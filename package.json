@@ -9,12 +9,15 @@
   "scripts": {
     "build": "pnpm -r --filter './packages/**' run build && node scripts/sync-entries.mjs",
     "clean": "pnpm -r --filter './packages/**' run clean",
-    "typecheck": "pnpm -r --filter './packages/**' run typecheck",
+    "typecheck": "pnpm run build && pnpm -r --filter './packages/**' run typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down -v",
+    "test:integration": "vitest run --config vitest.integration.mts"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

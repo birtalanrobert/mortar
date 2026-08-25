@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Environment schema validation with fail-at-boot semantics",
   "license": "UNLICENSED",
+  "type": "commonjs",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [

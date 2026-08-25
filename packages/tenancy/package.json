@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Tenant resolution, scoped repositories and RLS helpers",
   "license": "UNLICENSED",
+  "type": "commonjs",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [

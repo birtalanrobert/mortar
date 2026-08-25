@@ -1,0 +1,35 @@
+# Mortar's own test stack.
+#
+# Port 3050 sits deliberately outside the 3100-4799 range that the seventeen
+# projects allocate from, so running mortar's tests can never collide with a
+# project's local database.
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: mortar-test-postgres
+    environment:
+      POSTGRES_USER: mortar
+      POSTGRES_PASSWORD: mortar
+      POSTGRES_DB: mortar_test
+    ports:
+      - '3050:5432'
+    tmpfs:
+      # Tests are throwaway; keeping the data in memory makes them
+      # substantially faster and guarantees a clean slate on restart.
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U mortar -d mortar_test']
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  redis:
+    image: redis:7-alpine
+    container_name: mortar-test-redis
+    ports:
+      - '3051:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+      timeout: 3s
+      retries: 15

@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "BullMQ conventions and the forward-window scanner",
   "license": "UNLICENSED",
+  "type": "commonjs",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [

@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Error taxonomy, problem-details, filters, health checks",
   "license": "UNLICENSED",
+  "type": "commonjs",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
