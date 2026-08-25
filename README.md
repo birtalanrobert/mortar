@@ -9,9 +9,9 @@ or SMS segment counting.
 
 Mortar owns **plumbing**. It does not own domain logic.
 
-The governing rule from the foundations specification: *extract only what is
+The governing rule from the foundations specification: _extract only what is
 genuinely identical across several projects, stable enough not to churn, and
-expensive enough to rewrite that sharing pays.* A shared library that tries to
+expensive enough to rewrite that sharing pays._ A shared library that tries to
 own domain logic becomes a bottleneck every project has to fight.
 
 The corollary rule, which keeps this honest: **extract at the second consumer,
@@ -23,18 +23,18 @@ where all seventeen consumers are known in advance.
 
 ### Tier 1 — every project
 
-| Package | Status | Purpose |
-|---|---|---|
-| `@mortar/money` | ✅ | Integer minor-unit money, allocation, tax, formatting |
-| `@mortar/context` | ✅ | AsyncLocalStorage request context |
-| `@mortar/config` | ✅ | Environment schema with fail-at-boot semantics |
-| `@mortar/observability` | ⬜ | Structured logging, metrics, correlation |
-| `@mortar/http` | ⬜ | Error taxonomy, problem-details, filters, health |
-| `@mortar/audit` | ⬜ | Append-only audit log |
-| `@mortar/idempotency` | ⬜ | Idempotency keys for mutating endpoints |
-| `@mortar/tenancy` | ⬜ | Tenant resolution, scoped repositories, RLS helpers |
-| `@mortar/auth` | ⬜ | Identity, sessions, verification, invitations, RBAC |
-| `@mortar/jobs` | ⬜ | BullMQ conventions, forward-window scanner |
+| Package                 | Status | Purpose                                               |
+| ----------------------- | ------ | ----------------------------------------------------- |
+| `@mortar/money`         | ✅     | Integer minor-unit money, allocation, tax, formatting |
+| `@mortar/context`       | ✅     | AsyncLocalStorage request context                     |
+| `@mortar/config`        | ✅     | Environment schema with fail-at-boot semantics        |
+| `@mortar/observability` | ⬜     | Structured logging, metrics, correlation              |
+| `@mortar/http`          | ⬜     | Error taxonomy, problem-details, filters, health      |
+| `@mortar/audit`         | ⬜     | Append-only audit log                                 |
+| `@mortar/idempotency`   | ⬜     | Idempotency keys for mutating endpoints               |
+| `@mortar/tenancy`       | ⬜     | Tenant resolution, scoped repositories, RLS helpers   |
+| `@mortar/auth`          | ⬜     | Identity, sessions, verification, invitations, RBAC   |
+| `@mortar/jobs`          | ⬜     | BullMQ conventions, forward-window scanner            |
 
 Tiers 2–4 are listed in `../specs/00-shared-foundations.md` and are extracted
 incrementally, at the second consumer.

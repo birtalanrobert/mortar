@@ -7,23 +7,41 @@
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
+    "nestjs",
     "README.md"
   ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./nestjs": {
+      "types": "./dist/nestjs/index.d.ts",
+      "default": "./dist/nestjs/index.js"
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "clean": "rm -rf dist *.tsbuildinfo",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json"
   },
   "publishConfig": {
     "access": "restricted"
   },
   "dependencies": {
     "zod": "^3.24.1"
+  },
+  "mortar": {
+    "entries": [
+      "nestjs"
+    ]
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^10.0.0 || ^11.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@nestjs/common": {
+      "optional": true
+    }
   }
 }
