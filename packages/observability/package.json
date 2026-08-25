@@ -19,7 +19,8 @@
     "./nestjs": {
       "types": "./dist/nestjs/index.d.ts",
       "default": "./dist/nestjs/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

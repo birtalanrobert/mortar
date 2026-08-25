@@ -30,7 +30,12 @@ writeFileSync(
       main: './dist/index.js',
       types: './dist/index.d.ts',
       files: ['dist', 'README.md'],
-      exports: { '.': { types: './dist/index.d.ts', default: './dist/index.js' } },
+      exports: {
+        '.': { types: './dist/index.d.ts', default: './dist/index.js' },
+        // Bundlers and some libraries read a dependency's package.json; an
+        // exports map that omits it turns that into an obscure failure.
+        './package.json': './package.json',
+      },
       scripts: {
         build: 'tsc -p tsconfig.json',
         clean: 'rm -rf dist *.tsbuildinfo',
