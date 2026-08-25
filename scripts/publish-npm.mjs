@@ -108,18 +108,32 @@ for (const dir of ORDER) {
   }
 
   try {
-    // --no-git-checks in both modes: the clean-tree requirement is enforced
-    // above, with a message that says which files are dirty. Leaving pnpm's
-    // own check on would mean two definitions of 'clean' and a second, vaguer
-    // error — and would break a dry run, which exists to be inspected
-    // *before* committing.
-    const args = ['publish', '--access', 'public', '--no-git-checks'];
+    const args = ['publish', '--access', 'public'];
     if (dryRun) args.push('--dry-run');
-    const output = run('pnpm', args, join('packages', dir));
-    const fileCount = /(\d+)\s+files?/.exec(output)?.[1] ?? '?';
-    console.log(`  ✓ ${spec} (${fileCount} files)`);
+
+    // stdio: 'inherit' is load-bearing, not cosmetic. With two-factor auth on
+    // the account npm runs an interactive browser flow to collect a one-time
+    // password; capturing its output swallows the prompt and the publish fails
+    // with an opaque EOTP. Inheriting also means npm's own progress is visible
+    // live, which is what you want during a real publish anyway.
+    execFileSync('pnpm', args, {
+      cwd: join('packages', dir),
+      stdio: 'inherit',
+      encoding: 'utf8',
+    });
+    console.log(`  ✓ ${spec}`);
   } catch (error) {
-    console.error(`  ✗ ${spec}\n`);
+    console.error(`\n  ✗ ${spec}\n`);
+    // With inherited stdio npm has already printed the reason above, so only
+    // add guidance the raw error does not give.
+    if (String(error.message ?? '').includes('EOTP') || String(error.stderr ?? '').includes('EOTP')) {
+      console.error(
+        'Two-factor auth is required for publishing. Twelve packages means twelve prompts,\n' +
+          'so either relax 2FA to authorisation-only, or use an automation token:\n\n' +
+          '  https://www.npmjs.com/settings/~/tfa          → "Authorization only"\n' +
+          '  https://www.npmjs.com/settings/~/tokens/new   → Granular, type "Automation"\n',
+      );
+    }
     // Both streams, and never `??`: an empty stdout Buffer is neither null nor
     // undefined, so `??` would keep it and hide the real error in stderr.
     const detail = [error.stdout, error.stderr, error.message]
