@@ -1,9 +1,8 @@
 {
-  "name": "@mortar/jobs",
+  "name": "@mortar/redis",
   "version": "0.1.0",
-  "description": "BullMQ conventions, context propagation and the forward-window scanner",
+  "description": "Redis connections, locks, caching and rate limiting",
   "license": "UNLICENSED",
-  "type": "commonjs",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
@@ -24,15 +23,15 @@
   "publishConfig": {
     "access": "restricted"
   },
+  "type": "commonjs",
   "dependencies": {
-    "@mortar/context": "workspace:*",
-    "@mortar/observability": "workspace:*",
     "@mortar/config": "workspace:*",
-    "@mortar/redis": "workspace:*"
+    "@mortar/context": "workspace:*",
+    "@mortar/observability": "workspace:*"
   },
   "peerDependencies": {
     "@nestjs/common": "^10.0.0 || ^11.0.0",
-    "bullmq": "^5.0.0 || ^6.0.0"
+    "ioredis": "^5.0.0"
   },
   "peerDependenciesMeta": {
     "@nestjs/common": {
