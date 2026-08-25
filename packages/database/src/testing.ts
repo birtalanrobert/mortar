@@ -1,4 +1,4 @@
-import { DataSource } from 'typeorm';
+import { DataSource, type MixedList } from 'typeorm';
 import { buildDataSourceOptions } from './data-source';
 
 /**
@@ -18,20 +18,38 @@ export const TEST_DATABASE_URL =
  * all need exactly this, and each writing its own would guarantee four subtly
  * different setups.
  */
+export interface TestDataSourceOptions {
+  /**
+   * Migrations to run instead of synchronizing from entity metadata.
+   *
+   * Strongly preferred when a package ships migrations. `synchronize` builds
+   * the schema from decorators, which silently skips everything a migration
+   * does beyond columns and indexes — triggers, constraints, functions,
+   * grants. A package whose migration is never executed in a test has an
+   * untested migration, and the first place it runs for real is production.
+   */
+  migrations?: MixedList<string | (new () => object)>;
+}
+
 export async function createTestDataSource(
   entities: Array<new () => object> = [],
+  options: TestDataSourceOptions = {},
 ): Promise<DataSource> {
+  const useMigrations = Boolean(options.migrations);
+
   const dataSource = new DataSource({
     ...buildDataSourceOptions({
       url: TEST_DATABASE_URL,
       entities,
+      migrations: options.migrations ?? [],
       applicationName: 'mortar-tests',
     }),
-    // Tests own their schema; migrations are exercised separately.
-    synchronize: entities.length > 0,
-    dropSchema: entities.length > 0,
+    synchronize: !useMigrations && entities.length > 0,
+    dropSchema: useMigrations || entities.length > 0,
   });
+
   await dataSource.initialize();
+  if (useMigrations) await dataSource.runMigrations({ transaction: 'all' });
   return dataSource;
 }
 

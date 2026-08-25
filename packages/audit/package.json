@@ -1,7 +1,7 @@
 {
   "name": "@mortar/audit",
   "version": "0.1.0",
-  "description": "Append-only audit log",
+  "description": "Append-only audit log that joins the caller transaction",
   "license": "UNLICENSED",
   "type": "commonjs",
   "main": "./dist/index.js",
@@ -23,5 +23,18 @@
   },
   "publishConfig": {
     "access": "restricted"
+  },
+  "dependencies": {
+    "@mortar/context": "workspace:*",
+    "@mortar/database": "workspace:*"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^10.0.0 || ^11.0.0",
+    "typeorm": "^0.3.0 || ^1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@nestjs/common": {
+      "optional": true
+    }
   }
 }

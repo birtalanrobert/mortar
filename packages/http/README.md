@@ -56,12 +56,12 @@ from "booking window closed").
 
 ## Liveness and readiness are not the same endpoint
 
-`/health/live` answers *is this process running* and touches nothing. A
+`/health/live` answers _is this process running_ and touches nothing. A
 liveness probe that checks the database restarts the service every time the
 database hiccups — turning a brief blip into a restart loop across every
 replica at once.
 
-`/health/ready` answers *can this process serve traffic* and does check
+`/health/ready` answers _can this process serve traffic_ and does check
 dependencies. Non-critical indicators report `degraded` rather than `down`, so
 an unreachable metrics sink does not remove the instance from rotation.
 
