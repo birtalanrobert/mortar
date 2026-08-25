@@ -126,7 +126,7 @@ export class AuditService {
     const qb = this.manager(manager)
       .createQueryBuilder(AuditLogEntry, 'audit')
       .orderBy('audit.occurredAt', 'DESC')
-      .addOrderBy('audit.id', 'DESC')
+      .addOrderBy('audit.seq', 'DESC')
       .limit(Math.min(filter.limit ?? 100, 1000))
       .offset(filter.offset ?? 0);
 

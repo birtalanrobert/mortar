@@ -7,13 +7,13 @@ a multi-tenant system is a data breach, not a bug.
 
 ## Two layers, deliberately
 
-**`TenantScopedRepository`** stops an unscoped query being *written*. Every read
+**`TenantScopedRepository`** stops an unscoped query being _written_. Every read
 applies the tenant, every write stamps it, and every returned row is verified
 before it is handed back. The verification is not redundant with the filter — it
 also catches rows arriving through a relation, a raw query, or a caller passing
 an id it should not have.
 
-**Row-level security** stops an unscoped query *returning foreign rows* if one
+**Row-level security** stops an unscoped query _returning foreign rows_ if one
 is written anyway, through raw SQL, a query builder or a third-party library.
 
 The alternative to both — remembering the predicate at several hundred call
@@ -39,7 +39,7 @@ nothing while appearing to pass.
 
 ## The binding must be inside the transaction
 
-`SET LOCAL` is scoped to the current transaction *and* to the connection
+`SET LOCAL` is scoped to the current transaction _and_ to the connection
 running it. Setting it on a different pooled connection applies to nothing;
 setting it without `LOCAL` leaks it to whatever request picks that connection
 up next — which in a multi-tenant system means serving one tenant's rows to

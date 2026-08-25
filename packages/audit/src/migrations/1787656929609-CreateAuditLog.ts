@@ -14,6 +14,7 @@ export class CreateAuditLog1787656929609 implements MigrationInterface {
     await queryRunner.query(`
       CREATE TABLE "mortar_audit_log" (
         "id"              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        "seq"             bigserial NOT NULL,
         "tenant_id"       uuid,
         "action"          varchar(128) NOT NULL,
         "entity_type"     varchar(64),
@@ -33,7 +34,7 @@ export class CreateAuditLog1787656929609 implements MigrationInterface {
     `);
 
     await queryRunner.query(
-      `CREATE INDEX "idx_audit_tenant_occurred" ON "mortar_audit_log" ("tenant_id", "occurred_at" DESC)`,
+      `CREATE INDEX "idx_audit_tenant_occurred" ON "mortar_audit_log" ("tenant_id", "occurred_at" DESC, "seq" DESC)`,
     );
     await queryRunner.query(
       `CREATE INDEX "idx_audit_entity" ON "mortar_audit_log" ("tenant_id", "entity_type", "entity_id", "occurred_at" DESC)`,

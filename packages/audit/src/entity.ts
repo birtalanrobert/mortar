@@ -18,6 +18,17 @@ export class AuditLogEntry {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
+  /**
+   * Monotonic insertion order.
+   *
+   * `occurredAt` alone is not a total order: two entries written in the same
+   * millisecond tie, and a random uuid is no tiebreaker at all — the log would
+   * read back in an arbitrary order for exactly the closely-spaced events most
+   * likely to matter. A sequence also makes keyset pagination stable.
+   */
+  @Column({ type: 'bigint', generated: 'increment' })
+  seq!: string;
+
   /** Null for platform-level actions that belong to no tenant. */
   @Column({ type: 'uuid', nullable: true })
   tenantId!: string | null;

@@ -39,6 +39,31 @@ where all seventeen consumers are known in advance.
 Tiers 2–4 are listed in `../specs/00-shared-foundations.md` and are extracted
 incrementally, at the second consumer.
 
+## Extending mortar's entities from a project
+
+Every mortar entity ships as an **abstract base plus a concrete default**. A
+project needing extra columns or relations declares its own class extending the
+base, mapping the same table, and registers it:
+
+```ts
+@Entity({ name: 'mortar_user' })
+export class User extends BaseUser {
+  @Column({ nullable: true }) phoneNumber!: string | null;
+  @OneToMany(() => Shift, (s) => s.user) shifts?: Shift[];
+}
+
+AuthModule.forRoot({ entities: { user: User } });
+```
+
+Mortar's services then operate on the project's class. A profile table and a
+unidirectional `@ManyToOne` remain available for cases that suit them better.
+
+Two mistakes are caught at boot rather than surfacing later: registering both
+your subclass and mortar's default (two entities, one table), and renaming the
+subclass (mortar's entities reference each other by class name).
+
+See `packages/auth/README.md`.
+
 ## Conventions
 
 - **TypeScript → CommonJS.** The NestJS ecosystem is CJS and decorators depend
