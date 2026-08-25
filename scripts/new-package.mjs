@@ -26,10 +26,19 @@ writeFileSync(
       name: `@mortar/${name}`,
       version: '0.1.0',
       description: description ?? '',
-      license: 'UNLICENSED',
+      license: 'AGPL-3.0-only',
       main: './dist/index.js',
       types: './dist/index.d.ts',
-      files: ['dist', 'README.md'],
+      files: [
+        'dist',
+        'src',
+        // npm's allowlist wins over .npmignore, so tests are excluded here.
+        '!src/**/*.test.ts',
+        '!src/**/*.spec.ts',
+        'README.md',
+        'LICENSE',
+        'NOTICE',
+      ],
       exports: {
         '.': { types: './dist/index.d.ts', default: './dist/index.js' },
         // Bundlers and some libraries read a dependency's package.json; an
@@ -41,7 +50,7 @@ writeFileSync(
         clean: 'rm -rf dist *.tsbuildinfo',
         typecheck: 'tsc -p tsconfig.json --noEmit',
       },
-      publishConfig: { access: 'restricted' },
+      publishConfig: { access: 'public' },
     },
     null,
     2,

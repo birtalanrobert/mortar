@@ -5,6 +5,23 @@ binds the bricks: plumbing that every project needs, written once, so that no
 project spends its first fortnight rebuilding tenancy scoping, money arithmetic
 or SMS segment counting.
 
+## Licence
+
+**AGPL-3.0-only.** Read it, learn from it, use it — but anyone who builds a
+hosted service on mortar must release their service's source under the AGPL
+too. The network clause is the part that matters here: plain GPL would not
+trigger for a SaaS, which is precisely what these packages are used to build.
+
+The AGPL is a grant from the copyright holder to everyone else, and the
+copyright holder is not a licensee of their own work. Mortar is therefore used
+in the maintainer's own closed-source products without any AGPL obligation. See
+`NOTICE`.
+
+**Contributions are not accepted**, deliberately. A contributor keeps copyright
+in their contribution unless they assign it, and a project that is no longer
+wholly owned by one copyright holder cannot be relicensed by that holder. If
+that ever changes, a CLA is a prerequisite rather than a formality.
+
 ## What belongs here, and what does not
 
 Mortar owns **plumbing**. It does not own domain logic.

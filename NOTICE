@@ -1,0 +1,45 @@
+mortar
+Copyright (C) 2026 Robert Birtalan
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License along
+with this program. If not, see <https://www.gnu.org/licenses/>.
+
+--------------------------------------------------------------------------------
+
+RIGHTS RESERVED BY THE COPYRIGHT HOLDER
+
+The AGPL is a grant from the copyright holder to everyone else. The copyright
+holder is not a licensee of their own work, and is therefore not bound by these
+terms.
+
+Robert Birtalan, as sole copyright holder, retains the right to use, modify and
+distribute this software under any other terms, including within closed-source
+and commercial products, without triggering any obligation under the AGPL.
+
+Commercial licences for third parties who cannot or do not wish to comply with
+the AGPL are available on request.
+
+--------------------------------------------------------------------------------
+
+CONTRIBUTIONS
+
+Contributions are not currently accepted.
+
+This is deliberate and load-bearing. A contributor retains copyright in their
+contribution unless they assign it. Accepting outside contributions without a
+copyright assignment or a contributor licence agreement would mean the project
+was no longer wholly owned by one copyright holder — and the reserved rights
+above would no longer apply to those parts, because one cannot relicense code
+one does not own.
+
+Should contributions be accepted in future, a CLA assigning copyright to the
+maintainer is a prerequisite, not a formality.

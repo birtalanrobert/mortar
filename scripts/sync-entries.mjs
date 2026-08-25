@@ -9,7 +9,7 @@
  *
  * Driven by the `mortar.entries` field in each package.json.
  */
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync } from 'node:fs';
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -20,6 +20,14 @@ for (const name of readdirSync(packagesDir)) {
   if (!existsSync(pkgPath)) continue;
 
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+
+  // npm resolves LICENSE and NOTICE per package directory, not from the repo
+  // root, so each published package gets its own copy. Regenerated here rather
+  // than committed, so they cannot drift from the canonical pair.
+  for (const file of ['LICENSE', 'NOTICE']) {
+    if (existsSync(file)) copyFileSync(file, join(packagesDir, name, file));
+  }
+
   const entries = pkg.mortar?.entries ?? [];
 
   for (const entry of entries) {

@@ -2,12 +2,18 @@
   "name": "@mortar/redis",
   "version": "0.1.0",
   "description": "Redis connections, locks, caching and rate limiting",
-  "license": "UNLICENSED",
+  "license": "AGPL-3.0-only",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
-    "README.md"
+    "src",
+    "!src/**/*.test.ts",
+    "!src/**/*.spec.ts",
+    "!src/**/__tests__",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
   ],
   "exports": {
     ".": {
@@ -22,7 +28,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "publishConfig": {
-    "access": "restricted"
+    "access": "public"
   },
   "type": "commonjs",
   "dependencies": {
@@ -38,5 +44,10 @@
     "@nestjs/common": {
       "optional": true
     }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/birtalanrobert/mortar.git",
+    "directory": "packages/redis"
   }
 }

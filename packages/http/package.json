@@ -2,13 +2,19 @@
   "name": "@mortar/http",
   "version": "0.1.0",
   "description": "Error taxonomy, problem-details, request context and health checks",
-  "license": "UNLICENSED",
+  "license": "AGPL-3.0-only",
   "type": "commonjs",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
-    "README.md"
+    "src",
+    "!src/**/*.test.ts",
+    "!src/**/*.spec.ts",
+    "!src/**/__tests__",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
   ],
   "exports": {
     ".": {
@@ -23,7 +29,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "publishConfig": {
-    "access": "restricted"
+    "access": "public"
   },
   "dependencies": {
     "@mortar/context": "workspace:*",
@@ -48,5 +54,10 @@
     "class-validator": {
       "optional": true
     }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/birtalanrobert/mortar.git",
+    "directory": "packages/http"
   }
 }

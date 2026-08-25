@@ -74,7 +74,7 @@ hangs, not one that errors.
 ```ts
 HttpModule.forRoot({
   context: { trustProxy: true, supportedLocales: ['ro', 'hu', 'en'] },
-  errors: { baseUri: 'https://errors.acme.com' },
+  errors: { baseUri: 'https://problems.example.com' },
   health: { indicators: [databaseIndicator], detailed: false },
 });
 

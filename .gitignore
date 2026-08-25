@@ -6,3 +6,7 @@ coverage/
 .env
 .env.*
 !.env.example
+
+# Generated from the root LICENSE/NOTICE at publish time
+packages/*/LICENSE
+packages/*/NOTICE
