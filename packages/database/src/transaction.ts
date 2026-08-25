@@ -66,7 +66,7 @@ export interface TransactionOptions {
   independent?: boolean;
   /**
    * Run before the transaction body, on the transaction's own connection.
-   * This is how `@mortar/tenancy` sets `SET LOCAL app.tenant_id` so that
+   * This is how `@birtalanrobert/tenancy` sets `SET LOCAL app.tenant_id` so that
    * row-level security applies to every statement inside.
    */
   onBegin?: (queryRunner: QueryRunner) => Promise<void>;

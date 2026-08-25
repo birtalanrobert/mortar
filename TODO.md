@@ -11,7 +11,7 @@ See `../specs/00-shared-foundations.md` for the full context.
 | Language target | TypeScript → **CommonJS**, ES2023               | NestJS decorators + `emitDecoratorMetadata` assume CJS    |
 | Build           | plain `tsc` per package                         | Libraries need clean `.d.ts`, not bundles                 |
 | Tests           | vitest                                          | Fast, native TS, no transform config                      |
-| Validation      | zod                                             | The de-facto standard; used by `@mortar/config`           |
+| Validation      | zod                                             | The de-facto standard; used by `@birtalanrobert/config`   |
 | Database        | **PostgreSQL, enforced**                        | All seventeen specifications mandate it                   |
 | ORM             | **TypeORM**                                     | See below                                                 |
 | Migrations      | TypeORM migration classes, exported per package | Projects register mortar's migrations alongside their own |
@@ -32,7 +32,7 @@ own connection pool cannot join the caller's transaction. That means:
   apply to queries issued on another.
 
 All three are silent correctness failures. TypeORM it is, with
-`@mortar/database` owning the `DataSource` and a **transactional context** so
+`@birtalanrobert/database` owning the `DataSource` and a **transactional context** so
 every mortar write participates in whatever transaction is already open.
 
 ### On package shape — functions _and_ services
@@ -48,11 +48,11 @@ Every package has two layers:
 
 Packaging follows the audience:
 
-| Package                                                               | Entry points                                                                                                 |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `money`, `context`                                                    | Single pure entry. Frontend-safe, no NestJS anywhere                                                         |
-| `config`, `observability`                                             | `.` pure core, `./nestjs` module + service. A Next.js app importing `@mortar/config` must not pull in NestJS |
-| `database`, `http`, `audit`, `idempotency`, `tenancy`, `auth`, `jobs` | Server-only by nature; modules, services and the underlying functions all from the main entry                |
+| Package                                                               | Entry points                                                                                                         |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `money`, `context`                                                    | Single pure entry. Frontend-safe, no NestJS anywhere                                                                 |
+| `config`, `observability`                                             | `.` pure core, `./nestjs` module + service. A Next.js app importing `@birtalanrobert/config` must not pull in NestJS |
+| `database`, `http`, `audit`, `idempotency`, `tenancy`, `auth`, `jobs` | Server-only by nature; modules, services and the underlying functions all from the main entry                        |
 
 Subpath entries ship a **stub folder** (`nestjs/package.json` pointing at
 `../dist/nestjs`) as well as an `exports` map, because consuming NestJS projects
@@ -98,44 +98,44 @@ config ────────────┤               │
 
 ### Phase B — Framework-free packages
 
-- [x] B1. `@mortar/money` — minor units, arithmetic, allocation, rounding, multi-currency, parse/format
-- [x] B2. `@mortar/context` — AsyncLocalStorage request context
-- [x] B3. `@mortar/config` — zod env schema, fail-at-boot, typed access, redaction
-- [x] B4. `@mortar/config` — `./nestjs` ConfigModule + typed ConfigService
-- [x] B5. `@mortar/observability` — core logger (pino), context binding, redaction, metrics
-- [x] B6. `@mortar/observability` — `./nestjs` LoggerModule, Nest LoggerService adapter, HTTP logging interceptor
+- [x] B1. `@birtalanrobert/money` — minor units, arithmetic, allocation, rounding, multi-currency, parse/format
+- [x] B2. `@birtalanrobert/context` — AsyncLocalStorage request context
+- [x] B3. `@birtalanrobert/config` — zod env schema, fail-at-boot, typed access, redaction
+- [x] B4. `@birtalanrobert/config` — `./nestjs` ConfigModule + typed ConfigService
+- [x] B5. `@birtalanrobert/observability` — core logger (pino), context binding, redaction, metrics
+- [x] B6. `@birtalanrobert/observability` — `./nestjs` LoggerModule, Nest LoggerService adapter, HTTP logging interceptor
 
 ### Phase C — Database foundation
 
-- [x] C1. `@mortar/database` — `DataSource` factory from validated config, naming strategy, base entity conventions
-- [x] C2. `@mortar/database` — **transactional context**: active `EntityManager` in the request context, `@Transactional()` decorator, `runInTransaction()` function
-- [x] C3. `@mortar/database` — `DatabaseModule`, repository helpers, migration discovery, health check
-- [x] C4. `@mortar/database` — integration tests against a real Postgres
+- [x] C1. `@birtalanrobert/database` — `DataSource` factory from validated config, naming strategy, base entity conventions
+- [x] C2. `@birtalanrobert/database` — **transactional context**: active `EntityManager` in the request context, `@Transactional()` decorator, `runInTransaction()` function
+- [x] C3. `@birtalanrobert/database` — `DatabaseModule`, repository helpers, migration discovery, health check
+- [x] C4. `@birtalanrobert/database` — integration tests against a real Postgres
 
 ### Phase D — HTTP layer
 
-- [x] D1. `@mortar/http` — error taxonomy + problem-details mapping
-- [x] D2. `@mortar/http` — exception filter, validation pipe, serialization conventions
-- [x] D3. `@mortar/http` — context middleware (request id, correlation, locale, ip) and the Nest module
-- [x] D4. `@mortar/http` — health checks (db, redis, storage) with a pluggable indicator registry
-- [ ] D5. `@mortar/http` — OpenAPI conventions and shared decorators
+- [x] D1. `@birtalanrobert/http` — error taxonomy + problem-details mapping
+- [x] D2. `@birtalanrobert/http` — exception filter, validation pipe, serialization conventions
+- [x] D3. `@birtalanrobert/http` — context middleware (request id, correlation, locale, ip) and the Nest module
+- [x] D4. `@birtalanrobert/http` — health checks (db, redis, storage) with a pluggable indicator registry
+- [ ] D5. `@birtalanrobert/http` — OpenAPI conventions and shared decorators
       _Deferred to the second consumer: the useful set of shared response
       decorators is not knowable until two real APIs have been built against
       this package. Extracting it now would be guessing at an interface._
 
 ### Phase E — Data-touching packages
 
-- [x] E1. `@mortar/audit` — entity + migration, `AuditService`, transaction-joined writes, query helpers, retention
-- [x] E2. `@mortar/idempotency` — entity + migration, `IdempotencyService`, interceptor/decorator, replay and conflict semantics
-- [x] E3. `@mortar/tenancy` — resolution strategies, `TenantService`, scoped repository, **RLS session-variable binding inside the transaction**, cross-tenant guard
-- [x] E4. `@mortar/auth` — entities + migrations, password hashing, `SessionService`, verification and reset flows, invitations, RBAC guards and decorators
+- [x] E1. `@birtalanrobert/audit` — entity + migration, `AuditService`, transaction-joined writes, query helpers, retention
+- [x] E2. `@birtalanrobert/idempotency` — entity + migration, `IdempotencyService`, interceptor/decorator, replay and conflict semantics
+- [x] E3. `@birtalanrobert/tenancy` — resolution strategies, `TenantService`, scoped repository, **RLS session-variable binding inside the transaction**, cross-tenant guard
+- [x] E4. `@birtalanrobert/auth` — entities + migrations, password hashing, `SessionService`, verification and reset flows, invitations, RBAC guards and decorators
 
 ### Phase F — Background work
 
-- [x] F1. `@mortar/jobs` — BullMQ module, typed job definitions, idempotent handler wrapper
-- [x] F2. `@mortar/jobs` — retry/backoff, dead-letter, scheduled-job distributed lock
-- [x] F3. `@mortar/jobs` — **forward-window scanner base** (the pattern 10 of 17 projects need)
-- [x] F4. `@mortar/jobs` — context propagation from request into job execution
+- [x] F1. `@birtalanrobert/jobs` — BullMQ module, typed job definitions, idempotent handler wrapper
+- [x] F2. `@birtalanrobert/jobs` — retry/backoff, dead-letter, scheduled-job distributed lock
+- [x] F3. `@birtalanrobert/jobs` — **forward-window scanner base** (the pattern 10 of 17 projects need)
+- [x] F4. `@birtalanrobert/jobs` — context propagation from request into job execution
 
 ### Phase G — Release
 

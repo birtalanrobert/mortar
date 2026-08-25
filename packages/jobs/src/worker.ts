@@ -1,5 +1,5 @@
 import { Worker, type ConnectionOptions, type Job, type WorkerOptions } from 'bullmq';
-import { createNoopLogger, type Logger } from '@mortar/observability';
+import { createNoopLogger, type Logger } from '@birtalanrobert/observability';
 import type { JobDefinition } from './job';
 import { detachContext, runWithJobContext, type WithContext } from './propagation';
 

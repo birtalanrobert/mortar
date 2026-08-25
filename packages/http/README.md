@@ -1,4 +1,4 @@
-# @mortar/http
+# @birtalanrobert/http
 
 Error taxonomy, RFC 9457 Problem Details, request context and health checks.
 
@@ -10,7 +10,7 @@ turn one into a response. A domain module that had to import `@nestjs/common`
 to say "not found" would be coupled to a web framework for no reason.
 
 ```ts
-import { NotFoundError, ConflictError } from '@mortar/http';
+import { NotFoundError, ConflictError } from '@birtalanrobert/http';
 
 throw new NotFoundError('Booking', bookingId);
 throw new ConflictError('That seat has already been sold.');

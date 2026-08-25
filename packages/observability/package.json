@@ -1,5 +1,5 @@
 {
-  "name": "@mortar/observability",
+  "name": "@birtalanrobert/observability",
   "version": "0.1.0",
   "description": "Structured logging, metrics and correlation",
   "license": "AGPL-3.0-only",
@@ -42,7 +42,7 @@
     ]
   },
   "dependencies": {
-    "@mortar/context": "workspace:*",
+    "@birtalanrobert/context": "workspace:*",
     "pino": "^10.3.1",
     "pino-pretty": "^13.0.0"
   },

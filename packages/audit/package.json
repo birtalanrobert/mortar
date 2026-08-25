@@ -1,5 +1,5 @@
 {
-  "name": "@mortar/audit",
+  "name": "@birtalanrobert/audit",
   "version": "0.1.0",
   "description": "Append-only audit log that joins the caller transaction",
   "license": "AGPL-3.0-only",
@@ -32,8 +32,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@mortar/context": "workspace:*",
-    "@mortar/database": "workspace:*"
+    "@birtalanrobert/context": "workspace:*",
+    "@birtalanrobert/database": "workspace:*"
   },
   "peerDependencies": {
     "@nestjs/common": "^10.0.0 || ^11.0.0",

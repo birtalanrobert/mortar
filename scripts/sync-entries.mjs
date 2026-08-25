@@ -38,7 +38,7 @@ for (const name of readdirSync(packagesDir)) {
       JSON.stringify(
         {
           // Not published as its own package; this exists purely so that
-          // `require('@mortar/x/entry')` resolves under node10 resolution.
+          // `require('@birtalanrobert/x/entry')` resolves under node10 resolution.
           main: `../dist/${entry}/index.js`,
           types: `../dist/${entry}/index.d.ts`,
           sideEffects: false,

@@ -1,4 +1,4 @@
-import { envBoolean, envDuration, envInt, envString, envUrl, z } from '@mortar/config';
+import { envBoolean, envDuration, envInt, envString, envUrl, z } from '@birtalanrobert/config';
 
 export const redisEnvSchema = z.object({
   REDIS_URL: envUrl(),

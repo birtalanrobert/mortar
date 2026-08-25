@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
-import { getContext } from '@mortar/context';
-import { resolveManager, runInTransaction } from '@mortar/database';
-import { ConflictError, ValidationError } from '@mortar/http';
+import { getContext } from '@birtalanrobert/context';
+import { resolveManager, runInTransaction } from '@birtalanrobert/database';
+import { ConflictError, ValidationError } from '@birtalanrobert/http';
 import { IsNull, type DataSource, type EntityManager } from 'typeorm';
 import { IdempotencyRecord } from './entity';
 

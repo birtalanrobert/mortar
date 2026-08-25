@@ -1,6 +1,6 @@
-import { runInContext } from '@mortar/context';
-import { createTestDataSource, runInTransaction } from '@mortar/database';
-import { ConflictError, ValidationError } from '@mortar/http';
+import { runInContext } from '@birtalanrobert/context';
+import { createTestDataSource, runInTransaction } from '@birtalanrobert/database';
+import { ConflictError, ValidationError } from '@birtalanrobert/http';
 import type { DataSource } from 'typeorm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { IdempotencyRecord } from './entity';

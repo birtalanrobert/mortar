@@ -1,4 +1,4 @@
-import { contextSnapshot } from '@mortar/context';
+import { contextSnapshot } from '@birtalanrobert/context';
 import pino, { type Logger as PinoLogger, type LoggerOptions } from 'pino';
 import { buildRedactionPaths, REDACTED } from './redaction';
 import type { LogFields, LogLevel, Logger } from './types';

@@ -1,5 +1,5 @@
-import { runInTransaction, type TransactionOptions } from '@mortar/database';
-import { requireTenantId } from '@mortar/context';
+import { runInTransaction, type TransactionOptions } from '@birtalanrobert/database';
+import { requireTenantId } from '@birtalanrobert/context';
 import type { DataSource, EntityManager, QueryRunner } from 'typeorm';
 
 /** The Postgres session variable RLS policies read. */

@@ -5,7 +5,7 @@ import {
   type ExecutionContext,
   type NestInterceptor,
 } from '@nestjs/common';
-import { setAttribute } from '@mortar/context';
+import { setAttribute } from '@birtalanrobert/context';
 import type { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import type { Logger } from '../types';

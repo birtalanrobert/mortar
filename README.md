@@ -33,25 +33,25 @@ own domain logic becomes a bottleneck every project has to fight.
 
 The corollary rule, which keeps this honest: **extract at the second consumer,
 not the first.** Writing a shared package for a single consumer is guessing at
-an interface. The only exceptions are the Tier 1 packages and `@mortar/billing`,
+an interface. The only exceptions are the Tier 1 packages and `@birtalanrobert/billing`,
 where all seventeen consumers are known in advance.
 
 ## Packages
 
 ### Tier 1 — every project
 
-| Package                 | Status | Purpose                                               |
-| ----------------------- | ------ | ----------------------------------------------------- |
-| `@mortar/money`         | ✅     | Integer minor-unit money, allocation, tax, formatting |
-| `@mortar/context`       | ✅     | AsyncLocalStorage request context                     |
-| `@mortar/config`        | ✅     | Environment schema with fail-at-boot semantics        |
-| `@mortar/observability` | ⬜     | Structured logging, metrics, correlation              |
-| `@mortar/http`          | ⬜     | Error taxonomy, problem-details, filters, health      |
-| `@mortar/audit`         | ⬜     | Append-only audit log                                 |
-| `@mortar/idempotency`   | ⬜     | Idempotency keys for mutating endpoints               |
-| `@mortar/tenancy`       | ⬜     | Tenant resolution, scoped repositories, RLS helpers   |
-| `@mortar/auth`          | ⬜     | Identity, sessions, verification, invitations, RBAC   |
-| `@mortar/jobs`          | ⬜     | BullMQ conventions, forward-window scanner            |
+| Package                         | Status | Purpose                                               |
+| ------------------------------- | ------ | ----------------------------------------------------- |
+| `@birtalanrobert/money`         | ✅     | Integer minor-unit money, allocation, tax, formatting |
+| `@birtalanrobert/context`       | ✅     | AsyncLocalStorage request context                     |
+| `@birtalanrobert/config`        | ✅     | Environment schema with fail-at-boot semantics        |
+| `@birtalanrobert/observability` | ⬜     | Structured logging, metrics, correlation              |
+| `@birtalanrobert/http`          | ⬜     | Error taxonomy, problem-details, filters, health      |
+| `@birtalanrobert/audit`         | ⬜     | Append-only audit log                                 |
+| `@birtalanrobert/idempotency`   | ⬜     | Idempotency keys for mutating endpoints               |
+| `@birtalanrobert/tenancy`       | ⬜     | Tenant resolution, scoped repositories, RLS helpers   |
+| `@birtalanrobert/auth`          | ⬜     | Identity, sessions, verification, invitations, RBAC   |
+| `@birtalanrobert/jobs`          | ⬜     | BullMQ conventions, forward-window scanner            |
 
 Tiers 2–4 are listed in `../specs/00-shared-foundations.md` and are extracted
 incrementally, at the second consumer.

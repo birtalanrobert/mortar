@@ -1,6 +1,6 @@
-import { getContext } from '@mortar/context';
-import { resolveManager } from '@mortar/database';
-import { ConflictError, NotFoundError, ValidationError } from '@mortar/http';
+import { getContext } from '@birtalanrobert/context';
+import { resolveManager } from '@birtalanrobert/database';
+import { ConflictError, NotFoundError, ValidationError } from '@birtalanrobert/http';
 import { IsNull, type DataSource, type EntityManager } from 'typeorm';
 
 import type { BaseRole } from '../entities/role';

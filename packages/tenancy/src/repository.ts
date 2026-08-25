@@ -1,6 +1,6 @@
-import { getTenantId, requireTenantId } from '@mortar/context';
-import { resolveManager } from '@mortar/database';
-import { CrossTenantAccessError } from '@mortar/http';
+import { getTenantId, requireTenantId } from '@birtalanrobert/context';
+import { resolveManager } from '@birtalanrobert/database';
+import { CrossTenantAccessError } from '@birtalanrobert/http';
 import type {
   DataSource,
   DeepPartial,
@@ -18,7 +18,7 @@ import type {
  *
  * `id` is part of the contract because the scoped repository offers id-based
  * lookups, and because every tenant-owned table in this catalogue has a
- * surrogate key — the same convention `BaseEntity` in `@mortar/database` sets.
+ * surrogate key — the same convention `BaseEntity` in `@birtalanrobert/database` sets.
  */
 export interface TenantOwned extends ObjectLiteral {
   id: string;
@@ -99,7 +99,7 @@ export class TenantScopedRepository<Entity extends TenantOwned> {
   async findByIdOrFail(id: string, manager?: EntityManager): Promise<Entity> {
     const row = await this.findById(id, manager);
     if (!row) {
-      const { NotFoundError } = await import('@mortar/http');
+      const { NotFoundError } = await import('@birtalanrobert/http');
       throw new NotFoundError(entityName(this.entity), id);
     }
     return row;

@@ -1,5 +1,5 @@
-import { getContext } from '@mortar/context';
-import { resolveManager, runInTransaction } from '@mortar/database';
+import { getContext } from '@birtalanrobert/context';
+import { resolveManager, runInTransaction } from '@birtalanrobert/database';
 import { IsNull, LessThan, type DataSource, type EntityManager } from 'typeorm';
 import type { BaseAuthToken, AuthTokenType } from '../entities/auth-token';
 import { resolveRegistry, type AuthEntityRegistry } from '../registry';

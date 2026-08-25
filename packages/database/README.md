@@ -1,3 +1,3 @@
-# @mortar/database
+# @birtalanrobert/database
 
 TypeORM DataSource, transactional context and migration conventions

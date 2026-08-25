@@ -1,5 +1,5 @@
-import { getContext } from '@mortar/context';
-import { resolveManager } from '@mortar/database';
+import { getContext } from '@birtalanrobert/context';
+import { resolveManager } from '@birtalanrobert/database';
 import type { DataSource, EntityManager } from 'typeorm';
 import { AuditLogEntry } from './entity';
 import { computeChanges, redactMetadata, type Changes, type DiffOptions } from './diff';

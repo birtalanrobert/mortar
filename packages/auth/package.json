@@ -1,5 +1,5 @@
 {
-  "name": "@mortar/auth",
+  "name": "@birtalanrobert/auth",
   "version": "0.1.0",
   "description": "Identity, sessions, verification, invitations and RBAC primitives",
   "license": "AGPL-3.0-only",
@@ -32,9 +32,9 @@
     "access": "public"
   },
   "dependencies": {
-    "@mortar/context": "workspace:*",
-    "@mortar/database": "workspace:*",
-    "@mortar/http": "workspace:*"
+    "@birtalanrobert/context": "workspace:*",
+    "@birtalanrobert/database": "workspace:*",
+    "@birtalanrobert/http": "workspace:*"
   },
   "peerDependencies": {
     "@nestjs/common": "^10.0.0 || ^11.0.0",

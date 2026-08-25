@@ -13,9 +13,9 @@ import {
   type Provider,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { getTenantId, setContextValues } from '@mortar/context';
-import { MORTAR_DATA_SOURCE } from '@mortar/database';
-import { ForbiddenError } from '@mortar/http';
+import { getTenantId, setContextValues } from '@birtalanrobert/context';
+import { MORTAR_DATA_SOURCE } from '@birtalanrobert/database';
+import { ForbiddenError } from '@birtalanrobert/http';
 import type { DataSource, EntityTarget } from 'typeorm';
 import { resolveTenant, type ResolvableRequest, type TenantResolver } from './resolve';
 import { TenantScopedRepository, type TenantOwned } from './repository';

@@ -1,5 +1,5 @@
-import { createNoopLogger, type Logger } from '@mortar/observability';
-import type { RedisLocks } from '@mortar/redis';
+import { createNoopLogger, type Logger } from '@birtalanrobert/observability';
+import type { RedisLocks } from '@birtalanrobert/redis';
 
 export interface WindowScannerOptions<TItem> {
   /** Identifies this scanner in logs and in its lock. */

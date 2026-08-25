@@ -42,7 +42,13 @@ for (const { dir, pkg } of packages) {
   } catch (error) {
     failed += 1;
     console.error(`  ✗ ${spec}`);
-    console.error(String(error.stdout ?? error.message).trim().split('\n').slice(-4).join('\n'));
+    console.error(
+      String(error.stdout ?? error.message)
+        .trim()
+        .split('\n')
+        .slice(-4)
+        .join('\n'),
+    );
   }
 }
 

@@ -1,4 +1,4 @@
-# @mortar/tenancy
+# @birtalanrobert/tenancy
 
 Tenant resolution, scoped repositories and row-level security.
 
@@ -46,7 +46,7 @@ up next — which in a multi-tenant system means serving one tenant's rows to
 another.
 
 `runInTenantTransaction()` binds it on the transaction's own query runner via
-the `onBegin` hook, which is the third reason `@mortar/database`'s transactional
+the `onBegin` hook, which is the third reason `@birtalanrobert/database`'s transactional
 context exists.
 
 ## Failing closed

@@ -1,4 +1,4 @@
-# @mortar/idempotency
+# @birtalanrobert/idempotency
 
 Idempotency keys for mutating endpoints.
 

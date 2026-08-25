@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Scaffolds a new @mortar/* package with identical structure.
+ * Scaffolds a new @birtalanrobert/* package with identical structure.
  * Usage: node scripts/new-package.mjs <name> "<description>"
  */
 import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
@@ -23,7 +23,7 @@ writeFileSync(
   join(dir, 'package.json'),
   JSON.stringify(
     {
-      name: `@mortar/${name}`,
+      name: `@birtalanrobert/${name}`,
       version: '0.1.0',
       description: description ?? '',
       license: 'AGPL-3.0-only',
@@ -72,6 +72,6 @@ writeFileSync(
 );
 
 writeFileSync(join(dir, 'src', 'index.ts'), '');
-writeFileSync(join(dir, 'README.md'), `# @mortar/${name}\n\n${description ?? ''}\n`);
+writeFileSync(join(dir, 'README.md'), `# @birtalanrobert/${name}\n\n${description ?? ''}\n`);
 
 console.log(`Created packages/${name}`);

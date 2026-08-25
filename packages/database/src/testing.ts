@@ -14,7 +14,7 @@ export const TEST_DATABASE_URL =
  * Creates and initializes a DataSource against the test database.
  *
  * Exported from the package rather than kept in a test file because
- * `@mortar/audit`, `@mortar/idempotency`, `@mortar/tenancy` and `@mortar/auth`
+ * `@birtalanrobert/audit`, `@birtalanrobert/idempotency`, `@birtalanrobert/tenancy` and `@birtalanrobert/auth`
  * all need exactly this, and each writing its own would guarantee four subtly
  * different setups.
  */

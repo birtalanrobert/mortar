@@ -1,5 +1,5 @@
 {
-  "name": "@mortar/http",
+  "name": "@birtalanrobert/http",
   "version": "0.1.0",
   "description": "Error taxonomy, problem-details, request context and health checks",
   "license": "AGPL-3.0-only",
@@ -32,8 +32,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@mortar/context": "workspace:*",
-    "@mortar/observability": "workspace:*"
+    "@birtalanrobert/context": "workspace:*",
+    "@birtalanrobert/observability": "workspace:*"
   },
   "peerDependencies": {
     "@nestjs/common": "^10.0.0 || ^11.0.0",

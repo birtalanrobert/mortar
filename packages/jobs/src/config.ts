@@ -1,4 +1,4 @@
-import { envDuration, envInt, envString, envUrl, z } from '@mortar/config';
+import { envDuration, envInt, envString, envUrl, z } from '@birtalanrobert/config';
 
 /** The Redis variables the queue needs. */
 export const jobsEnvSchema = z.object({

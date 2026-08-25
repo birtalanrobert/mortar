@@ -1,4 +1,4 @@
-# @mortar/money
+# @birtalanrobert/money
 
 Integer minor-unit money. No floats, ever, at any point in the chain.
 
@@ -19,7 +19,7 @@ this package exists and why it has no dependencies.
 ## Usage
 
 ```ts
-import { money, fromMajor, add, allocate, fromNet, format } from '@mortar/money';
+import { money, fromMajor, add, allocate, fromNet, format } from '@birtalanrobert/money';
 
 const price = fromMajor(12.34, 'EUR'); // 1234 minor units
 const total = add(price, money(500, 'EUR')); // 1734

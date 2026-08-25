@@ -1,5 +1,5 @@
 import { Global, Module, type DynamicModule, type Provider } from '@nestjs/common';
-import { MORTAR_DATA_SOURCE } from '@mortar/database';
+import { MORTAR_DATA_SOURCE } from '@birtalanrobert/database';
 import type { DataSource } from 'typeorm';
 import { AuditService } from './service';
 

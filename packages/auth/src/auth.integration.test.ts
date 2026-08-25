@@ -1,6 +1,6 @@
-import { runInContext } from '@mortar/context';
-import { ConflictError, ValidationError } from '@mortar/http';
-import { createTestDataSource, runInTransaction } from '@mortar/database';
+import { runInContext } from '@birtalanrobert/context';
+import { ConflictError, ValidationError } from '@birtalanrobert/http';
+import { createTestDataSource, runInTransaction } from '@birtalanrobert/database';
 import type { DataSource } from 'typeorm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AuthToken } from './entities/auth-token';

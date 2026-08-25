@@ -1,5 +1,5 @@
 {
-  "name": "@mortar/jobs",
+  "name": "@birtalanrobert/jobs",
   "version": "0.1.0",
   "description": "BullMQ conventions, context propagation and the forward-window scanner",
   "license": "AGPL-3.0-only",
@@ -32,10 +32,10 @@
     "access": "public"
   },
   "dependencies": {
-    "@mortar/context": "workspace:*",
-    "@mortar/observability": "workspace:*",
-    "@mortar/config": "workspace:*",
-    "@mortar/redis": "workspace:*"
+    "@birtalanrobert/context": "workspace:*",
+    "@birtalanrobert/observability": "workspace:*",
+    "@birtalanrobert/config": "workspace:*",
+    "@birtalanrobert/redis": "workspace:*"
   },
   "peerDependencies": {
     "@nestjs/common": "^10.0.0 || ^11.0.0",

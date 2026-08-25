@@ -6,7 +6,7 @@ import {
   SetMetadata,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { BadRequestError } from '@mortar/http';
+import { BadRequestError } from '@birtalanrobert/http';
 import { Observable, from, of, switchMap } from 'rxjs';
 import { IdempotencyService } from './service';
 

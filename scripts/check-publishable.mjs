@@ -19,7 +19,8 @@ const RULES = [
   },
   {
     name: 'password in a connection string',
-    pattern: /(?:postgres|postgresql|redis|mongodb|amqp):\/\/[^:\s'"]+:(?!mortar@|password@|test@)[^@\s'"]{3,}@/,
+    pattern:
+      /(?:postgres|postgresql|redis|mongodb|amqp):\/\/[^:\s'"]+:(?!mortar@|password@|test@)[^@\s'"]{3,}@/,
   },
   {
     name: 'non-public hostname',
@@ -45,7 +46,8 @@ const RULES = [
   },
   {
     name: 'personal contact detail',
-    pattern: /[A-Za-z0-9._%+-]+@(?!example\.(?:com|org)|x\.com|y\.hu|mortar\.dev)[A-Za-z0-9.-]+\.[A-Za-z]{2,}/,
+    pattern:
+      /[A-Za-z0-9._%+-]+@(?!example\.(?:com|org)|x\.com|y\.hu|mortar\.dev)[A-Za-z0-9.-]+\.[A-Za-z]{2,}/,
   },
 ];
 
@@ -89,7 +91,9 @@ for (const dir of readdirSync('packages')) {
 }
 
 if (findings > 0) {
-  console.error(`\n${findings} issue(s) found. These packages publish publicly — fix before publishing.`);
+  console.error(
+    `\n${findings} issue(s) found. These packages publish publicly — fix before publishing.`,
+  );
   process.exit(1);
 }
 console.log('Publishable: no credentials, private hosts or personal details in any shipped file.');

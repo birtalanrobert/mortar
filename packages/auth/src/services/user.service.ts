@@ -1,10 +1,10 @@
-import { resolveManager } from '@mortar/database';
+import { resolveManager } from '@birtalanrobert/database';
 import type { DataSource, EntityManager } from 'typeorm';
 import { type BaseUser, type UserStatus } from '../entities/user';
 import type { BaseMembership } from '../entities/membership';
 import { RoleService } from './role.service';
 import { resolveRegistry, type AuthEntityRegistry } from '../registry';
-import { ValidationError } from '@mortar/http';
+import { ValidationError } from '@birtalanrobert/http';
 import {
   AccountLockedError,
   AccountSuspendedError,

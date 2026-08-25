@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getContext } from '@mortar/context';
+import { getContext } from '@birtalanrobert/context';
 import { ContextMiddleware, negotiateLocale } from './context.middleware';
 
 function run(

@@ -1,8 +1,8 @@
 import type { ArgumentsHost } from '@nestjs/common';
 import { NotFoundException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
-import { runInContext } from '@mortar/context';
-import { createNoopLogger } from '@mortar/observability';
+import { runInContext } from '@birtalanrobert/context';
+import { createNoopLogger } from '@birtalanrobert/observability';
 import { ConflictError, CrossTenantAccessError, RateLimitedError } from './errors';
 import { MortarExceptionFilter, type ExceptionFilterOptions } from './exception.filter';
 

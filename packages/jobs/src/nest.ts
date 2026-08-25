@@ -5,9 +5,13 @@ import {
   type OnApplicationShutdown,
   type Provider,
 } from '@nestjs/common';
-import type { Logger } from '@mortar/observability';
-import { MORTAR_LOGGER } from '@mortar/observability/nestjs';
-import { RedisService, createQueueConnection, type CreateRedisOptions } from '@mortar/redis';
+import type { Logger } from '@birtalanrobert/observability';
+import { MORTAR_LOGGER } from '@birtalanrobert/observability/nestjs';
+import {
+  RedisService,
+  createQueueConnection,
+  type CreateRedisOptions,
+} from '@birtalanrobert/redis';
 import type { Job } from 'bullmq';
 import { JobQueues } from './queue';
 import { TaskScheduler } from './scheduler';

@@ -1,6 +1,6 @@
-import { runInContext } from '@mortar/context';
-import { createTestDataSource, runInTransaction } from '@mortar/database';
-import { CrossTenantAccessError } from '@mortar/http';
+import { runInContext } from '@birtalanrobert/context';
+import { createTestDataSource, runInTransaction } from '@birtalanrobert/database';
+import { CrossTenantAccessError } from '@birtalanrobert/http';
 import { Column, DataSource, Entity, PrimaryGeneratedColumn } from 'typeorm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { TenantScopedRepository } from './repository';

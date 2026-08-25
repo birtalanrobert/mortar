@@ -5,7 +5,7 @@
  * In its own file because it drops and rebuilds the schema, which would wipe
  * the tables the sibling suite creates.
  */
-import { createTestDataSource } from '@mortar/database';
+import { createTestDataSource } from '@birtalanrobert/database';
 import {
   Column,
   DataSource,

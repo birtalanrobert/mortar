@@ -1,4 +1,4 @@
-import { MortarError, UnauthenticatedError } from '@mortar/http';
+import { MortarError, UnauthenticatedError } from '@birtalanrobert/http';
 
 /**
  * Wrong email, wrong password, unknown account — all the same error.

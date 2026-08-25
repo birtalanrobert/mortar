@@ -6,7 +6,7 @@
  * only points one way. These tests exercise the two patterns that work within
  * that constraint, so that the documented answer is a demonstrated one.
  */
-import { createTestDataSource } from '@mortar/database';
+import { createTestDataSource } from '@birtalanrobert/database';
 import {
   Column,
   DataSource,

@@ -1,5 +1,5 @@
-import { runInContext } from '@mortar/context';
-import { createTestDataSource, runInTransaction } from '@mortar/database';
+import { runInContext } from '@birtalanrobert/context';
+import { createTestDataSource, runInTransaction } from '@birtalanrobert/database';
 import { auditMigrations } from './index';
 import type { DataSource } from 'typeorm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';

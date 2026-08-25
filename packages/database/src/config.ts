@@ -1,4 +1,4 @@
-import { envBoolean, envDuration, envInt, envString, envUrl, z } from '@mortar/config';
+import { envBoolean, envDuration, envInt, envString, envUrl, z } from '@birtalanrobert/config';
 
 /**
  * The database variables every service in the catalogue needs.

@@ -1,6 +1,6 @@
-import { createNoopLogger, type Logger } from '@mortar/observability';
-import type { RedisLocks } from '@mortar/redis';
-import { runInChildContext } from '@mortar/context';
+import { createNoopLogger, type Logger } from '@birtalanrobert/observability';
+import type { RedisLocks } from '@birtalanrobert/redis';
+import { runInChildContext } from '@birtalanrobert/context';
 
 export interface ScheduledTask {
   /** Identifies the task in logs and in its lock. */

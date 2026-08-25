@@ -1,11 +1,11 @@
-import { runInContext, getContext } from '@mortar/context';
+import { runInContext, getContext } from '@birtalanrobert/context';
 import {
   RedisLocks,
   TEST_REDIS_URL,
   createQueueConnection,
   createTestRedis,
   flushTestRedis,
-} from '@mortar/redis';
+} from '@birtalanrobert/redis';
 import type { Redis } from 'ioredis';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { defineJob } from './job';

@@ -1,4 +1,4 @@
-# @mortar/audit
+# @birtalanrobert/audit
 
 An append-only audit trail that **joins the caller's transaction**.
 

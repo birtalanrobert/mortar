@@ -1,5 +1,5 @@
 {
-  "name": "@mortar/redis",
+  "name": "@birtalanrobert/redis",
   "version": "0.1.0",
   "description": "Redis connections, locks, caching and rate limiting",
   "license": "AGPL-3.0-only",
@@ -32,9 +32,9 @@
   },
   "type": "commonjs",
   "dependencies": {
-    "@mortar/config": "workspace:*",
-    "@mortar/context": "workspace:*",
-    "@mortar/observability": "workspace:*"
+    "@birtalanrobert/config": "workspace:*",
+    "@birtalanrobert/context": "workspace:*",
+    "@birtalanrobert/observability": "workspace:*"
   },
   "peerDependencies": {
     "@nestjs/common": "^10.0.0 || ^11.0.0",

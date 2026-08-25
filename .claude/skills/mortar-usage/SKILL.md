@@ -1,6 +1,6 @@
 ---
 name: mortar-usage
-description: How to consume the @mortar/* packages in a project — wiring order, the transactional context, tenant scoping, extending mortar's entities, and the job scanner. Use when building any of the seventeen projects on top of mortar.
+description: How to consume the @birtalanrobert/* packages in a project — wiring order, the transactional context, tenant scoping, extending mortar's entities, and the job scanner. Use when building any of the seventeen projects on top of mortar.
 ---
 
 # Using mortar
@@ -17,7 +17,7 @@ accept traffic.
 
 ## The transactional context — the thing to understand first
 
-`@mortar/database` carries the active `EntityManager` in the request context.
+`@birtalanrobert/database` carries the active `EntityManager` in the request context.
 Every mortar write resolves through it, so **audit rows, idempotency keys and
 RLS bindings all join the caller's transaction**.
 
@@ -89,14 +89,17 @@ tenant table, because each project defines its own.
 seventeen specs require this and every one warns about the alternative:
 
 ```ts
-new WindowScanner({
-  name: 'booking-reminders',
-  intervalMs: 60_000,
-  windowMs: 15 * 60_000,      // must exceed the interval
-  find: (from, to) => repo.dueBetween(from, to),
-  keyFor: (b) => `${b.id}:24h`, // include *which* reminder, not just the item
-  dispatch: (b) => queues.enqueue(sendReminder, { bookingId: b.id }),
-}, redis.locks).start();
+new WindowScanner(
+  {
+    name: 'booking-reminders',
+    intervalMs: 60_000,
+    windowMs: 15 * 60_000, // must exceed the interval
+    find: (from, to) => repo.dueBetween(from, to),
+    keyFor: (b) => `${b.id}:24h`, // include *which* reminder, not just the item
+    dispatch: (b) => queues.enqueue(sendReminder, { bookingId: b.id }),
+  },
+  redis.locks,
+).start();
 ```
 
 A per-item job still fires for a booking that was cancelled or rescheduled, and
@@ -128,7 +131,7 @@ forints. Override explicitly at boot if that matters.
 
 ## Errors
 
-Throw `@mortar/http` errors from anywhere — they are framework-free, so domain
+Throw `@birtalanrobert/http` errors from anywhere — they are framework-free, so domain
 code and workers use them too. Clients branch on **`code`**, not on `title`
 (prose, translatable) or `status` (too coarse). A 5xx never carries internal
 detail to the client.

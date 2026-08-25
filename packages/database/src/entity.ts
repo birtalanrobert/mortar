@@ -20,7 +20,7 @@ import {
  */
 export const TIMESTAMP_COLUMN: ColumnOptions = { type: 'timestamptz' };
 
-/** Money is stored as an integer count of minor units, per `@mortar/money`. */
+/** Money is stored as an integer count of minor units, per `@birtalanrobert/money`. */
 export const MONEY_AMOUNT_COLUMN: ColumnOptions = { type: 'bigint' };
 
 /** ISO 4217 currency code. */

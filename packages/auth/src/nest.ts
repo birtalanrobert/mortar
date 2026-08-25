@@ -9,9 +9,9 @@ import {
   type Provider,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { getActor, getTenantId } from '@mortar/context';
-import { MORTAR_DATA_SOURCE } from '@mortar/database';
-import { ForbiddenError, UnauthenticatedError } from '@mortar/http';
+import { getActor, getTenantId } from '@birtalanrobert/context';
+import { MORTAR_DATA_SOURCE } from '@birtalanrobert/database';
+import { ForbiddenError, UnauthenticatedError } from '@birtalanrobert/http';
 import type { DataSource } from 'typeorm';
 import { hasAllPermissions, hasAnyPermission, type Permission } from './rbac';
 import { SessionService, type SessionOptions } from './services/session.service';

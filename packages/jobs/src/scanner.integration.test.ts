@@ -1,4 +1,4 @@
-import { RedisLocks, createTestRedis, flushTestRedis } from '@mortar/redis';
+import { RedisLocks, createTestRedis, flushTestRedis } from '@birtalanrobert/redis';
 import type { Redis } from 'ioredis';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { WindowScanner } from './scanner';

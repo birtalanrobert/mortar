@@ -1,4 +1,4 @@
-# @mortar/auth
+# @birtalanrobert/auth
 
 Identity, sessions, single-use tokens, memberships and RBAC primitives.
 

@@ -1,5 +1,5 @@
-import { getContext } from '@mortar/context';
-import { resolveManager } from '@mortar/database';
+import { getContext } from '@birtalanrobert/context';
+import { resolveManager } from '@birtalanrobert/database';
 import { IsNull, LessThan, type DataSource, type EntityManager } from 'typeorm';
 import type { BaseSession } from '../entities/session';
 import { resolveRegistry, type AuthEntityRegistry } from '../registry';

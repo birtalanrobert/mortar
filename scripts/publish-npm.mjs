@@ -27,15 +27,62 @@ if (!dryRun) {
     console.error('\nA published version must correspond to a commit that exists.');
     process.exit(1);
   }
+
+  // Pre-flight the two things that fail every first publish, so they are
+  // reported as instructions rather than as an opaque registry error.
+  let user;
+  try {
+    user = run('npm', ['whoami']).trim();
+  } catch {
+    console.error('Not logged in to npm.\n\n  npm login\n');
+    process.exit(1);
+  }
+
+  const scope = JSON.parse(readFileSync('packages/money/package.json', 'utf8')).name.split('/')[0];
+  const org = scope.slice(1);
+
+  if (org !== user) {
+    // npm permits a scope only when it is your username or an organisation you
+    // belong to. A scope that is neither fails on every package with an error
+    // that never mentions the organisation.
+    let belongs = false;
+    try {
+      belongs = run('npm', ['org', 'ls', org]).includes(user);
+    } catch {
+      belongs = false;
+    }
+
+    if (!belongs) {
+      console.error(`The npm organisation '${org}' does not exist, or '${user}' is not a member.`);
+      console.error(`\nEvery package here is published under '${scope}', and npm allows a scope`);
+      console.error(`only when it is your username or an organisation you belong to.`);
+      console.error(`\nCreate it once, free for public packages:`);
+      console.error(`\n  https://www.npmjs.com/org/create   (name it exactly: ${org})`);
+      console.error(`\nThen re-run. Nothing has been published.`);
+      process.exit(1);
+    }
+  }
 }
 
 // Dependency order, so a package is never published before something it needs.
 const ORDER = [
-  'money', 'context', 'config', 'observability', 'redis',
-  'database', 'http', 'audit', 'idempotency', 'tenancy', 'auth', 'jobs',
+  'money',
+  'context',
+  'config',
+  'observability',
+  'redis',
+  'database',
+  'http',
+  'audit',
+  'idempotency',
+  'tenancy',
+  'auth',
+  'jobs',
 ];
 
-const known = readdirSync('packages').filter((d) => existsSync(join('packages', d, 'package.json')));
+const known = readdirSync('packages').filter((d) =>
+  existsSync(join('packages', d, 'package.json')),
+);
 const missing = known.filter((d) => !ORDER.includes(d));
 if (missing.length > 0) {
   console.error(`These packages are not in the publish order: ${missing.join(', ')}`);
@@ -61,19 +108,25 @@ for (const dir of ORDER) {
   }
 
   try {
-    const args = ['publish', '--access', 'public'];
-    if (dryRun) {
-      // A dry run exists to be inspected *before* committing, so pnpm's own
-      // clean-tree requirement is unhelpful here. The real publish still
-      // refuses a dirty tree, checked above.
-      args.push('--dry-run', '--no-git-checks');
-    }
+    // --no-git-checks in both modes: the clean-tree requirement is enforced
+    // above, with a message that says which files are dirty. Leaving pnpm's
+    // own check on would mean two definitions of 'clean' and a second, vaguer
+    // error — and would break a dry run, which exists to be inspected
+    // *before* committing.
+    const args = ['publish', '--access', 'public', '--no-git-checks'];
+    if (dryRun) args.push('--dry-run');
     const output = run('pnpm', args, join('packages', dir));
     const fileCount = /(\d+)\s+files?/.exec(output)?.[1] ?? '?';
     console.log(`  ✓ ${spec} (${fileCount} files)`);
   } catch (error) {
-    console.error(`  ✗ ${spec}`);
-    console.error(String(error.stdout ?? error.stderr ?? error.message).trim().split('\n').slice(-6).join('\n'));
+    console.error(`  ✗ ${spec}\n`);
+    // Both streams, and never `??`: an empty stdout Buffer is neither null nor
+    // undefined, so `??` would keep it and hide the real error in stderr.
+    const detail = [error.stdout, error.stderr, error.message]
+      .map((part) => (part ? String(part).trim() : ''))
+      .filter(Boolean)
+      .join('\n');
+    console.error(detail || '(no output captured)');
     console.error('\nStopped. Packages already published are fine; fix and re-run.');
     process.exit(1);
   }

@@ -1,5 +1,5 @@
 {
-  "name": "@mortar/context",
+  "name": "@birtalanrobert/context",
   "version": "0.1.0",
   "description": "AsyncLocalStorage request context",
   "license": "AGPL-3.0-only",
