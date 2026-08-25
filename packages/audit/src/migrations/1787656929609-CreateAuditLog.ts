@@ -7,8 +7,8 @@ import type { MigrationInterface, QueryRunner } from 'typeorm';
  *
  *   migrations: [...mortarMigrations, ...myMigrations]
  */
-export class CreateAuditLog1700000000001 implements MigrationInterface {
-  name = 'CreateAuditLog1700000000001';
+export class CreateAuditLog1787656929609 implements MigrationInterface {
+  name = 'CreateAuditLog1787656929609';
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`

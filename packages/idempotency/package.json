@@ -23,5 +23,23 @@
   },
   "publishConfig": {
     "access": "restricted"
+  },
+  "dependencies": {
+    "@mortar/context": "workspace:*",
+    "@mortar/database": "workspace:*",
+    "@mortar/http": "workspace:*"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^10.0.0 || ^11.0.0",
+    "rxjs": "^7.0.0",
+    "typeorm": "^0.3.0 || ^1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@nestjs/common": {
+      "optional": true
+    },
+    "rxjs": {
+      "optional": true
+    }
   }
 }

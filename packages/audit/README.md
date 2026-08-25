@@ -17,7 +17,8 @@ await runInTransaction(dataSource, async () => {
     action: 'booking.cancelled',
     entityType: 'booking',
     entityId: booking.id,
-    before, after,
+    before,
+    after,
   });
 });
 // Both commit, or neither does.

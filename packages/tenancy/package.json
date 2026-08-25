@@ -1,7 +1,7 @@
 {
   "name": "@mortar/tenancy",
   "version": "0.1.0",
-  "description": "Tenant resolution, scoped repositories and RLS helpers",
+  "description": "Tenant resolution, scoped repositories and row-level security",
   "license": "UNLICENSED",
   "type": "commonjs",
   "main": "./dist/index.js",
@@ -23,5 +23,23 @@
   },
   "publishConfig": {
     "access": "restricted"
+  },
+  "dependencies": {
+    "@mortar/context": "workspace:*",
+    "@mortar/database": "workspace:*",
+    "@mortar/http": "workspace:*"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^10.0.0 || ^11.0.0",
+    "@nestjs/core": "^10.0.0 || ^11.0.0",
+    "typeorm": "^0.3.0 || ^1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@nestjs/common": {
+      "optional": true
+    },
+    "@nestjs/core": {
+      "optional": true
+    }
   }
 }

@@ -17,7 +17,9 @@
     "format:check": "prettier --check .",
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down -v",
-    "test:integration": "vitest run --config vitest.integration.mts"
+    "test:integration": "vitest run --config vitest.integration.mts",
+    "new:migration": "node scripts/new-migration.mjs",
+    "new:package": "node scripts/new-package.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
