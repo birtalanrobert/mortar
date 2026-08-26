@@ -10,4 +10,7 @@ export {
   type Histogram,
   type MetricLabels,
   type Metrics,
+  type MetricSeries,
+  type HistogramSeries,
+  type MetricsSnapshot,
 } from './metrics';

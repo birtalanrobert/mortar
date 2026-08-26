@@ -55,10 +55,36 @@ function labelKey(labels: MetricLabels = {}): string {
  * An in-memory implementation, useful in tests where an assertion on a metric
  * is the clearest way to prove a code path ran.
  */
+interface Observations {
+  readonly labels: MetricLabels;
+  readonly values: number[];
+}
+
+export interface MetricSeries {
+  readonly name: string;
+  readonly labels: MetricLabels;
+  readonly value: number;
+}
+
+export interface HistogramSeries {
+  readonly name: string;
+  readonly labels: MetricLabels;
+  readonly count: number;
+  readonly sum: number;
+  readonly min: number;
+  readonly max: number;
+}
+
+export interface MetricsSnapshot {
+  readonly counters: readonly MetricSeries[];
+  readonly gauges: readonly MetricSeries[];
+  readonly histograms: readonly HistogramSeries[];
+}
+
 export class InMemoryMetrics implements Metrics {
   private readonly counters = new Map<string, Map<string, Sample>>();
   private readonly gauges = new Map<string, Map<string, Sample>>();
-  private readonly histograms = new Map<string, Map<string, number[]>>();
+  private readonly histograms = new Map<string, Map<string, Observations>>();
 
   counter(name: string): Counter {
     const series = this.series(this.counters, name);
@@ -90,15 +116,18 @@ export class InMemoryMetrics implements Metrics {
   histogram(name: string): Histogram {
     let series = this.histograms.get(name);
     if (!series) {
-      series = new Map<string, number[]>();
+      series = new Map<string, Observations>();
       this.histograms.set(name, series);
     }
     const observations = series;
     const observe = (value: number, labels: MetricLabels = {}) => {
       const key = labelKey(labels);
       const bucket = observations.get(key);
-      if (bucket) bucket.push(value);
-      else observations.set(key, [value]);
+      // The labels are stored beside the values rather than recovered from the
+      // key later: a label value containing `=` or `,` would not survive the
+      // round trip, and one eventually will.
+      if (bucket) bucket.values.push(value);
+      else observations.set(key, { labels, values: [value] });
     };
     return {
       observe,
@@ -113,6 +142,40 @@ export class InMemoryMetrics implements Metrics {
     };
   }
 
+  /**
+   * Every series currently held, for an exposition endpoint.
+   *
+   * A `/metrics` route needs to enumerate what exists; `value()` and
+   * `observations()` can only answer about a name the caller already knows,
+   * which an exporter by definition does not.
+   *
+   * Histograms are reported as count, sum, min and max rather than as buckets.
+   * Bucketing is a presentation decision that belongs to whatever scrapes this,
+   * and keeping raw observations here means a percentile can still be computed
+   * exactly rather than interpolated.
+   */
+  snapshot(): MetricsSnapshot {
+    const flatten = (source: Map<string, Map<string, Sample>>): MetricSeries[] =>
+      [...source.entries()].flatMap(([name, series]) =>
+        [...series.values()].map(({ labels, value }) => ({ name, labels, value })),
+      );
+
+    return {
+      counters: flatten(this.counters),
+      gauges: flatten(this.gauges),
+      histograms: [...this.histograms.entries()].flatMap(([name, series]) =>
+        [...series.values()].map(({ labels, values }) => ({
+          name,
+          labels,
+          count: values.length,
+          sum: values.reduce((total, value) => total + value, 0),
+          min: values.length > 0 ? Math.min(...values) : 0,
+          max: values.length > 0 ? Math.max(...values) : 0,
+        })),
+      ),
+    };
+  }
+
   /** Current value of a counter or gauge, for assertions. */
   value(name: string, labels: MetricLabels = {}): number | undefined {
     const key = labelKey(labels);
@@ -121,7 +184,7 @@ export class InMemoryMetrics implements Metrics {
 
   /** Recorded observations of a histogram, for assertions. */
   observations(name: string, labels: MetricLabels = {}): readonly number[] {
-    return this.histograms.get(name)?.get(labelKey(labels)) ?? [];
+    return this.histograms.get(name)?.get(labelKey(labels))?.values ?? [];
   }
 
   reset(): void {

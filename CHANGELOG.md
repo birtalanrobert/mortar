@@ -6,9 +6,51 @@ rest.
 
 ## observability 1.0.1
 
-No code change. `1.0.0` was left partially staged by an interrupted publish and
-npm will not accept that version again, so the release moved past it. Packages
-depending on `^1.0.0` need no update — a caret range accepts the patch.
+Never published. An interrupted publish left `1.0.0` partially staged and npm
+rejected a retry, so the version was stepped over — and then the staged upload
+finalised on npm's side after all. `1.0.0` is the real release; `1.0.1` does
+not exist.
+
+## observability 1.1.0, jobs 1.1.0
+
+Everything a worker needs to be observable. Found by building `starter-worker`,
+whose specification asks for queue depth, job duration, failure rate and
+scanner lag — none of which anything recorded.
+
+### Added
+
+- **`JobWorkers` records `job_duration_ms`, `jobs_total` (labelled by outcome)
+  and `jobs_dead_lettered_total`.** In the runner rather than in each handler:
+  how many ran, how many failed and how long they took are properties of the
+  runner and identical in every service. One counter with a `status` label
+  rather than two counters, because failure rate is a ratio and both halves
+  must share their labels. Defaults to a no-op registry.
+
+- **`WindowScanner` records `scanner_scan_duration_ms`, `scanner_items_total`
+  and `scanner_last_success_timestamp_ms`.** The last is the one worth alerting
+  on: a scanner that has stopped logs nothing and errors nothing, it simply
+  stops finding work, and the first anyone hears is a customer asking why they
+  were never reminded. A timestamp rather than an age, because a gauge written
+  only on success cannot grow while the scanner is dead.
+
+- **`JobQueues` rejects a job id containing `:`**, naming the job and the id.
+  BullMQ uses the colon as a key separator and refuses such an id with an error
+  that mentions neither — and `` `reminder:${id}` `` is the natural thing to
+  write, so that error is reached often and explains nothing.
+
+- **`JobsModule` passes the container's metrics registry** to the worker
+  registry, so this costs a consumer nothing to switch on.
+
+- **`InMemoryMetrics.snapshot()`**, returning every series held. A `/metrics`
+  endpoint has to enumerate what exists, and `value()` could only answer about
+  a name the caller already knew. Histograms report count, sum, min and max;
+  bucketing is a presentation decision belonging to whatever scrapes it.
+
+### Fixed
+
+- **Histogram labels are stored beside their observations** rather than
+  recovered by parsing the storage key. A label value containing `=` or `,`
+  would not have survived the round trip.
 
 ## 1.0.0
 

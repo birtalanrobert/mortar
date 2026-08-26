@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/jobs",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "BullMQ conventions, context propagation and the forward-window scanner",
   "license": "AGPL-3.0-only",
   "type": "commonjs",

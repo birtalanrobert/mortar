@@ -1,4 +1,9 @@
-import { createNoopLogger, type Logger } from '@birtalanrobert/observability';
+import {
+  createNoopLogger,
+  createNoopMetrics,
+  type Logger,
+  type Metrics,
+} from '@birtalanrobert/observability';
 import type { RedisLocks } from '@birtalanrobert/redis';
 
 export interface WindowScannerOptions<TItem> {
@@ -31,6 +36,15 @@ export interface WindowScannerOptions<TItem> {
   /** How long a dispatch is remembered. Defaults to four windows. */
   dedupeTtlMs?: number;
   logger?: Logger;
+  /**
+   * Where scan counts, durations and the last-success timestamp go.
+   *
+   * The timestamp is the one worth alerting on. A scanner that has stopped
+   * produces no errors and no logs — it simply stops finding work, and the
+   * first anyone hears is a customer asking why they were never reminded.
+   * Nothing else in this system fails that quietly.
+   */
+  metrics?: Metrics;
 }
 
 export interface ScanResult {
@@ -66,6 +80,9 @@ export class WindowScanner<TItem> {
   private running = false;
   private readonly logger: Logger;
   private readonly dedupeTtlMs: number;
+  private readonly scanDuration;
+  private readonly items;
+  private readonly lastSuccess;
 
   constructor(
     private readonly options: WindowScannerOptions<TItem>,
@@ -73,6 +90,17 @@ export class WindowScanner<TItem> {
   ) {
     this.logger = options.logger ?? createNoopLogger();
     this.dedupeTtlMs = options.dedupeTtlMs ?? options.windowMs * 4;
+
+    const metrics = options.metrics ?? createNoopMetrics();
+    this.scanDuration = metrics.histogram('scanner_scan_duration_ms', 'Time for one pass.');
+    this.items = metrics.counter('scanner_items_total', 'Items seen, by outcome.');
+    // A timestamp rather than an age: a gauge set only when a scan succeeds
+    // cannot grow while the scanner is stalled, which is exactly when it
+    // needs to. Monitoring subtracts it from now.
+    this.lastSuccess = metrics.gauge(
+      'scanner_last_success_timestamp_ms',
+      'When a pass last completed. Alert on how old this is.',
+    );
 
     if (options.windowMs <= options.intervalMs) {
       throw new Error(
@@ -155,6 +183,13 @@ export class WindowScanner<TItem> {
       failed,
       durationMs: Date.now() - startedAt,
     };
+
+    const labels = { scanner: this.options.name };
+    this.scanDuration.observe(result.durationMs, labels);
+    this.items.increment(dispatched, { ...labels, outcome: 'dispatched' });
+    this.items.increment(skipped, { ...labels, outcome: 'skipped' });
+    this.items.increment(failed, { ...labels, outcome: 'failed' });
+    this.lastSuccess.set(Date.now(), labels);
 
     this.logger.debug('scan complete', { scanner: this.options.name, ...result });
     return result;

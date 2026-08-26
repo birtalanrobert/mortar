@@ -1,4 +1,5 @@
 import { RedisLocks, createTestRedis, flushTestRedis } from '@birtalanrobert/redis';
+import { InMemoryMetrics } from '@birtalanrobert/observability';
 import type { Redis } from 'ioredis';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { WindowScanner } from './scanner';
@@ -237,5 +238,53 @@ describe('configuration', () => {
           locks,
         ),
     ).toThrow(/must exceed intervalMs/);
+  });
+});
+
+describe('metrics', () => {
+  it('records what a pass did, and when it last succeeded', async () => {
+    const metrics = new InMemoryMetrics();
+    const sent: string[] = [];
+    const before = Date.now();
+
+    await scanner(
+      [
+        { id: 'b1', dueAt: inMinutes(5), kind: '2h' },
+        { id: 'b2', dueAt: inMinutes(9), kind: '2h' },
+      ],
+      sent,
+      { metrics },
+    ).scanOnce();
+
+    const dispatched = metrics.snapshot().counters.find((s) => s.labels.outcome === 'dispatched');
+    expect(dispatched?.value).toBe(2);
+
+    /**
+     * The series worth alerting on.
+     *
+     * A scanner that has stopped logs nothing and errors nothing — it simply
+     * stops finding work. This timestamp going stale is the only signal, which
+     * is why it is a timestamp rather than an age: a gauge written only when a
+     * scan succeeds cannot grow while the scanner is dead.
+     */
+    const lastSuccess = metrics
+      .snapshot()
+      .gauges.find((s) => s.name === 'scanner_last_success_timestamp_ms');
+    expect(lastSuccess?.value).toBeGreaterThanOrEqual(before);
+  });
+
+  it('leaves the last-success timestamp untouched when the query fails', async () => {
+    const metrics = new InMemoryMetrics();
+    await scanner([], [], {
+      metrics,
+      find: async () => {
+        throw new Error('database unreachable');
+      },
+    }).scanOnce();
+
+    // Otherwise a scanner failing every pass would look perfectly healthy.
+    expect(
+      metrics.snapshot().gauges.find((s) => s.name === 'scanner_last_success_timestamp_ms'),
+    ).toBeUndefined();
   });
 });

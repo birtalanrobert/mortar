@@ -84,3 +84,43 @@ describe('noop metrics', () => {
     await expect(metrics.histogram('h').time(async () => 7)).resolves.toBe(7);
   });
 });
+
+describe('snapshot', () => {
+  it('enumerates every series, which is what an exposition endpoint needs', () => {
+    const metrics = new InMemoryMetrics();
+    metrics.counter('jobs_total').increment(1, { queue: 'mail', status: 'completed' });
+    metrics.counter('jobs_total').increment(2, { queue: 'mail', status: 'failed' });
+    metrics.gauge('queue_depth').set(7, { queue: 'mail' });
+    metrics.histogram('job_duration_ms').observe(10, { queue: 'mail' });
+    metrics.histogram('job_duration_ms').observe(30, { queue: 'mail' });
+
+    const snapshot = metrics.snapshot();
+
+    expect(snapshot.counters).toHaveLength(2);
+    expect(snapshot.counters).toContainEqual({
+      name: 'jobs_total',
+      labels: { queue: 'mail', status: 'failed' },
+      value: 2,
+    });
+    expect(snapshot.gauges).toEqual([{ name: 'queue_depth', labels: { queue: 'mail' }, value: 7 }]);
+    expect(snapshot.histograms).toEqual([
+      { name: 'job_duration_ms', labels: { queue: 'mail' }, count: 2, sum: 40, min: 10, max: 30 },
+    ]);
+  });
+
+  it('keeps labels whose values contain the key separators', () => {
+    const metrics = new InMemoryMetrics();
+    // Recovering labels by parsing the storage key would split this in two.
+    metrics.histogram('probe').observe(1, { detail: 'a=b,c=d' });
+
+    expect(metrics.snapshot().histograms[0]?.labels).toEqual({ detail: 'a=b,c=d' });
+  });
+
+  it('is empty before anything is recorded', () => {
+    expect(new InMemoryMetrics().snapshot()).toEqual({
+      counters: [],
+      gauges: [],
+      histograms: [],
+    });
+  });
+});

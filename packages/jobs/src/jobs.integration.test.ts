@@ -8,6 +8,7 @@ import {
 } from '@birtalanrobert/redis';
 import type { Redis } from 'ioredis';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { InMemoryMetrics } from '@birtalanrobert/observability';
 import { defineJob } from './job';
 import { JobQueues } from './queue';
 import { TaskScheduler } from './scheduler';
@@ -36,13 +37,14 @@ const failing = defineJob<{ attempt: string }>({
 let connection: Redis;
 let queues: JobQueues;
 let workers: JobWorkers;
+const metrics = new InMemoryMetrics();
 
 const settled = (ms = 400) => new Promise((resolve) => setTimeout(resolve, ms));
 
 beforeAll(() => {
   connection = createQueueConnection({ url: TEST_REDIS_URL });
   queues = new JobQueues({ connection, prefix: PREFIX });
-  workers = new JobWorkers({ connection, prefix: PREFIX, concurrency: 4 });
+  workers = new JobWorkers({ connection, prefix: PREFIX, concurrency: 4, metrics });
 });
 
 afterAll(async () => {
@@ -266,5 +268,74 @@ describe('scheduled tasks', () => {
       scheduler.register({ name: 'once', intervalMs: 60_000, run: async () => undefined }),
     ).toThrow(/already registered/);
     scheduler.stop();
+  });
+});
+
+describe('metrics', () => {
+  const counted = (name: string, labels: Record<string, string>) =>
+    metrics
+      .snapshot()
+      .counters.filter((series) => series.name === name)
+      .filter((series) => Object.entries(labels).every(([k, v]) => series.labels[k] === v))
+      .reduce((total, series) => total + series.value, 0);
+
+  it('counts runs by outcome and times them', async () => {
+    const job = defineJob<{ id: string }>({ name: 'metrics.ok', queue: 'metrics-test' });
+    workers.register(job, async () => {});
+    await queues.enqueue(job, { id: 'm1' });
+    await settled();
+
+    expect(counted('jobs_total', { queue: 'metrics-test', status: 'completed' })).toBe(1);
+
+    const timing = metrics
+      .snapshot()
+      .histograms.find((series) => series.labels.job === 'metrics.ok');
+    expect(timing?.count).toBe(1);
+  });
+
+  /**
+   * Failure rate is a ratio, so both halves must carry the same labels — which
+   * is why this is one counter with a `status` label rather than two counters.
+   */
+  it('counts a failure and, separately, a dead letter', async () => {
+    const job = defineJob<{ id: string }>({
+      name: 'metrics.fails',
+      queue: 'metrics-dead-letter',
+      options: { attempts: 2, backoff: { type: 'fixed', delay: 10 } },
+    });
+    workers.register(job, async () => {
+      throw new Error('nope');
+    });
+    await queues.enqueue(job, { id: 'm2' });
+    await settled(600);
+
+    expect(counted('jobs_total', { job: 'metrics.fails', status: 'failed' })).toBe(2);
+    expect(counted('jobs_dead_lettered_total', { job: 'metrics.fails' })).toBe(1);
+  });
+});
+
+describe('job ids', () => {
+  it('refuses an id BullMQ cannot store, naming the job', async () => {
+    // `reminder:${id}` is the natural thing to write, and BullMQ's own error
+    // names neither the job nor the queue.
+    const colonised = defineJob<{ id: string }>({
+      name: 'colon.id',
+      queue: 'id-validation',
+      idFor: (payload) => `thing:${payload.id}`,
+    });
+
+    await expect(queues.enqueue(colonised, { id: '1' })).rejects.toThrow(
+      /Job 'colon\.id' produced the id 'thing:1'/,
+    );
+  });
+
+  it('accepts a conventional id', async () => {
+    const fine = defineJob<{ id: string }>({
+      name: 'hyphen.id',
+      queue: 'id-validation',
+      idFor: (payload) => `thing-${payload.id}`,
+    });
+
+    expect(await queues.enqueue(fine, { id: '1' })).toBe('thing-1');
   });
 });

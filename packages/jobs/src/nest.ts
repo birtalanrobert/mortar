@@ -6,8 +6,8 @@ import {
   type Provider,
 } from '@nestjs/common';
 import type { AsyncModuleOptions } from '@birtalanrobert/context';
-import type { Logger } from '@birtalanrobert/observability';
-import { MORTAR_LOGGER } from '@birtalanrobert/observability/nestjs';
+import type { Logger, Metrics } from '@birtalanrobert/observability';
+import { MORTAR_LOGGER, MORTAR_METRICS } from '@birtalanrobert/observability/nestjs';
 import {
   RedisService,
   createQueueConnection,
@@ -51,15 +51,19 @@ export class JobsModule implements OnApplicationShutdown {
       },
       {
         provide: JobWorkers,
-        useFactory: (logger?: Logger) =>
+        useFactory: (logger?: Logger, metrics?: Metrics) =>
           new JobWorkers({
             connection,
             prefix: options.prefix,
             concurrency: options.concurrency,
             logger,
+            metrics,
             onDeadLetter: options.onDeadLetter,
           }),
-        inject: [{ token: MORTAR_LOGGER, optional: true }],
+        inject: [
+          { token: MORTAR_LOGGER, optional: true },
+          { token: MORTAR_METRICS, optional: true },
+        ],
       },
       {
         provide: TaskScheduler,
@@ -101,15 +105,20 @@ export class JobsModule implements OnApplicationShutdown {
       },
       {
         provide: JobWorkers,
-        useFactory: (connection: never, logger?: Logger) =>
+        useFactory: (connection: never, logger?: Logger, metrics?: Metrics) =>
           new JobWorkers({
             connection,
             prefix: resolved.current?.prefix,
             concurrency: resolved.current?.concurrency,
             logger,
+            metrics,
             onDeadLetter: resolved.current?.onDeadLetter,
           }),
-        inject: [connectionToken, { token: MORTAR_LOGGER, optional: true }],
+        inject: [
+          connectionToken,
+          { token: MORTAR_LOGGER, optional: true },
+          { token: MORTAR_METRICS, optional: true },
+        ],
       },
       {
         provide: TaskScheduler,

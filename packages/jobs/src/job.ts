@@ -21,6 +21,13 @@ export interface JobDefinition<TPayload> {
    * so the same logical job enqueued twice runs once. Essential for anything
    * triggered by a webhook or a user action that can be repeated.
    */
+  /**
+   * A stable id per logical job, which is what makes enqueuing idempotent:
+   * BullMQ ignores a second job carrying an id it already holds.
+   *
+   * Must not contain `:` — BullMQ uses it as a key separator and refuses the
+   * job. Use `-`.
+   */
   readonly idFor?: (payload: TPayload) => string;
 }
 

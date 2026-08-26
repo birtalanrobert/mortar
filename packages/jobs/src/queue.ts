@@ -50,7 +50,7 @@ export class JobQueues {
     const job = await this.queue(definition.queue).add(definition.name, attachContext(payload), {
       ...definition.options,
       ...options,
-      ...(definition.idFor ? { jobId: definition.idFor(payload) } : {}),
+      ...(definition.idFor ? { jobId: jobIdFor(definition, payload) } : {}),
     });
     return job.id;
   }
@@ -86,7 +86,7 @@ export class JobQueues {
         opts: {
           ...definition.options,
           ...options,
-          ...(definition.idFor ? { jobId: definition.idFor(payload) } : {}),
+          ...(definition.idFor ? { jobId: jobIdFor(definition, payload) } : {}),
         },
       })),
     );
@@ -102,4 +102,28 @@ export class JobQueues {
     await Promise.all([...this.queues.values()].map((queue) => queue.close()));
     this.queues.clear();
   }
+}
+
+/**
+ * Computes a job id and rejects one BullMQ cannot store.
+ *
+ * BullMQ uses `:` to separate segments of its own Redis keys, so a custom id
+ * containing one is refused — with an error naming neither the job nor the
+ * queue. Since the natural thing to write is `` `reminder:${id}` ``, that error
+ * is reached often and explains nothing, and it surfaces at enqueue time,
+ * which may be far from the definition that caused it.
+ */
+function jobIdFor<TPayload extends object>(
+  definition: JobDefinition<TPayload>,
+  payload: TPayload,
+): string {
+  const id = definition.idFor!(payload);
+  if (id.includes(':')) {
+    throw new Error(
+      `Job '${definition.name}' produced the id '${id}', which BullMQ will not accept: ` +
+        `a custom id cannot contain ':', because BullMQ uses it as a key separator. ` +
+        `Use another separator — '-' is conventional.`,
+    );
+  }
+  return id;
 }

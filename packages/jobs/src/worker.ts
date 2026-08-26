@@ -1,5 +1,10 @@
 import { Worker, type ConnectionOptions, type Job, type WorkerOptions } from 'bullmq';
-import { createNoopLogger, type Logger } from '@birtalanrobert/observability';
+import {
+  createNoopLogger,
+  createNoopMetrics,
+  type Logger,
+  type Metrics,
+} from '@birtalanrobert/observability';
 import type { JobDefinition } from './job';
 import { detachContext, runWithJobContext, type WithContext } from './propagation';
 
@@ -10,6 +15,15 @@ export interface WorkerRegistryOptions {
   prefix?: string;
   concurrency?: number;
   logger?: Logger;
+  /**
+   * Where run counts and durations go.
+   *
+   * Recorded here rather than left to each handler, because the three numbers
+   * an operator actually asks for — how many ran, how many failed, how long
+   * they took — are properties of the runner and identical in every service.
+   * Defaults to a no-op, so a consumer that wants none pays nothing.
+   */
+  metrics?: Metrics;
   /**
    * Called when a job exhausts every attempt.
    *
@@ -32,9 +46,23 @@ export class JobWorkers {
   private readonly workers = new Map<string, Worker>();
   private readonly handlers = new Map<string, JobHandler<never>>();
   private readonly logger: Logger;
+  private readonly duration;
+  private readonly runs;
+  private readonly deadLettered;
 
   constructor(private readonly options: WorkerRegistryOptions) {
     this.logger = options.logger ?? createNoopLogger();
+
+    const metrics = options.metrics ?? createNoopMetrics();
+    this.duration = metrics.histogram('job_duration_ms', 'Handler run time, by queue and job.');
+    // One counter with a `status` label rather than separate success and
+    // failure counters: failure rate is the useful figure, and it is a ratio of
+    // two series that must therefore share their labels.
+    this.runs = metrics.counter('jobs_total', 'Job runs, by queue, job and outcome.');
+    this.deadLettered = metrics.counter(
+      'jobs_dead_lettered_total',
+      'Jobs that exhausted every attempt.',
+    );
   }
 
   /**
@@ -104,6 +132,7 @@ export class JobWorkers {
       this.logger.debug('job started', { queue: queueName, job: job.name, jobId: job.id });
       try {
         await (handler as JobHandler<object>)(payload, job);
+        this.record(queueName, job, 'completed', Date.now() - startedAt);
         this.logger.info('job completed', {
           queue: queueName,
           job: job.name,
@@ -114,6 +143,7 @@ export class JobWorkers {
         // A handler throwing a string would otherwise reach BullMQ's retry
         // logic without a stack, making the failure undiagnosable.
         const error = thrown instanceof Error ? thrown : new Error(String(thrown));
+        this.record(queueName, job, 'failed', Date.now() - startedAt);
         this.logger.warn('job failed', {
           queue: queueName,
           job: job.name,
@@ -128,7 +158,19 @@ export class JobWorkers {
     });
   }
 
+  private record(
+    queue: string,
+    job: Job,
+    status: 'completed' | 'failed',
+    durationMs: number,
+  ): void {
+    const labels = { queue, job: job.name };
+    this.duration.observe(durationMs, labels);
+    this.runs.increment(1, { ...labels, status });
+  }
+
   private async deadLetter(job: Job, error: Error): Promise<void> {
+    this.deadLettered.increment(1, { queue: job.queueName, job: job.name });
     this.logger.error('job exhausted every attempt', error, {
       queue: job.queueName,
       job: job.name,
