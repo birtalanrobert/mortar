@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/observability",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Structured logging, metrics and correlation",
   "license": "AGPL-3.0-only",
   "type": "commonjs",

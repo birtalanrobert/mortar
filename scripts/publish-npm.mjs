@@ -178,7 +178,20 @@ for (const pkg of ordered) {
       .map((part) => (part ? String(part).trim() : ''))
       .filter(Boolean)
       .join('\n');
-    if (detail.includes('EOTP')) {
+    if (detail.includes('E409') || detail.includes('previously staged')) {
+      // npm keeps a partial record when a publish is interrupted mid-upload.
+      // That name and version are then permanently unusable — it cannot be
+      // unpublished, and retrying returns the same 409 forever.
+      const [, version] = spec.split('@').slice(-2);
+      console.error(
+        `\nnpm has a partially-staged ${spec} from an interrupted publish.\n` +
+          `That version is spent: it cannot be republished or removed. Bump past it:\n\n` +
+          `  pnpm version:bump patch ${pkg.dir}\n` +
+          `  pnpm install && pnpm release\n\n` +
+          `Packages already published that depend on ${version} need no change — a\n` +
+          `caret range accepts the patch, which is the point of them.\n`,
+      );
+    } else if (detail.includes('EOTP')) {
       console.error(
         '\nTwo-factor auth is required for publishing. Either relax it to\n' +
           'authorisation-only, or use an automation token:\n\n' +

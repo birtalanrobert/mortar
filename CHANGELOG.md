@@ -4,6 +4,12 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## observability 1.0.1
+
+No code change. `1.0.0` was left partially staged by an interrupted publish and
+npm will not accept that version again, so the release moved past it. Packages
+depending on `^1.0.0` need no update — a caret range accepts the patch.
+
 ## 1.0.0
 
 The version numbers become meaningful.
