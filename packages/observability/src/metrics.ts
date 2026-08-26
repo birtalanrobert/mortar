@@ -1,13 +1,13 @@
 /**
  * A deliberately small metrics abstraction.
  *
- * Mortar does not choose an exporter. Every project in the catalogue names
+ * Mortar does not choose an exporter. Every service names the
  * metrics it needs — hold-acquisition latency, reminder dispatch lag, kiosk
  * sync failures, event-resolution lag — but they will be shipped to whatever
  * the deployment target offers. So this package defines the *surface* those
  * metrics are recorded against and ships an in-memory implementation for tests
  * and local work; wiring it to Prometheus, OTLP or a hosted collector is one
- * small adapter written per deployment, not a dependency imposed on seventeen
+ * small adapter written per deployment, not a dependency imposed on every
  * projects.
  */
 

@@ -5,7 +5,7 @@ import { money, type Money } from './money';
  * minor unit.
  *
  * This is the algorithm behind every bill split, fee distribution, discount
- * apportionment and commission calculation in the catalogue. The naive
+ * apportionment and commission calculation. The naive
  * approach — multiply each share by the ratio and round — either loses money
  * or creates it, and the discrepancy always surfaces later as an unexplainable
  * one-cent difference on a reconciliation report.

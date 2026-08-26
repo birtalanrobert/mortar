@@ -4,7 +4,7 @@ import { buildDataSourceOptions } from './data-source';
 /**
  * Connection string for mortar's own test database.
  *
- * Port 3050 sits outside the 3100-4799 range the seventeen projects allocate
+ * Port 3050 sits outside the 3100-4799 range the consuming services allocate
  * from, so mortar's tests can never touch a project's local data.
  */
 export const TEST_DATABASE_URL =

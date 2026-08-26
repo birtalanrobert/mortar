@@ -29,7 +29,7 @@ function scryptAsync(
  * A password hashing strategy.
  *
  * Pluggable because the right answer changes over time and because mortar
- * should not force a native dependency on all seventeen projects. The default
+ * should not force a native dependency on every consumer. The default
  * uses Node's built-in scrypt — zero dependencies, no build step, no
  * platform-specific binaries — and a project wanting Argon2id supplies an
  * adapter without mortar taking on the dependency.

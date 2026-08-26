@@ -44,7 +44,7 @@ export interface ScanResult {
 /**
  * Scans a forward window for work that is about to come due.
  *
- * **Ten of the seventeen projects need exactly this**, and every one of their
+ * **This pattern is needed constantly**, and every one of their
  * specifications warns against the obvious alternative: scheduling one job per
  * item at the moment it is created.
  *

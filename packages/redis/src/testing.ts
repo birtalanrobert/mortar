@@ -4,7 +4,7 @@ import { buildRedisOptions } from './connection';
 /**
  * Connection string for mortar's own test Redis.
  *
- * Port 3051 sits outside the 3100-4799 range the seventeen projects allocate
+ * Port 3051 sits outside the 3100-4799 range the consuming services allocate
  * from, so mortar's tests can never touch a project's local data.
  */
 export const TEST_REDIS_URL = process.env.MORTAR_TEST_REDIS_URL ?? 'redis://localhost:3051';

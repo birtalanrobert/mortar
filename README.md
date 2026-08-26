@@ -1,109 +1,108 @@
 # mortar
 
-The common library behind the seventeen projects in `../specs`. Mortar is what
-binds the bricks: plumbing that every project needs, written once, so that no
-project spends its first fortnight rebuilding tenancy scoping, money arithmetic
-or SMS segment counting.
+Backend plumbing for NestJS services, as twelve small packages.
 
-## Licence
+Multi-tenant SaaS backends need the same things every time: money that does not
+drift, a request context that reaches the logger, an audit trail that cannot lie,
+tenant isolation that fails closed, background work that survives the world
+changing underneath it. Mortar is those things, written once and tested
+properly, so they are not rewritten badly on each new service.
 
-**AGPL-3.0-only.** Read it, learn from it, use it — but anyone who builds a
-hosted service on mortar must release their service's source under the AGPL
-too. The network clause is the part that matters here: plain GPL would not
-trigger for a SaaS, which is precisely what these packages are used to build.
-
-The AGPL is a grant from the copyright holder to everyone else, and the
-copyright holder is not a licensee of their own work. Mortar is therefore used
-in the maintainer's own closed-source products without any AGPL obligation. See
-`NOTICE`.
-
-**Contributions are not accepted**, deliberately. A contributor keeps copyright
-in their contribution unless they assign it, and a project that is no longer
-wholly owned by one copyright holder cannot be relicensed by that holder. If
-that ever changes, a CLA is a prerequisite rather than a formality.
-
-## What belongs here, and what does not
-
-Mortar owns **plumbing**. It does not own domain logic.
-
-The governing rule from the foundations specification: _extract only what is
-genuinely identical across several projects, stable enough not to churn, and
-expensive enough to rewrite that sharing pays._ A shared library that tries to
-own domain logic becomes a bottleneck every project has to fight.
-
-The corollary rule, which keeps this honest: **extract at the second consumer,
-not the first.** Writing a shared package for a single consumer is guessing at
-an interface. The only exceptions are the Tier 1 packages and `@birtalanrobert/billing`,
-where all seventeen consumers are known in advance.
+**Plumbing only.** There is no domain model here, no opinion about what a
+customer or an order is, and nothing that expects your application to be shaped
+a particular way.
 
 ## Packages
 
-### Tier 1 — every project
+Every package is versioned and installed independently. Take one or take all
+twelve.
 
-| Package                         | Status | Purpose                                               |
-| ------------------------------- | ------ | ----------------------------------------------------- |
-| `@birtalanrobert/money`         | ✅     | Integer minor-unit money, allocation, tax, formatting |
-| `@birtalanrobert/context`       | ✅     | AsyncLocalStorage request context                     |
-| `@birtalanrobert/config`        | ✅     | Environment schema with fail-at-boot semantics        |
-| `@birtalanrobert/observability` | ⬜     | Structured logging, metrics, correlation              |
-| `@birtalanrobert/http`          | ⬜     | Error taxonomy, problem-details, filters, health      |
-| `@birtalanrobert/audit`         | ⬜     | Append-only audit log                                 |
-| `@birtalanrobert/idempotency`   | ⬜     | Idempotency keys for mutating endpoints               |
-| `@birtalanrobert/tenancy`       | ⬜     | Tenant resolution, scoped repositories, RLS helpers   |
-| `@birtalanrobert/auth`          | ⬜     | Identity, sessions, verification, invitations, RBAC   |
-| `@birtalanrobert/jobs`          | ⬜     | BullMQ conventions, forward-window scanner            |
+| Package | What it does |
+|---|---|
+| [`@birtalanrobert/money`](packages/money) | Integer minor-unit money, allocation that never loses a cent, net/gross tax, locale parsing and formatting |
+| [`@birtalanrobert/context`](packages/context) | `AsyncLocalStorage` request context: request id, correlation id, tenant, actor, locale |
+| [`@birtalanrobert/config`](packages/config) | Environment validation that fails at boot and reports every problem at once, with secret redaction |
+| [`@birtalanrobert/observability`](packages/observability) | Structured logging bound to the request context, metrics, correlation |
+| [`@birtalanrobert/http`](packages/http) | Error taxonomy, RFC 9457 problem details, exception filter, health checks, locale negotiation |
+| [`@birtalanrobert/database`](packages/database) | TypeORM `DataSource` conventions and a **transactional context** every other package writes through |
+| [`@birtalanrobert/redis`](packages/redis) | Connections, distributed locks, tagged cache, sliding-window rate limiting |
+| [`@birtalanrobert/tenancy`](packages/tenancy) | Tenant resolution, scoped repositories, PostgreSQL row-level security |
+| [`@birtalanrobert/auth`](packages/auth) | Identity, scrypt passwords, opaque sessions, single-use tokens, roles and permissions |
+| [`@birtalanrobert/audit`](packages/audit) | Append-only audit log, enforced by a database trigger |
+| [`@birtalanrobert/idempotency`](packages/idempotency) | Idempotency keys for mutating endpoints |
+| [`@birtalanrobert/jobs`](packages/jobs) | BullMQ conventions, context propagation, and a forward-window scanner |
 
-Tiers 2–4 are listed in `../specs/00-shared-foundations.md` and are extracted
-incrementally, at the second consumer.
-
-## Extending mortar's entities from a project
-
-Every mortar entity ships as an **abstract base plus a concrete default**. A
-project needing extra columns or relations declares its own class extending the
-base, mapping the same table, and registers it:
-
-```ts
-@Entity({ name: 'mortar_user' })
-export class User extends BaseUser {
-  @Column({ nullable: true }) phoneNumber!: string | null;
-  @OneToMany(() => Shift, (s) => s.user) shifts?: Shift[];
-}
-
-AuthModule.forRoot({ entities: { user: User } });
+```bash
+npm install @birtalanrobert/money @birtalanrobert/http
 ```
 
-Mortar's services then operate on the project's class. A profile table and a
-unidirectional `@ManyToOne` remain available for cases that suit them better.
+Each package's README explains **why** it is built the way it is; the API is
+discoverable from the types.
 
-Two mistakes are caught at boot rather than surfacing later: registering both
-your subclass and mortar's default (two entities, one table), and renaming the
-subclass (mortar's entities reference each other by class name).
+## The idea worth understanding first
 
-See `packages/auth/README.md`.
+`@birtalanrobert/database` carries the active TypeORM `EntityManager` in the
+request context. Every other package resolves through it, so an audit record, an
+idempotency key or a row-level-security binding **joins the transaction the
+caller already has open**.
 
-## Conventions
+```ts
+await runInTransaction(dataSource, async () => {
+  await orders.save(order);
+  await audit.record({ action: 'order.cancelled', before, after });
+});
+// Both commit, or neither does.
+```
 
-- **TypeScript → CommonJS.** The NestJS ecosystem is CJS and decorators depend
-  on `emitDecoratorMetadata`.
-- **`tsc` per package**, not a bundler. Libraries need clean `.d.ts` output.
-- **No ORM.** Mortar owns only infrastructural tables (sessions, audit,
-  idempotency) and reaches them through `pg` directly. Forcing TypeORM, Prisma
-  or Drizzle on seventeen projects is exactly the bottleneck to avoid. Projects
-  choose their own ORM for domain models; mortar ships SQL migrations for its
-  own tables.
-- **NestJS is a peer dependency**, and only in the packages that genuinely need
-  it. `money`, `context`, `config` and `observability` stay framework-free.
+Without that, a package holding its own connection pool would write an audit row
+for a change that then rolled back — a confident record of something that never
+happened. It is the reason the packages compose rather than merely coexist.
 
-## Working on it
+## Some things that are deliberate
+
+- **Money is never a float.** Not at any point, in any package.
+- **Tenant scoping fails closed.** An unscoped query throws rather than quietly
+  returning every tenant's rows, and row-level security is the second line
+  behind it. `assertRlsEffective()` exists because RLS is silently inert when
+  the connecting role is a superuser.
+- **The audit log is append-only in the database**, not merely by convention. A
+  trail that can be edited is worth less than one that cannot.
+- **Sessions are opaque, not JWTs**, because revoking access immediately matters
+  more than avoiding a lookup.
+- **Background work scans a forward window** rather than scheduling one job per
+  item. A per-item job still fires for something cancelled or rescheduled after
+  it was scheduled; a scan reads current state and simply does not find it.
+- **Every package has a framework-free core** and, where useful, a thin NestJS
+  layer over it. The service is a wrapper, never a reimplementation, so the same
+  logic runs in workers, CLI tools and tests.
+
+## Development
+
+Requires Node 20+, pnpm and Docker.
 
 ```bash
 pnpm install
-pnpm test          # vitest, all packages
-pnpm typecheck
-pnpm lint
-pnpm build
-
-node scripts/new-package.mjs <name> "<description>"
+pnpm db:up              # PostgreSQL and Redis, for integration tests
+pnpm test               # unit only — fast, runs anywhere
+pnpm test:integration   # needs the Docker stack
+pnpm typecheck && pnpm lint && pnpm build
 ```
 
-See `TODO.md` for the implementation plan and current state.
+Integration tests run against a real PostgreSQL and a real Redis, never mocks,
+and they execute the real migrations rather than `synchronize` — which silently
+skips triggers, constraints and grants.
+
+## Licence
+
+**AGPL-3.0-only.** Read it, learn from it, use it. If you build a hosted service
+on it, that service's source must be released under the AGPL too.
+
+The AGPL is a grant from the copyright holder to everyone else; the copyright
+holder is not a licensee of their own work. See [`NOTICE`](NOTICE).
+
+Commercial licences are available for anyone who cannot comply with the AGPL.
+
+**Contributions are not accepted.** A contributor keeps copyright in their
+contribution unless they assign it, and a project no longer wholly owned by one
+copyright holder cannot be relicensed by that holder. Should that change, a CLA
+would be a prerequisite rather than a formality.

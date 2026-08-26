@@ -92,7 +92,7 @@ export class MortarExceptionFilter implements ExceptionFilter {
 
 function setHeader(response: ResponseLike, name: string, value: string): void {
   // Express exposes setHeader; Fastify exposes header. Support both rather
-  // than forcing a platform choice on seventeen projects.
+  // than forcing a platform choice on consuming services.
   if (typeof response.setHeader === 'function') response.setHeader(name, value);
   else if (typeof response.header === 'function') response.header(name, value);
 }

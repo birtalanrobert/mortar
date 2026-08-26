@@ -16,7 +16,7 @@ export type UserStatus = 'active' | 'suspended' | 'deactivated';
 /**
  * A person, globally.
  *
- * Deliberately **not** tenant-scoped. Several projects in this catalogue have
+ * Deliberately **not** tenant-scoped. Several services built on this have
  * one human belonging to several tenants — an agent managing portfolios for
  * four landlords, a recruiter working two agencies, an operator supporting
  * everybody — and a user-per-tenant model forces them into separate accounts

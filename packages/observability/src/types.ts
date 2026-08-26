@@ -6,7 +6,7 @@ export const LOG_LEVELS: readonly LogLevel[] = ['trace', 'debug', 'info', 'warn'
 export type LogFields = Record<string, unknown>;
 
 /**
- * The logging surface the rest of the catalogue codes against.
+ * The logging surface the rest of these packages code against.
  *
  * Deliberately narrow and framework-free, so the same interface serves a
  * NestJS service, a Next.js route handler, a worker and a test — and so that

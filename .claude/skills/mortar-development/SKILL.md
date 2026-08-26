@@ -22,7 +22,7 @@ pnpm new:migration <package> <MigrationName>
 
 | Decision                          | Why                                                                                                                                                                                                            |
 | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **TypeORM, PostgreSQL enforced**  | All seventeen specs mandate Postgres, so there is no ORM independence left to protect — and a package with its own pool cannot join the caller's transaction, which breaks audit, idempotency and RLS silently |
+| **TypeORM, PostgreSQL enforced**  | PostgreSQL is a stated requirement, so there is no ORM independence left to protect — and a package with its own pool cannot join the caller's transaction, which breaks audit, idempotency and RLS silently |
 | **CommonJS, NodeNext resolution** | NestJS decorators need `emitDecoratorMetadata`; `node10` is deprecated in TS 5.9 and removed in TS 7                                                                                                           |
 | **`tsc` per package, no bundler** | Libraries need clean `.d.ts`, not bundles                                                                                                                                                                      |
 | **NestJS is a peer dependency**   | `money`, `context`, `config`, `observability` stay framework-free                                                                                                                                              |
@@ -83,8 +83,7 @@ Other rules learned the hard way:
 ## Adding a package
 
 Only when a **second** consumer needs it — one consumer is guessing at an
-interface. Tier 1 and `@birtalanrobert/billing` are the exceptions, because all
-seventeen consumers are known.
+interface.
 
 Then: `pnpm new:package`, peer-depend on NestJS rather than depending on it,
 ship migrations as an exported array (`authMigrations`), export entities as an

@@ -5,7 +5,7 @@ import { DEFAULT_ROUNDING, RoundingMode, roundToInteger } from './rounding';
  * A net (tax-exclusive) and gross (tax-inclusive) pair, with the tax itself.
  *
  * Both figures are always carried together and always labelled. Several of the
- * projects in this catalogue note the same failure: comparing a gross selling
+ * services built on this note the same failure: comparing a gross selling
  * price to a net cost overstates margin by the whole tax rate, and it is the
  * single most common error in the spreadsheets these systems replace.
  */

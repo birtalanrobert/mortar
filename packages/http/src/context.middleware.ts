@@ -102,8 +102,7 @@ function clientIp(request: RequestLike, trustProxy: boolean): string | undefined
  *
  * Matches the exact tag first, then the language subtag — so a browser asking
  * for `ro-MD` is served `ro` rather than falling through to English, which
- * matters for a catalogue serving Romanian and Hungarian audiences whose
- * regional tags vary.
+ * matters wherever an audience's regional tags vary.
  */
 export function negotiateLocale(
   header: string | undefined,

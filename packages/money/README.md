@@ -2,8 +2,7 @@
 
 Integer minor-unit money. No floats, ever, at any point in the chain.
 
-Eleven of the seventeen project specifications independently state the same
-requirement — _"money in integer minor units, never floats"_ — which is why
+This requirement comes up in every financial system — _"money in integer minor units, never floats"_ — which is why
 this package exists and why it has no dependencies.
 
 ## Core ideas
@@ -57,7 +56,7 @@ the customer's own arithmetic use. `HalfEven` is available for statistical work.
 ## Allocation
 
 `allocate()` is the algorithm behind every bill split, fee distribution,
-discount apportionment and commission calculation in the catalogue. Shares are
+discount apportionment and commission calculation. Shares are
 handed out by integer division and the remaining units distributed to the
 largest fractional remainders — so the parts **always** sum exactly back to the
 whole, for any input, including negatives.

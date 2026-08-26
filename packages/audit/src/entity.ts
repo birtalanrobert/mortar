@@ -6,7 +6,7 @@ import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
  * Append-only by contract: this package exposes no update or delete for
  * individual rows, and the migration revokes both at the database level for
  * the application role. An audit trail that can be edited is not an audit
- * trail, and the projects in this catalogue use it to settle disputes about
+ * trail, and the services built on this use it to settle disputes about
  * money, hours worked and who saw whose data.
  */
 @Entity({ name: 'mortar_audit_log' })

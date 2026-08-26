@@ -95,7 +95,7 @@ describe('concurrency', () => {
   });
 
   it('lets exactly one of many simultaneous claims through', async () => {
-    // The scenario every project in the catalogue actually hits: a guest
+    // The scenario real systems actually hit: a client
     // double-taps, or a flaky connection retries before the first response.
     const attempts = await Promise.allSettled(
       Array.from({ length: 8 }, () => service.begin('stampede', SCOPE, { total: 1 })),

@@ -43,7 +43,7 @@ all related properly, with cascade behaviour declared on the relation and
 matching the migration's foreign keys.
 
 **`tenantId` is deliberately a plain column with no relation.** Mortar owns no
-tenant table: each of the seventeen projects defines its own, with its own
+tenant table: each of the consuming services defines its own, with its own
 branding, plan and settings. There is nothing here for a relation to point at,
 and inventing a `Tenant` entity in mortar would force one shape on all of them.
 A project wanting a foreign key adds it in its own migration.
@@ -120,7 +120,7 @@ accounts with separate passwords, so `mortar_user` is global and
 ## Passwords
 
 Node's built-in **scrypt** by default: no dependency, no native build, no
-platform binaries — which matters for a library seventeen projects install. The
+platform binaries — which matters for a library consuming services install. The
 `PasswordHasher` interface is pluggable, so a project wanting Argon2id supplies
 an adapter without mortar taking on the dependency.
 

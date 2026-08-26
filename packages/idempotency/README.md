@@ -2,7 +2,7 @@
 
 Idempotency keys for mutating endpoints.
 
-Every project in the catalogue needs this because clients double-submit: a
+This is needed wherever clients double-submit: a
 guest double-taps and the order becomes real food, a retried attack command is
 unrecoverable, a doubled payment is a refund and an apology.
 

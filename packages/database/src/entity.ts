@@ -14,7 +14,7 @@ import {
  * Timestamps are stored `timestamptz`, always.
  *
  * A `timestamp without time zone` column is a bug waiting for a daylight-saving
- * transition — and several projects in this catalogue schedule work across
+ * transition — and several services built on this schedule work across
  * exactly those transitions. Postgres stores timestamptz as UTC and converts on
  * the way out, which is the behaviour every one of them assumes.
  */

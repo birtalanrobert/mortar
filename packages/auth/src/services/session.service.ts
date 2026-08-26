@@ -26,8 +26,8 @@ export interface CreatedSession {
 /**
  * Opaque server-side sessions.
  *
- * Opaque rather than a self-contained JWT, deliberately. Every project in this
- * catalogue needs to revoke access immediately — a dismissed employee, a lost
+ * Opaque rather than a self-contained JWT, deliberately. Real systems need to
+ * revoke access immediately — a dismissed employee, a lost
  * counter tablet, a compromised account, a suspended tenant — and a stateless
  * token cannot be revoked without building the very lookup table it was
  * supposed to avoid. The lookup is one indexed read.

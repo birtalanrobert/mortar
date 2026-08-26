@@ -9,7 +9,7 @@ export interface CacheOptions {
 /**
  * A namespaced cache with tag-based invalidation.
  *
- * Tags exist because the caches in this catalogue are invalidated by *event*
+ * Tags exist because the caches here are invalidated by *event*
  * rather than by key: a price-list import invalidates every customer affected
  * by it, a booking invalidates every availability window it touches. Without
  * tags each caller has to reconstruct the key set that a change affects, and

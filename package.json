@@ -20,8 +20,6 @@
     "test:integration": "vitest run --config vitest.integration.mts",
     "new:migration": "node scripts/new-migration.mjs",
     "new:package": "node scripts/new-package.mjs",
-    "publish:local": "pnpm build && pnpm check:publishable && node scripts/publish-local.mjs",
-    "registry:up": "docker compose -f ../docker-compose.yml up -d --wait",
     "check:publishable": "node scripts/check-publishable.mjs",
     "release:check": "pnpm build && pnpm check:publishable && pnpm test && node scripts/publish-npm.mjs --dry-run",
     "release": "pnpm build && pnpm check:publishable && node scripts/publish-npm.mjs"

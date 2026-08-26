@@ -32,7 +32,7 @@ export interface HttpModuleOptions {
 /**
  * Wires the request context, the exception filter and the health endpoints.
  *
- * One import gives an application the conventions all seventeen projects
+ * One import gives an application the conventions every consumer
  * share, and nothing here is domain-specific.
  */
 @Global()

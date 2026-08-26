@@ -15,7 +15,7 @@ export interface MortarErrorOptions {
 }
 
 /**
- * The base error for everything this catalogue throws deliberately.
+ * The base error for everything these services throws deliberately.
  *
  * Framework-free on purpose: domain code, workers, CLI tools and tests all
  * throw these, and only the HTTP layer knows how to turn one into a response.
@@ -146,7 +146,7 @@ export class VersionConflictError extends MortarError {
  * 410 — the resource existed and is deliberately gone.
  *
  * The correct answer for an expired signed link, which every link-based
- * surface in this catalogue produces. A 404 would suggest the link was never
+ * surface here produces. A 404 would suggest the link was never
  * valid and send the recipient to support; a 410 lets the page say "this link
  * has expired, request a new one".
  */
@@ -208,7 +208,7 @@ export class RateLimitedError extends MortarError {
 /**
  * 402 — the tenant's plan does not include this.
  *
- * Every project in the catalogue gates features by plan, and a 403 for a
+ * Most SaaS gates features by plan, and a 403 for a
  * billing reason sends the user to support rather than to the upgrade page.
  */
 export class PaymentRequiredError extends MortarError {

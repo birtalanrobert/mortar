@@ -2,7 +2,7 @@
  * Normalises an email address for storage and lookup.
  *
  * Lower-cases the whole address. The local part is technically
- * case-sensitive per RFC 5321, but no mail provider anyone in this catalogue
+ * case-sensitive per RFC 5321, but no mail provider anyone here
  * will encounter actually treats it that way — and honouring the letter of the
  * spec would let `Ana@x.com` and `ana@x.com` register as two accounts, which
  * users experience as a bug and attackers experience as an opportunity.

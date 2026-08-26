@@ -41,7 +41,7 @@ function toSnakeCase(value: string): string {
 }
 
 /**
- * A ValidationPipe configured the way every project in the catalogue wants it.
+ * A ValidationPipe with the defaults most services actually want.
  *
  * The defaults matter:
  *

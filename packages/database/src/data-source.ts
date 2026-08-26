@@ -25,8 +25,8 @@ export interface CreateDataSourceOptions {
 }
 
 /**
- * Builds DataSource options with the conventions every project in the
- * catalogue shares, so that no project has to rediscover them.
+ * Builds DataSource options with the conventions these packages assume, so
+ * that no service has to rediscover them.
  */
 export function buildDataSourceOptions(options: CreateDataSourceOptions): DataSourceOptions {
   const {

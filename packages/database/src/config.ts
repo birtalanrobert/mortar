@@ -1,7 +1,7 @@
 import { envBoolean, envDuration, envInt, envString, envUrl, z } from '@birtalanrobert/config';
 
 /**
- * The database variables every service in the catalogue needs.
+ * The database variables every service needs.
  *
  * Composed into an application's own schema:
  *
@@ -11,8 +11,8 @@ export const databaseEnvSchema = z.object({
   DATABASE_URL: envUrl(),
   /**
    * Pool size. The default is deliberately modest: Postgres handles a small
-   * busy pool far better than a large idle one, and every project in this
-   * catalogue runs several processes (api, worker) against one database.
+   * busy pool far better than a large idle one, and a service typically runs
+   * several processes (api, worker) against one database.
    */
   DATABASE_POOL_SIZE: envInt(10),
   DATABASE_CONNECT_TIMEOUT: envDuration(10_000),

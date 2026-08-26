@@ -1,7 +1,7 @@
 /**
  * How the tenant is determined for an incoming request.
  *
- * Every project in the catalogue is multi-tenant, and each reaches its tenant
+ * Multi-tenant services each reach their tenant
  * differently: a venue by subdomain, a distributor's buyer by session, a
  * scanner device by API key. Resolution is therefore a strategy rather than a
  * fixed rule.
@@ -32,7 +32,7 @@ function header(request: ResolvableRequest, name: string): string | undefined {
 }
 
 /**
- * Reads the tenant from a subdomain, e.g. `clubname.seatscope.app`.
+ * Reads the tenant from a subdomain, e.g. `clubname.venue-system.app`.
  *
  * `excluded` exists because the apex, `www`, and operational hostnames are not
  * tenants — and treating `www` as a tenant slug produces a confusing 404

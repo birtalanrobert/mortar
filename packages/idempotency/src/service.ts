@@ -66,7 +66,7 @@ function stableStringify(value: unknown): string {
  *   unfinished — and the retry would do the work twice, which is the exact
  *   failure this package exists to prevent.
  *
- * Every project in the catalogue needs this because guests double-tap: an
+ * This is needed wherever clients double-submit: an
  * order submitted twice becomes real food, a duplicated attack command is
  * unrecoverable, and a doubled payment is a refund and an apology.
  */

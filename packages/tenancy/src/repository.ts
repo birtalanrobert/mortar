@@ -17,7 +17,7 @@ import type {
  * An entity that belongs to a tenant.
  *
  * `id` is part of the contract because the scoped repository offers id-based
- * lookups, and because every tenant-owned table in this catalogue has a
+ * lookups, and because every tenant-owned table here has a
  * surrogate key — the same convention `BaseEntity` in `@birtalanrobert/database` sets.
  */
 export interface TenantOwned extends ObjectLiteral {

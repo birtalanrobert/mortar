@@ -1,12 +1,12 @@
 ---
 name: mortar-usage
-description: How to consume the @birtalanrobert/* packages in a project — wiring order, the transactional context, tenant scoping, extending mortar's entities, and the job scanner. Use when building any of the seventeen projects on top of mortar.
+description: How to consume the @birtalanrobert/* packages — wiring order, the transactional context, tenant scoping, extending mortar's entities, and the job scanner. Use when building a service on top of mortar.
 ---
 
 # Using mortar
 
-Mortar is plumbing shared by all seventeen projects. Install only what is
-needed; each package is versioned independently.
+Mortar is backend plumbing for NestJS services. Install only what is needed;
+each package is versioned independently.
 
 ## Wiring order
 
@@ -85,8 +85,7 @@ tenant table, because each project defines its own.
 
 ## Background work
 
-**Use the window scanner, never one scheduled job per item.** Ten of the
-seventeen specs require this and every one warns about the alternative:
+**Use the window scanner, never one scheduled job per item:**
 
 ```ts
 new WindowScanner(

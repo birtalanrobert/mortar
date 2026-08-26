@@ -137,7 +137,7 @@ export const envSecret = (minLength = 32) =>
     .string()
     .min(minLength, `must be at least ${minLength} characters — short secrets are not secrets`);
 
-/** The variables essentially every service in the catalogue needs. */
+/** The variables essentially every service needs. */
 export const baseEnvSchema = z.object({
   NODE_ENV: envEnum(['development', 'test', 'production'], 'development'),
   SERVICE_NAME: envString(),

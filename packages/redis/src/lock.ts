@@ -45,7 +45,7 @@ end`;
  * A single-instance distributed lock.
  *
  * Honest about what it is: correct for coordinating one Redis instance, which
- * is what every deployment in this catalogue runs. It is **not** Redlock and
+ * is what every deployment here runs. It is **not** Redlock and
  * makes no guarantee across a failover — if the holder is paused long enough
  * for the TTL to lapse, another holder can acquire. Work protected by a lock
  * should therefore still be idempotent, and anything requiring true mutual

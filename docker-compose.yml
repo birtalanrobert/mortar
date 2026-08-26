@@ -1,8 +1,8 @@
 # Mortar's own test stack.
 #
-# Port 3050 sits deliberately outside the 3100-4799 range that the seventeen
-# projects allocate from, so running mortar's tests can never collide with a
-# project's local database.
+# Ports 3050/3051 are chosen to sit clear of the defaults (5432, 6379), so
+# running these tests can never collide with a database a consuming service is
+# already running locally.
 services:
   postgres:
     image: postgres:17-alpine

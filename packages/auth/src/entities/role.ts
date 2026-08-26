@@ -21,7 +21,7 @@ import type { MembershipRole } from './membership-role';
  *
  * **Scope.** `tenantId` is null for a *system* role — one the project defines
  * and every tenant gets. A non-null `tenantId` is a role that one tenant
- * created for itself, which several projects in this catalogue genuinely need.
+ * created for itself, which several services built on this genuinely need.
  */
 export abstract class BaseRole {
   @PrimaryGeneratedColumn('uuid')
