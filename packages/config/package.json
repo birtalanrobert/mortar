@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/config",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Environment schema validation with fail-at-boot semantics",
   "license": "AGPL-3.0-only",
   "type": "commonjs",
@@ -15,7 +15,8 @@
     "README.md",
     "LICENSE",
     "NOTICE",
-    "nestjs"
+    "nestjs",
+    "CHANGELOG.md"
   ],
   "exports": {
     ".": {

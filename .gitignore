@@ -10,3 +10,4 @@ coverage/
 # Generated from the root LICENSE/NOTICE at publish time
 packages/*/LICENSE
 packages/*/NOTICE
+packages/*/CHANGELOG.md

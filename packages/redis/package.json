@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/redis",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Redis connections, locks, caching and rate limiting",
   "license": "AGPL-3.0-only",
   "main": "./dist/index.js",
@@ -13,7 +13,8 @@
     "!src/**/__tests__",
     "README.md",
     "LICENSE",
-    "NOTICE"
+    "NOTICE",
+    "CHANGELOG.md"
   ],
   "exports": {
     ".": {
@@ -32,9 +33,9 @@
   },
   "type": "commonjs",
   "dependencies": {
-    "@birtalanrobert/config": "workspace:*",
-    "@birtalanrobert/context": "workspace:*",
-    "@birtalanrobert/observability": "workspace:*"
+    "@birtalanrobert/config": "workspace:^",
+    "@birtalanrobert/context": "workspace:^",
+    "@birtalanrobert/observability": "workspace:^"
   },
   "peerDependencies": {
     "@nestjs/common": "^10.0.0 || ^11.0.0",

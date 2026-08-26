@@ -63,10 +63,10 @@ importers:
   packages/audit:
     dependencies:
       '@birtalanrobert/context':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../context
       '@birtalanrobert/database':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../database
       '@nestjs/common':
         specifier: ^10.0.0 || ^11.0.0
@@ -78,13 +78,13 @@ importers:
   packages/auth:
     dependencies:
       '@birtalanrobert/context':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../context
       '@birtalanrobert/database':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../database
       '@birtalanrobert/http':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../http
       '@nestjs/common':
         specifier: ^10.0.0 || ^11.0.0
@@ -110,10 +110,10 @@ importers:
   packages/database:
     dependencies:
       '@birtalanrobert/config':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../config
       '@birtalanrobert/context':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../context
       '@nestjs/common':
         specifier: ^10.0.0 || ^11.0.0
@@ -131,10 +131,10 @@ importers:
   packages/http:
     dependencies:
       '@birtalanrobert/context':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../context
       '@birtalanrobert/observability':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../observability
       '@nestjs/common':
         specifier: ^10.0.0 || ^11.0.0
@@ -152,13 +152,13 @@ importers:
   packages/idempotency:
     dependencies:
       '@birtalanrobert/context':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../context
       '@birtalanrobert/database':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../database
       '@birtalanrobert/http':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../http
       '@nestjs/common':
         specifier: ^10.0.0 || ^11.0.0
@@ -173,16 +173,16 @@ importers:
   packages/jobs:
     dependencies:
       '@birtalanrobert/config':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../config
       '@birtalanrobert/context':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../context
       '@birtalanrobert/observability':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../observability
       '@birtalanrobert/redis':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../redis
       '@nestjs/common':
         specifier: ^10.0.0 || ^11.0.0
@@ -196,7 +196,7 @@ importers:
   packages/observability:
     dependencies:
       '@birtalanrobert/context':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../context
       '@nestjs/common':
         specifier: ^10.0.0 || ^11.0.0
@@ -214,13 +214,13 @@ importers:
   packages/redis:
     dependencies:
       '@birtalanrobert/config':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../config
       '@birtalanrobert/context':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../context
       '@birtalanrobert/observability':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../observability
       '@nestjs/common':
         specifier: ^10.0.0 || ^11.0.0
@@ -232,13 +232,13 @@ importers:
   packages/tenancy:
     dependencies:
       '@birtalanrobert/context':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../context
       '@birtalanrobert/database':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../database
       '@birtalanrobert/http':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../http
       '@nestjs/common':
         specifier: ^10.0.0 || ^11.0.0

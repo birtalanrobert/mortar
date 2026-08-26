@@ -24,7 +24,7 @@ for (const name of readdirSync(packagesDir)) {
   // npm resolves LICENSE and NOTICE per package directory, not from the repo
   // root, so each published package gets its own copy. Regenerated here rather
   // than committed, so they cannot drift from the canonical pair.
-  for (const file of ['LICENSE', 'NOTICE']) {
+  for (const file of ['LICENSE', 'NOTICE', 'CHANGELOG.md']) {
     if (existsSync(file)) copyFileSync(file, join(packagesDir, name, file));
   }
 

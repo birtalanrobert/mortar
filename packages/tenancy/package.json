@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/tenancy",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Tenant resolution, scoped repositories and row-level security",
   "license": "AGPL-3.0-only",
   "type": "commonjs",
@@ -14,7 +14,8 @@
     "!src/**/__tests__",
     "README.md",
     "LICENSE",
-    "NOTICE"
+    "NOTICE",
+    "CHANGELOG.md"
   ],
   "exports": {
     ".": {
@@ -32,9 +33,9 @@
     "access": "public"
   },
   "dependencies": {
-    "@birtalanrobert/context": "workspace:*",
-    "@birtalanrobert/database": "workspace:*",
-    "@birtalanrobert/http": "workspace:*"
+    "@birtalanrobert/context": "workspace:^",
+    "@birtalanrobert/database": "workspace:^",
+    "@birtalanrobert/http": "workspace:^"
   },
   "peerDependencies": {
     "@nestjs/common": "^10.0.0 || ^11.0.0",

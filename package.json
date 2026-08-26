@@ -22,7 +22,8 @@
     "new:package": "node scripts/new-package.mjs",
     "check:publishable": "node scripts/check-publishable.mjs",
     "release:check": "pnpm build && pnpm check:publishable && pnpm test && node scripts/publish-npm.mjs --dry-run",
-    "release": "pnpm build && pnpm check:publishable && node scripts/publish-npm.mjs"
+    "release": "pnpm build && pnpm check:publishable && node scripts/publish-npm.mjs",
+    "set-version": "node scripts/set-version.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
@@ -43,5 +44,6 @@
     "bullmq": "^6.2.1",
     "ioredis": "^5.4.1"
   },
-  "license": "AGPL-3.0-only"
+  "license": "AGPL-3.0-only",
+  "version": "0.2.0"
 }
