@@ -72,6 +72,7 @@ if (!dryRun) {
 }
 
 const packages = readPackages();
+const byName = new Map(packages.map((pkg) => [pkg.name, pkg]));
 const ordered = inDependencyOrder(packages);
 
 console.log(dryRun ? 'Dry run — nothing will be published.\n' : 'Publishing to npm.\n');
@@ -86,6 +87,32 @@ function isPublished(spec) {
   }
 }
 
+/**
+ * A package whose own dependencies are not all on the registry.
+ *
+ * Checked before publishing rather than only after a failure in this run,
+ * because the two are not the same. A package that failed on one run leaves
+ * the block behind; on the next run its dependents are no longer blocked —
+ * their versions still are not published, so nothing skips them — and they go
+ * out against a dependency that does not exist. Everything then installs with
+ * ETARGET, and the only clue is a package missing from a list of twelve.
+ */
+function unpublishedDependencies(pkg) {
+  return (
+    pkg.dependencies
+      .map((name) => byName.get(name))
+      .filter(Boolean)
+      // Handled earlier in this run. In a real run it is now on the registry; in
+      // a dry run it would be. Either way it is not the stale-dependency case
+      // this guard is looking for.
+      .filter((dep) => !handled.has(dep.name))
+      .filter((dep) => !isPublished(`${dep.name}@${dep.version}`))
+      .map((dep) => `${dep.name}@${dep.version}`)
+  );
+}
+
+/** Names dealt with earlier in this run — published, or would be. */
+const handled = new Set();
 const published = [];
 const skipped = [];
 const failed = [];
@@ -104,12 +131,24 @@ for (const pkg of ordered) {
   // the registry already has is a dry run that answers the wrong question.
   if (isPublished(spec)) {
     console.log(`  – ${spec} already published, skipping`);
+    handled.add(pkg.name);
     skipped.push(spec);
+    continue;
+  }
+
+  // Anything published in this run is on the registry by the time we get
+  // here, so what remains is a version an earlier run failed to publish.
+  const missing = unpublishedDependencies(pkg);
+  if (missing.length > 0) {
+    console.error(`  ⊘ ${spec} held back — depends on unpublished ${missing.join(', ')}`);
+    blocked.add(pkg.name);
+    failed.push(spec);
     continue;
   }
 
   if (dryRun) {
     console.log(`  ✓ ${spec} would be published`);
+    handled.add(pkg.name);
     published.push(spec);
     continue;
   }
@@ -126,6 +165,7 @@ for (const pkg of ordered) {
       encoding: 'utf8',
     });
     console.log(`  ✓ ${spec}`);
+    handled.add(pkg.name);
     published.push(spec);
   } catch (error) {
     console.error(`\n  ✗ ${spec}`);
