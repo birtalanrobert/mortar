@@ -18,6 +18,7 @@ export {
   assertMigrationsUpToDate,
   getMigrationStatus,
   runMigrations,
+  runMigrationsWithLock,
   type MigrationStatus,
 } from './migrations';
 export {

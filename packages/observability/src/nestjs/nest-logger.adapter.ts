@@ -1,5 +1,6 @@
-import { Injectable, type LoggerService } from '@nestjs/common';
+import { Inject, Injectable, type LoggerService } from '@nestjs/common';
 import type { Logger } from '../types';
+import { MORTAR_LOGGER } from './tokens';
 
 /**
  * Adapts a mortar {@link Logger} to Nest's own `LoggerService`, so that
@@ -15,7 +16,10 @@ import type { Logger } from '../types';
  */
 @Injectable()
 export class NestLoggerAdapter implements LoggerService {
-  constructor(private readonly logger: Logger) {}
+  // Injected by token rather than by type: `Logger` is an interface, and
+  // `emitDecoratorMetadata` records `Object` for one — there would be nothing
+  // for Nest to resolve.
+  constructor(@Inject(MORTAR_LOGGER) private readonly logger: Logger) {}
 
   log(message: unknown, ...optional: unknown[]): void {
     this.logger.info(String(message), this.fields(optional));

@@ -10,7 +10,12 @@ import type { AsyncModuleOptions } from '@birtalanrobert/context';
 import { DataSource, type EntityManager, type EntityTarget, type Repository } from 'typeorm';
 import { createDataSource, type CreateDataSourceOptions } from './data-source';
 import { checkDatabaseHealth, type DatabaseHealth } from './health';
-import { assertMigrationsUpToDate, getMigrationStatus, type MigrationStatus } from './migrations';
+import {
+  assertMigrationsUpToDate,
+  getMigrationStatus,
+  runMigrationsWithLock,
+  type MigrationStatus,
+} from './migrations';
 import { runInTransaction, resolveManager, type TransactionOptions } from './transaction';
 
 export const MORTAR_DATA_SOURCE = Symbol('MORTAR_DATA_SOURCE');
@@ -63,11 +68,52 @@ export class DatabaseService {
 
 export interface DatabaseModuleOptions extends CreateDataSourceOptions {
   /**
+   * Apply pending migrations at boot, before anything is served.
+   *
+   * Safe with several replicas: the run is guarded by a Postgres advisory
+   * lock, so one applies while the rest wait and then find nothing pending.
+   *
+   * Whether to use it is a deployment question, not a correctness one. It
+   * removes a manual step and the class of incident where someone forgets it;
+   * what it gives up is the ability to migrate at a moment of your choosing,
+   * separately from the rollout — which matters once a migration takes long
+   * enough to lock a table people are using.
+   */
+  migrationsRun?: boolean;
+
+  /**
    * Refuse to start when migrations are pending. Defaults to true outside
    * development — a service serving traffic against a schema older than its
    * code produces confusing failures far from their cause.
+   *
+   * Redundant with `migrationsRun`, and harmless alongside it: after a
+   * successful run nothing is pending, so the assertion simply passes. Left on
+   * because it is what catches a run that silently applied nothing.
    */
   assertMigrations?: boolean;
+}
+
+/**
+ * Opens the connection and brings the schema to where the code expects it.
+ *
+ * Shared by both factories rather than written twice, because the two differing
+ * by accident is exactly the bug nobody finds until the async path is the one
+ * production uses.
+ */
+async function initializeDataSource(options: DatabaseModuleOptions): Promise<DataSource> {
+  const {
+    migrationsRun = false,
+    assertMigrations = process.env.NODE_ENV !== 'development',
+    ...dataSourceOptions
+  } = options;
+
+  const dataSource = createDataSource(dataSourceOptions);
+  await dataSource.initialize();
+
+  if (migrationsRun) await runMigrationsWithLock(dataSource);
+  if (assertMigrations) await assertMigrationsUpToDate(dataSource);
+
+  return dataSource;
 }
 
 @Global()
@@ -76,17 +122,9 @@ export class DatabaseModule implements OnApplicationShutdown {
   constructor(@Inject(MORTAR_DATA_SOURCE) private readonly dataSource: DataSource) {}
 
   static forRoot(options: DatabaseModuleOptions): DynamicModule {
-    const { assertMigrations = process.env.NODE_ENV !== 'development', ...dataSourceOptions } =
-      options;
-
     const dataSourceProvider: Provider = {
       provide: MORTAR_DATA_SOURCE,
-      useFactory: async (): Promise<DataSource> => {
-        const dataSource = createDataSource(dataSourceOptions);
-        await dataSource.initialize();
-        if (assertMigrations) await assertMigrationsUpToDate(dataSource);
-        return dataSource;
-      },
+      useFactory: (): Promise<DataSource> => initializeDataSource(options),
     };
 
     const serviceProvider: Provider = {
@@ -112,14 +150,8 @@ export class DatabaseModule implements OnApplicationShutdown {
   static forRootAsync(options: AsyncModuleOptions<DatabaseModuleOptions>): DynamicModule {
     const dataSourceProvider: Provider = {
       provide: MORTAR_DATA_SOURCE,
-      useFactory: async (...args: never[]): Promise<DataSource> => {
-        const resolved = await options.useFactory(...args);
-        const { assertMigrations = process.env.NODE_ENV !== 'development', ...rest } = resolved;
-        const dataSource = createDataSource(rest);
-        await dataSource.initialize();
-        if (assertMigrations) await assertMigrationsUpToDate(dataSource);
-        return dataSource;
-      },
+      useFactory: async (...args: never[]): Promise<DataSource> =>
+        initializeDataSource(await options.useFactory(...args)),
       inject: (options.inject ?? []) as never[],
     };
 

@@ -12,7 +12,7 @@ import { Reflector } from '@nestjs/core';
 import type { AsyncModuleOptions } from '@birtalanrobert/context';
 import { getActor, getTenantId } from '@birtalanrobert/context';
 import { MORTAR_DATA_SOURCE } from '@birtalanrobert/database';
-import { ForbiddenError, UnauthenticatedError } from '@birtalanrobert/http';
+import { ForbiddenError, PUBLIC_ROUTE_KEY, UnauthenticatedError } from '@birtalanrobert/http';
 import type { DataSource } from 'typeorm';
 import { hasAllPermissions, hasAnyPermission, type Permission } from './rbac';
 import { SessionService, type SessionOptions } from './services/session.service';
@@ -22,7 +22,14 @@ import { assertAuthEntitiesValid, resolveRegistry, type AuthEntityRegistry } fro
 import { UserService, type UserServiceOptions } from './services/user.service';
 
 export const PERMISSIONS_KEY = 'mortar:permissions';
-export const PUBLIC_KEY = 'mortar:public';
+/**
+ * Re-exported from `@birtalanrobert/http`, not redeclared.
+ *
+ * Two copies of the string would drift, and the guard here must read the same
+ * key that package's `@PublicRoute()` writes — otherwise its health controller
+ * is protected by a guard that cannot see its exemption.
+ */
+export const PUBLIC_KEY = PUBLIC_ROUTE_KEY;
 
 /** Marks a route as reachable without authentication. */
 export const Public = () => SetMetadata(PUBLIC_KEY, true);

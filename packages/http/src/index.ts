@@ -61,3 +61,4 @@ export {
 } from './health.controller';
 
 export { CONTEXT_OPTIONS, HttpModule, type HttpModuleOptions } from './nest';
+export { PUBLIC_ROUTE_KEY, PublicRoute } from './public';

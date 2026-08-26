@@ -1,5 +1,6 @@
 import { Controller, Get, Inject, Res } from '@nestjs/common';
 import { HealthRegistry, type HealthReport } from './health';
+import { PublicRoute } from './public';
 
 export const HEALTH_REGISTRY = Symbol('MORTAR_HEALTH_REGISTRY');
 export const HEALTH_OPTIONS = Symbol('MORTAR_HEALTH_OPTIONS');
@@ -35,6 +36,10 @@ interface ResponseLike {
  * balancer without being killed.
  */
 @Controller('health')
+// Probes carry no credentials. Left authenticated, a readiness check 401s and
+// the pod never joins the load balancer — a failure mode that looks like a
+// broken deployment rather than a missing decorator.
+@PublicRoute()
 export class HealthController {
   constructor(
     @Inject(HEALTH_REGISTRY) private readonly registry: HealthRegistry,

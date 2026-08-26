@@ -1,6 +1,69 @@
 # Changelog
 
-All packages share a version and are released together.
+Each package carries its own version. A release publishes only the packages
+whose version is not yet on the registry; `pnpm release` asks npm and skips the
+rest.
+
+## 1.0.0
+
+The version numbers become meaningful.
+
+Until now every package shared one version and all twelve were republished
+together. That does not survive contact with per-package releases while the
+major is `0`: under semver a `^0.2.0` range excludes `0.3.0`, so changing one
+package and releasing only it leaves every dependent pinned to the old copy —
+and npm resolves that by installing both. Two copies of `observability` means
+two distinct `MORTAR_LOGGER` symbols, and dependency injection stops working
+with an error that names neither.
+
+At `1.x` a caret range accepts later minors, so a package can be released on
+its own and its dependents pick it up on their next install. From here:
+
+- **patch** — a fix that changes no signature
+- **minor** — anything added
+- **major** — anything removed or changed in shape
+
+### Added
+
+- **`DatabaseModule` can run migrations at boot** — `migrationsRun: true`.
+
+  Guarded by a Postgres advisory lock, so several replicas starting at once are
+  safe: one applies while the others wait, then find nothing pending. TypeORM
+  takes no lock of its own, and without one the second replica to reach a
+  `CREATE TABLE` fails and that container crash-loops. Also exported directly
+  as `runMigrationsWithLock` for release-step scripts.
+
+- **`LoggerModule` provides `NestLoggerAdapter` and `LoggingInterceptor`.**
+  Both were exported but never registered, so `app.get(NestLoggerAdapter)` and
+  `{ provide: APP_INTERCEPTOR, useExisting: LoggingInterceptor }` — the two
+  documented ways to use them — both failed. Constructing them by hand still
+  works.
+
+- **`PUBLIC_ROUTE_KEY` and `PublicRoute()` in `@birtalanrobert/http`**, and the
+  health controller now carries them. `@birtalanrobert/auth` re-exports the key
+  as `PUBLIC_KEY`, unchanged, so `PermissionsGuard` and `@Public()` behave
+  exactly as before — but a globally registered guard no longer 401s the
+  readiness probe, which previously left pods that never joined the load
+  balancer.
+
+- **`auditEntities` and `idempotencyEntities`**, so every package that ships
+  entities exports them as an array the same way it exports its migrations.
+
+### Fixed
+
+- **A circular import between `logger.module.ts` and the two classes it now
+  provides** left `MORTAR_LOGGER` `undefined` at decorator evaluation time, so
+  `@Inject(MORTAR_LOGGER)` silently degraded to reflected-type injection and
+  Nest reported that it could not resolve `Function`. The tokens moved to a
+  leaf module. Under CommonJS this class of bug fails at wiring time, never at
+  build time.
+
+### Testing
+
+`@nestjs/testing` and `unplugin-swc` are now dev dependencies, and the Nest
+modules are exercised by building a real container rather than by inspecting
+the `DynamicModule` object. Every defect above was invisible to a test that
+asserts on `module.providers` and obvious to one that calls `moduleRef.get()`.
 
 ## 0.2.0
 

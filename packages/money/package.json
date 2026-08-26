@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/money",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "Integer minor-unit money, arithmetic, allocation and formatting",
   "license": "AGPL-3.0-only",
   "type": "commonjs",

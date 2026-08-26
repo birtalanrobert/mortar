@@ -10,7 +10,7 @@ import type { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import type { Logger } from '../types';
 import type { Metrics } from '../metrics';
-import { MORTAR_LOGGER, MORTAR_METRICS } from './logger.module';
+import { MORTAR_LOGGER, MORTAR_METRICS } from './tokens';
 
 /**
  * Logs one line per HTTP request, on completion, with its duration and status.

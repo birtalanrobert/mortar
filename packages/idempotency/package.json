@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/idempotency",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "Idempotency keys for mutating endpoints",
   "license": "AGPL-3.0-only",
   "type": "commonjs",

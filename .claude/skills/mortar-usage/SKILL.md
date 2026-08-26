@@ -134,3 +134,29 @@ Throw `@birtalanrobert/http` errors from anywhere — they are framework-free, s
 code and workers use them too. Clients branch on **`code`**, not on `title`
 (prose, translatable) or `status` (too coarse). A 5xx never carries internal
 detail to the client.
+
+## Registering entities and migrations
+
+Every package that ships tables exports two arrays — `authEntities` /
+`authMigrations`, `auditEntities` / `auditMigrations`, `idempotencyEntities` /
+`idempotencyMigrations`. Spread them into one module in the service and import
+that module from both the application and the TypeORM CLI, so the two cannot
+disagree about what the schema contains.
+
+Explicit lists, never a glob. `entities: ['dist/**/*.entity.js']` looks tidier
+and breaks in four ways: it silently registers nothing when the build output
+moves, it cannot see entities that live inside a package, it defeats
+tree-shaking, and a typo produces an empty schema rather than an error. The
+list is the one place a new table has to be mentioned, and forgetting it fails
+at boot.
+
+## Migrations at boot
+
+`DatabaseModule.forRootAsync({ migrationsRun: true })` applies pending
+migrations during startup, guarded by a Postgres advisory lock so replicas
+starting together do not race. Leave `assertMigrations` on alongside it — after
+a successful run nothing is pending, so it only fires when a run applied
+nothing.
+
+Turn it off when a migration grows slow enough that a rollout waiting for it
+matters, and run `runMigrationsWithLock` from a release step instead.

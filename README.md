@@ -92,6 +92,33 @@ Integration tests run against a real PostgreSQL and a real Redis, never mocks,
 and they execute the real migrations rather than `synchronize` — which silently
 skips triggers, constraints and grants.
 
+Anything with a NestJS module is tested by building a real container, not by
+inspecting the `DynamicModule` object it returns. Asserting on `providers`
+proves a provider was declared; only `moduleRef.get()` proves it can actually
+be resolved, which is a different question and the one that matters.
+
+### Releasing
+
+Each package has its own version, and a release publishes only what the
+registry does not already have.
+
+```bash
+pnpm version:bump minor http auth   # or: pnpm version:set 1.2.0 http
+pnpm install                        # refresh the lockfile
+pnpm release --dry-run              # shows exactly what would go out
+pnpm release
+```
+
+Internal dependencies are declared `workspace:^` and published as
+`^<current version>`. A caret range accepts later minors, which is what allows
+one package to be released without republishing the others. An exact pin would
+not, and would make npm install several copies of the same package as soon as
+two versions coexist in a tree — which, for packages whose injection tokens are
+symbols, breaks dependency injection rather than merely wasting space.
+
+If a publish fails partway, packages that depend on the failure are held back
+and everything unrelated still goes out. Re-running skips whatever succeeded.
+
 ## Licence
 
 **AGPL-3.0-only.** Read it, learn from it, use it. If you build a hosted service

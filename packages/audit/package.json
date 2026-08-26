@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/audit",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "Append-only audit log that joins the caller transaction",
   "license": "AGPL-3.0-only",
   "type": "commonjs",

@@ -1,5 +1,6 @@
 import { Writable } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
+import { Test } from '@nestjs/testing';
 import { of, throwError } from 'rxjs';
 import type { CallHandler, ExecutionContext } from '@nestjs/common';
 import { createLogger, createNoopLogger } from '../logger';
@@ -31,11 +32,46 @@ function capture(): { logger: Logger; lines: () => Record<string, unknown>[] } {
 describe('LoggerModule', () => {
   it('provides a logger and metrics, and exports both', () => {
     const module = LoggerModule.forRoot({ serviceName: 'api', pretty: false });
-    expect(module.providers).toHaveLength(2);
-    expect(module.exports).toHaveLength(2);
+    expect(module.providers).toHaveLength(module.exports?.length ?? 0);
     const tokens = (module.providers ?? []).map((p) => (p as { provide: symbol }).provide);
     expect(tokens).toContain(MORTAR_LOGGER);
     expect(tokens).toContain(MORTAR_METRICS);
+  });
+
+  /**
+   * Built through a real container, not by inspecting the module's shape.
+   *
+   * Asserting on `module.providers` proves only that a provider was declared.
+   * It cannot catch a class that is exported but never registered, or one
+   * whose constructor Nest has no way to resolve — both of which happened
+   * here, and both of which only surface in an application that tries to
+   * resolve them.
+   */
+  it.each([
+    ['forRoot', () => LoggerModule.forRoot({ serviceName: 'api', pretty: false })],
+    [
+      'forRootAsync',
+      () =>
+        LoggerModule.forRootAsync({ useFactory: () => ({ serviceName: 'api', pretty: false }) }),
+    ],
+    ['forRootWithLogger', () => LoggerModule.forRootWithLogger(createNoopLogger())],
+  ])('resolves its helpers from the container when configured with %s', async (_name, build) => {
+    const moduleRef = await Test.createTestingModule({ imports: [build()] }).compile();
+
+    expect(moduleRef.get(NestLoggerAdapter)).toBeInstanceOf(NestLoggerAdapter);
+    expect(moduleRef.get(LoggingInterceptor)).toBeInstanceOf(LoggingInterceptor);
+  });
+
+  it('gives the adapter the configured logger rather than a fresh one', async () => {
+    const logger = createNoopLogger();
+    const moduleRef = await Test.createTestingModule({
+      imports: [LoggerModule.forRootWithLogger(logger)],
+    }).compile();
+
+    const spy = vi.spyOn(logger, 'info');
+    moduleRef.get(NestLoggerAdapter).log('mapped route');
+
+    expect(spy).toHaveBeenCalledWith('mapped route', expect.anything());
   });
 
   it('accepts a pre-built logger for tests', () => {

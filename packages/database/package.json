@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/database",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "TypeORM DataSource, transactional context and migration conventions",
   "license": "AGPL-3.0-only",
   "type": "commonjs",
