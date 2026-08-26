@@ -41,6 +41,17 @@ export interface ConfigModuleOptions<T extends z.ZodTypeAny> {
 @Global()
 @Module({})
 export class ConfigModule {
+  /**
+   * The injection token, for `inject:` arrays.
+   *
+   * `ConfigModule.token()` reads better at a wiring site than importing
+   * `MORTAR_CONFIG` separately, and it keeps the token's identity in one place
+   * should it ever need to change.
+   */
+  static token(): symbol {
+    return MORTAR_CONFIG;
+  }
+
   static forRoot<T extends z.ZodTypeAny>(options: ConfigModuleOptions<T>): DynamicModule {
     const { schema, source, logOnBoot = true, logger = console.log } = options;
 

@@ -39,7 +39,7 @@
     "@nestjs/common": "^10.0.0 || ^11.0.0",
     "@nestjs/core": "^10.0.0 || ^11.0.0",
     "rxjs": "^7.0.0",
-    "class-validator": "^0.14.0"
+    "class-validator": "^0.14.0 || ^0.15.0"
   },
   "peerDependenciesMeta": {
     "@nestjs/common": {

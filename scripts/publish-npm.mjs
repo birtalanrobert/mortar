@@ -126,7 +126,10 @@ for (const dir of ORDER) {
     console.error(`\n  ✗ ${spec}\n`);
     // With inherited stdio npm has already printed the reason above, so only
     // add guidance the raw error does not give.
-    if (String(error.message ?? '').includes('EOTP') || String(error.stderr ?? '').includes('EOTP')) {
+    if (
+      String(error.message ?? '').includes('EOTP') ||
+      String(error.stderr ?? '').includes('EOTP')
+    ) {
       console.error(
         'Two-factor auth is required for publishing. Twelve packages means twelve prompts,\n' +
           'so either relax 2FA to authorisation-only, or use an automation token:\n\n' +

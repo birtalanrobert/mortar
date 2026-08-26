@@ -1,4 +1,5 @@
 import { Global, Inject, Module, type DynamicModule, type Provider } from '@nestjs/common';
+import type { AsyncModuleOptions } from '@birtalanrobert/context';
 import { createLogger, type CreateLoggerOptions } from '../logger';
 import { InMemoryMetrics, type Metrics } from '../metrics';
 import type { Logger } from '../types';
@@ -39,6 +40,35 @@ export class LoggerModule {
     ];
 
     return { module: LoggerModule, providers, exports: providers };
+  }
+
+  /** Configures from other providers — validated config, most often. */
+  static forRootAsync(options: AsyncModuleOptions<LoggerModuleOptions>): DynamicModule {
+    const loggerProvider: Provider = {
+      provide: MORTAR_LOGGER,
+      useFactory: async (...args: never[]) => {
+        const { metrics: _metrics, ...loggerOptions } = await options.useFactory(...args);
+        return createLogger(loggerOptions);
+      },
+      inject: (options.inject ?? []) as never[],
+    };
+
+    const metricsProvider: Provider = {
+      provide: MORTAR_METRICS,
+      useFactory: async (...args: never[]) => {
+        const { metrics } = await options.useFactory(...args);
+        return metrics ?? new InMemoryMetrics();
+      },
+      inject: (options.inject ?? []) as never[],
+    };
+
+    const providers: Provider[] = [loggerProvider, metricsProvider];
+    return {
+      module: LoggerModule,
+      imports: (options.imports ?? []) as never[],
+      providers,
+      exports: providers,
+    };
   }
 
   /** Provides an already-constructed logger, for tests and unusual wiring. */

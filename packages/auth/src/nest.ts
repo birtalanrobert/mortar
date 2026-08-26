@@ -9,6 +9,7 @@ import {
   type Provider,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import type { AsyncModuleOptions } from '@birtalanrobert/context';
 import { getActor, getTenantId } from '@birtalanrobert/context';
 import { MORTAR_DATA_SOURCE } from '@birtalanrobert/database';
 import { ForbiddenError, UnauthenticatedError } from '@birtalanrobert/http';
@@ -126,6 +127,60 @@ export class AuthModule {
 
     return {
       module: AuthModule,
+      providers,
+      exports: [UserService, RoleService, SessionService, TokenService, PermissionsGuard],
+    };
+  }
+
+  /** Configures from other providers — validated config, most often. */
+  static forRootAsync(options: AsyncModuleOptions<AuthModuleOptions>): DynamicModule {
+    const providers: Provider[] = [
+      {
+        provide: RoleService,
+        useFactory: async (dataSource: DataSource, ...args: never[]) => {
+          const resolved = await options.useFactory(...args);
+          assertAuthEntitiesValid(dataSource, resolveRegistry(resolved.entities));
+          return new RoleService(dataSource, { entities: resolved.entities });
+        },
+        inject: [MORTAR_DATA_SOURCE, ...((options.inject ?? []) as never[])],
+      },
+      {
+        provide: UserService,
+        useFactory: async (dataSource: DataSource, roleService: RoleService, ...args: never[]) => {
+          const resolved = await options.useFactory(...args);
+          return new UserService(dataSource, {
+            ...resolved.user,
+            entities: resolved.entities,
+            roleService,
+          });
+        },
+        inject: [MORTAR_DATA_SOURCE, RoleService, ...((options.inject ?? []) as never[])],
+      },
+      {
+        provide: SessionService,
+        useFactory: async (dataSource: DataSource, ...args: never[]) => {
+          const resolved = await options.useFactory(...args);
+          return new SessionService(dataSource, {
+            ...resolved.session,
+            entities: resolved.entities,
+          });
+        },
+        inject: [MORTAR_DATA_SOURCE, ...((options.inject ?? []) as never[])],
+      },
+      {
+        provide: TokenService,
+        useFactory: async (dataSource: DataSource, ...args: never[]) => {
+          const resolved = await options.useFactory(...args);
+          return new TokenService(dataSource, { entities: resolved.entities });
+        },
+        inject: [MORTAR_DATA_SOURCE, ...((options.inject ?? []) as never[])],
+      },
+      PermissionsGuard,
+    ];
+
+    return {
+      module: AuthModule,
+      imports: (options.imports ?? []) as never[],
       providers,
       exports: [UserService, RoleService, SessionService, TokenService, PermissionsGuard],
     };

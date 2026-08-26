@@ -13,6 +13,7 @@ import {
   type Provider,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import type { AsyncModuleOptions } from '@birtalanrobert/context';
 import { getTenantId, setContextValues } from '@birtalanrobert/context';
 import { MORTAR_DATA_SOURCE } from '@birtalanrobert/database';
 import { ForbiddenError } from '@birtalanrobert/http';
@@ -107,11 +108,9 @@ export interface TenancyModuleOptions {
 @Global()
 @Module({})
 export class TenancyModule implements NestModule {
-  private static resolvers: readonly TenantResolver[] = [];
+  constructor(@Inject(TENANT_RESOLVERS) private readonly resolvers: readonly TenantResolver[]) {}
 
   static forRoot(options: TenancyModuleOptions): DynamicModule {
-    TenancyModule.resolvers = options.resolvers;
-
     const providers: Provider[] = [
       { provide: TENANT_RESOLVERS, useValue: options.resolvers },
       {
@@ -129,12 +128,39 @@ export class TenancyModule implements NestModule {
     };
   }
 
+  /** Configures from other providers — validated config, most often. */
+  static forRootAsync(options: AsyncModuleOptions<TenancyModuleOptions>): DynamicModule {
+    const providers: Provider[] = [
+      {
+        provide: TENANT_RESOLVERS,
+        useFactory: async (...args: never[]) => (await options.useFactory(...args)).resolvers,
+        inject: (options.inject ?? []) as never[],
+      },
+      {
+        provide: TenantService,
+        useFactory: (dataSource: DataSource) => new TenantService(dataSource),
+        inject: [MORTAR_DATA_SOURCE],
+      },
+      TenantGuard,
+    ];
+
+    return {
+      module: TenancyModule,
+      imports: (options.imports ?? []) as never[],
+      providers,
+      exports: [TenantService, TenantGuard, TENANT_RESOLVERS],
+    };
+  }
+
   configure(consumer: MiddlewareConsumer): void {
+    // The middleware takes its resolvers by injection rather than from a
+    // static, so two applications in one process — which is what a test suite
+    // is — cannot clobber each other's configuration.
+    const middleware = new TenantMiddleware(this.resolvers);
     consumer
-      .apply(
-        (request: never, response: never, next: () => void) =>
-          void new TenantMiddleware(TenancyModule.resolvers).use(request, response, next),
-      )
+      .apply((request: never, response: never, next: () => void) => {
+        void middleware.use(request, response, next);
+      })
       .forRoutes('*');
   }
 }

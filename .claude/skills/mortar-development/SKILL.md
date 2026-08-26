@@ -20,13 +20,13 @@ pnpm new:migration <package> <MigrationName>
 
 ## Settled decisions — do not reverse without a reason
 
-| Decision                          | Why                                                                                                                                                                                                            |
-| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Decision                          | Why                                                                                                                                                                                                          |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **TypeORM, PostgreSQL enforced**  | PostgreSQL is a stated requirement, so there is no ORM independence left to protect — and a package with its own pool cannot join the caller's transaction, which breaks audit, idempotency and RLS silently |
-| **CommonJS, NodeNext resolution** | NestJS decorators need `emitDecoratorMetadata`; `node10` is deprecated in TS 5.9 and removed in TS 7                                                                                                           |
-| **`tsc` per package, no bundler** | Libraries need clean `.d.ts`, not bundles                                                                                                                                                                      |
-| **NestJS is a peer dependency**   | `money`, `context`, `config`, `observability` stay framework-free                                                                                                                                              |
-| **Pure core + thin NestJS layer** | The service is a wrapper, never a reimplementation — all logic stays in the core so Next.js, workers, CLI and tests can use it                                                                                 |
+| **CommonJS, NodeNext resolution** | NestJS decorators need `emitDecoratorMetadata`; `node10` is deprecated in TS 5.9 and removed in TS 7                                                                                                         |
+| **`tsc` per package, no bundler** | Libraries need clean `.d.ts`, not bundles                                                                                                                                                                    |
+| **NestJS is a peer dependency**   | `money`, `context`, `config`, `observability` stay framework-free                                                                                                                                            |
+| **Pure core + thin NestJS layer** | The service is a wrapper, never a reimplementation — all logic stays in the core so Next.js, workers, CLI and tests can use it                                                                               |
 
 ## Package structure
 

@@ -1,3 +1,4 @@
+export type { AsyncModuleOptions } from './module-options';
 export type { Actor, ContextSource, RequestContext } from './types';
 export {
   contextSnapshot,

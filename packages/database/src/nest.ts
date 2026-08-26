@@ -6,6 +6,7 @@ import {
   type OnApplicationShutdown,
   type Provider,
 } from '@nestjs/common';
+import type { AsyncModuleOptions } from '@birtalanrobert/context';
 import { DataSource, type EntityManager, type EntityTarget, type Repository } from 'typeorm';
 import { createDataSource, type CreateDataSourceOptions } from './data-source';
 import { checkDatabaseHealth, type DatabaseHealth } from './health';
@@ -96,6 +97,41 @@ export class DatabaseModule implements OnApplicationShutdown {
 
     return {
       module: DatabaseModule,
+      providers: [dataSourceProvider, serviceProvider],
+      exports: [dataSourceProvider, serviceProvider],
+    };
+  }
+
+  /**
+   * Configures from other providers — validated config, most often.
+   *
+   * Without this a consumer must read `process.env` at import time, before
+   * anything has validated it, which is precisely what the config layer
+   * exists to prevent.
+   */
+  static forRootAsync(options: AsyncModuleOptions<DatabaseModuleOptions>): DynamicModule {
+    const dataSourceProvider: Provider = {
+      provide: MORTAR_DATA_SOURCE,
+      useFactory: async (...args: never[]): Promise<DataSource> => {
+        const resolved = await options.useFactory(...args);
+        const { assertMigrations = process.env.NODE_ENV !== 'development', ...rest } = resolved;
+        const dataSource = createDataSource(rest);
+        await dataSource.initialize();
+        if (assertMigrations) await assertMigrationsUpToDate(dataSource);
+        return dataSource;
+      },
+      inject: (options.inject ?? []) as never[],
+    };
+
+    const serviceProvider: Provider = {
+      provide: DatabaseService,
+      useFactory: (dataSource: DataSource) => new DatabaseService(dataSource),
+      inject: [MORTAR_DATA_SOURCE],
+    };
+
+    return {
+      module: DatabaseModule,
+      imports: (options.imports ?? []) as never[],
       providers: [dataSourceProvider, serviceProvider],
       exports: [dataSourceProvider, serviceProvider],
     };

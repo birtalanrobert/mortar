@@ -17,20 +17,20 @@ a particular way.
 Every package is versioned and installed independently. Take one or take all
 twelve.
 
-| Package | What it does |
-|---|---|
-| [`@birtalanrobert/money`](packages/money) | Integer minor-unit money, allocation that never loses a cent, net/gross tax, locale parsing and formatting |
-| [`@birtalanrobert/context`](packages/context) | `AsyncLocalStorage` request context: request id, correlation id, tenant, actor, locale |
-| [`@birtalanrobert/config`](packages/config) | Environment validation that fails at boot and reports every problem at once, with secret redaction |
-| [`@birtalanrobert/observability`](packages/observability) | Structured logging bound to the request context, metrics, correlation |
-| [`@birtalanrobert/http`](packages/http) | Error taxonomy, RFC 9457 problem details, exception filter, health checks, locale negotiation |
-| [`@birtalanrobert/database`](packages/database) | TypeORM `DataSource` conventions and a **transactional context** every other package writes through |
-| [`@birtalanrobert/redis`](packages/redis) | Connections, distributed locks, tagged cache, sliding-window rate limiting |
-| [`@birtalanrobert/tenancy`](packages/tenancy) | Tenant resolution, scoped repositories, PostgreSQL row-level security |
-| [`@birtalanrobert/auth`](packages/auth) | Identity, scrypt passwords, opaque sessions, single-use tokens, roles and permissions |
-| [`@birtalanrobert/audit`](packages/audit) | Append-only audit log, enforced by a database trigger |
-| [`@birtalanrobert/idempotency`](packages/idempotency) | Idempotency keys for mutating endpoints |
-| [`@birtalanrobert/jobs`](packages/jobs) | BullMQ conventions, context propagation, and a forward-window scanner |
+| Package                                                   | What it does                                                                                               |
+| --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| [`@birtalanrobert/money`](packages/money)                 | Integer minor-unit money, allocation that never loses a cent, net/gross tax, locale parsing and formatting |
+| [`@birtalanrobert/context`](packages/context)             | `AsyncLocalStorage` request context: request id, correlation id, tenant, actor, locale                     |
+| [`@birtalanrobert/config`](packages/config)               | Environment validation that fails at boot and reports every problem at once, with secret redaction         |
+| [`@birtalanrobert/observability`](packages/observability) | Structured logging bound to the request context, metrics, correlation                                      |
+| [`@birtalanrobert/http`](packages/http)                   | Error taxonomy, RFC 9457 problem details, exception filter, health checks, locale negotiation              |
+| [`@birtalanrobert/database`](packages/database)           | TypeORM `DataSource` conventions and a **transactional context** every other package writes through        |
+| [`@birtalanrobert/redis`](packages/redis)                 | Connections, distributed locks, tagged cache, sliding-window rate limiting                                 |
+| [`@birtalanrobert/tenancy`](packages/tenancy)             | Tenant resolution, scoped repositories, PostgreSQL row-level security                                      |
+| [`@birtalanrobert/auth`](packages/auth)                   | Identity, scrypt passwords, opaque sessions, single-use tokens, roles and permissions                      |
+| [`@birtalanrobert/audit`](packages/audit)                 | Append-only audit log, enforced by a database trigger                                                      |
+| [`@birtalanrobert/idempotency`](packages/idempotency)     | Idempotency keys for mutating endpoints                                                                    |
+| [`@birtalanrobert/jobs`](packages/jobs)                   | BullMQ conventions, context propagation, and a forward-window scanner                                      |
 
 ```bash
 npm install @birtalanrobert/money @birtalanrobert/http

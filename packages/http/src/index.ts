@@ -60,4 +60,4 @@ export {
   type HealthControllerOptions,
 } from './health.controller';
 
-export { HttpModule, type HttpModuleOptions } from './nest';
+export { CONTEXT_OPTIONS, HttpModule, type HttpModuleOptions } from './nest';

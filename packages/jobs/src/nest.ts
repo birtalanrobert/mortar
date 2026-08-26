@@ -5,6 +5,7 @@ import {
   type OnApplicationShutdown,
   type Provider,
 } from '@nestjs/common';
+import type { AsyncModuleOptions } from '@birtalanrobert/context';
 import type { Logger } from '@birtalanrobert/observability';
 import { MORTAR_LOGGER } from '@birtalanrobert/observability/nestjs';
 import {
@@ -70,6 +71,57 @@ export class JobsModule implements OnApplicationShutdown {
 
     return {
       module: JobsModule,
+      providers,
+      exports: [JobQueues, JobWorkers, TaskScheduler],
+    };
+  }
+
+  /** Configures from other providers — validated config, most often. */
+  static forRootAsync(options: AsyncModuleOptions<JobsModuleOptions>): DynamicModule {
+    const resolved = { current: undefined as JobsModuleOptions | undefined };
+    const connectionToken = Symbol('MORTAR_QUEUE_CONNECTION');
+
+    const providers: Provider[] = [
+      {
+        provide: connectionToken,
+        useFactory: async (...args: never[]) => {
+          resolved.current = await options.useFactory(...args);
+          return createQueueConnection({
+            ...resolved.current.redis,
+            connectionName: 'mortar-queue',
+          });
+        },
+        inject: (options.inject ?? []) as never[],
+      },
+      {
+        provide: JobQueues,
+        useFactory: (connection: never) =>
+          new JobQueues({ connection, prefix: resolved.current?.prefix }),
+        inject: [connectionToken],
+      },
+      {
+        provide: JobWorkers,
+        useFactory: (connection: never, logger?: Logger) =>
+          new JobWorkers({
+            connection,
+            prefix: resolved.current?.prefix,
+            concurrency: resolved.current?.concurrency,
+            logger,
+            onDeadLetter: resolved.current?.onDeadLetter,
+          }),
+        inject: [connectionToken, { token: MORTAR_LOGGER, optional: true }],
+      },
+      {
+        provide: TaskScheduler,
+        useFactory: (redis: RedisService, logger?: Logger) =>
+          new TaskScheduler(redis.locks, logger),
+        inject: [RedisService, { token: MORTAR_LOGGER, optional: true }],
+      },
+    ];
+
+    return {
+      module: JobsModule,
+      imports: (options.imports ?? []) as never[],
       providers,
       exports: [JobQueues, JobWorkers, TaskScheduler],
     };

@@ -6,6 +6,7 @@ import {
   type OnApplicationShutdown,
   type Provider,
 } from '@nestjs/common';
+import type { AsyncModuleOptions } from '@birtalanrobert/context';
 import type { Redis } from 'ioredis';
 import { RedisCache, type CacheOptions } from './cache';
 import { createRedis, type CreateRedisOptions } from './connection';
@@ -68,6 +69,34 @@ export class RedisModule implements OnApplicationShutdown {
     ];
 
     return { module: RedisModule, providers, exports: providers };
+  }
+
+  /** Configures from other providers — validated config, most often. */
+  static forRootAsync(options: AsyncModuleOptions<RedisModuleOptions>): DynamicModule {
+    const clientProvider: Provider = {
+      provide: MORTAR_REDIS,
+      useFactory: async (...args: never[]) => {
+        const { cache: _cache, ...connection } = await options.useFactory(...args);
+        return createRedis({ connectionName: 'mortar-app', ...connection });
+      },
+      inject: (options.inject ?? []) as never[],
+    };
+
+    const serviceProvider: Provider = {
+      provide: RedisService,
+      useFactory: async (client: Redis, ...args: never[]) => {
+        const { cache } = await options.useFactory(...args);
+        return new RedisService(client, cache);
+      },
+      inject: [MORTAR_REDIS, ...((options.inject ?? []) as never[])],
+    };
+
+    return {
+      module: RedisModule,
+      imports: (options.imports ?? []) as never[],
+      providers: [clientProvider, serviceProvider],
+      exports: [clientProvider, serviceProvider],
+    };
   }
 
   /** Provides an existing client, for tests. */
