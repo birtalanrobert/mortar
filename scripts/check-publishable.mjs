@@ -46,8 +46,29 @@ const RULES = [
   },
   {
     name: 'personal contact detail',
-    pattern:
-      /[A-Za-z0-9._%+-]+@(?!example\.(?:com|org)|x\.com|y\.hu|mortar\.dev)[A-Za-z0-9.-]+\.[A-Za-z]{2,}/,
+    /*
+     * Subdomains of the reserved documentation domains are allowed too, which
+     * the hostname rule above already does. RFC 2606 reserves `example.com`
+     * and everything under it precisely so that documentation can name an
+     * address; flagging `docs@in.example.com` while permitting
+     * `https://in.example.com` was an inconsistency between two rules meant to
+     * express the same policy.
+     *
+     * The allowlist must consume the *whole* domain, hence the trailing
+     * lookahead: without it `someone@example.com.attacker.net` is read as
+     * beginning with a permitted domain and waved through, which is a
+     * lookalike anybody can register.
+     */
+    pattern: new RegExp(
+      '[A-Za-z0-9._%+-]+@(?!(?:' +
+        [
+          '(?:[a-z0-9-]+\\.)*example\\.(?:com|org|net)',
+          'x\\.com',
+          'y\\.hu',
+          '(?:[a-z0-9-]+\\.)*mortar\\.dev',
+        ].join('|') +
+        ')(?![A-Za-z0-9.-]))[A-Za-z0-9.-]+\\.[A-Za-z]{2,}',
+    ),
   },
 ];
 

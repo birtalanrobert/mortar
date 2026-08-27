@@ -27,6 +27,8 @@
     "version:bump": "node scripts/version.mjs"
   },
   "devDependencies": {
+    "@aws-sdk/client-s3": "^3",
+    "@aws-sdk/s3-request-presigner": "^3",
     "@eslint/js": "^9.17.0",
     "@nestjs/common": "^11.2.2",
     "@nestjs/core": "^11.2.2",

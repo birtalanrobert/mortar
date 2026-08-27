@@ -1,7 +1,7 @@
 {
-  "name": "@birtalanrobert/workflow",
+  "name": "@birtalanrobert/comms",
   "version": "1.0.0",
-  "description": "Lifecycle state machines, due dates and signed public links",
+  "description": "Outbound email and SMS behind provider ports, and inbound email parsing",
   "license": "AGPL-3.0-only",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -37,8 +37,8 @@
   },
   "dependencies": {
     "@birtalanrobert/context": "workspace:^",
-    "@birtalanrobert/http": "workspace:^",
-    "@birtalanrobert/database": "workspace:^"
+    "@birtalanrobert/database": "workspace:^",
+    "@birtalanrobert/http": "workspace:^"
   },
   "peerDependencies": {
     "@nestjs/common": "^11.0.0",
@@ -51,5 +51,10 @@
     "typeorm": {
       "optional": true
     }
+  },
+  "mortar": {
+    "entries": [
+      "nestjs"
+    ]
   }
 }

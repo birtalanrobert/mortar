@@ -46,11 +46,36 @@ writeFileSync(
         './package.json': './package.json',
       },
       scripts: {
-        build: 'tsc -p tsconfig.json',
+        build: 'tsc -p tsconfig.build.json',
         clean: 'rm -rf dist *.tsbuildinfo',
         typecheck: 'tsc -p tsconfig.json --noEmit',
       },
       publishConfig: { access: 'public' },
+    },
+    null,
+    2,
+  ) + '\n',
+);
+
+/**
+ * Two configurations, and the pair is the point.
+ *
+ * `tsconfig.build.json` emits and excludes tests, because tests have no place
+ * in a published `dist`. `tsconfig.json` emits nothing and **includes** them,
+ * because that is the project an editor and `pnpm typecheck` resolve.
+ *
+ * One config doing both jobs looks tidier and silently stops type-checking the
+ * tests: the build is green, the editor is red, and nobody sees the editor
+ * until they open the file. That is exactly how it went wrong the first time.
+ */
+writeFileSync(
+  join(dir, 'tsconfig.build.json'),
+  JSON.stringify(
+    {
+      extends: '../../tsconfig.base.json',
+      compilerOptions: { outDir: './dist', rootDir: './src', types: ['node'] },
+      include: ['src/**/*'],
+      exclude: ['src/**/*.test.ts', 'src/**/*.spec.ts', 'src/**/__tests__/**'],
     },
     null,
     2,
@@ -62,9 +87,8 @@ writeFileSync(
   JSON.stringify(
     {
       extends: '../../tsconfig.base.json',
-      compilerOptions: { outDir: './dist', rootDir: './src' },
+      compilerOptions: { noEmit: true, types: ['node'] },
       include: ['src/**/*'],
-      exclude: ['src/**/*.test.ts'],
     },
     null,
     2,

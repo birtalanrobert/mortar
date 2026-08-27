@@ -4,6 +4,76 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## files 1.0.0, comms 1.0.0
+
+The two Tier 2 packages dossier's Phase 2 needs: somewhere for an uploaded
+document to go, and a way for a client to forward one they already have.
+
+Built now rather than up front because this is the phase that first needs them —
+and built partially, on purpose. `files` has no PDF assembly, thumbnailing or
+ZIP packaging; `comms` has no templates, quiet hours or credit ledger. Those
+belong to the phases that need them, and writing them now would be guessing at
+requirements three projects away.
+
+### `files`
+
+- **Pre-signed direct upload.** The browser uploads to storage without touching
+  the API. Proxying the bytes costs a request-sized chunk of memory per
+  concurrent upload and puts the API's timeout between a client on a train and
+  finishing. The cost is real rows in `pending`, which `sweepAbandoned` clears.
+- **The type is read from the bytes, never from the header.** A `Content-Type`
+  and a filename extension are claims made by whoever uploaded the file.
+- **One bucket, tenant id as the first path segment**, so a bucket policy can
+  name it. `assertTenantOwns` before every read, delete and signature: nothing
+  governs a bucket except the key handed to it.
+- **Envelope encryption for erasure, not confidentiality.** The provider already
+  encrypts at rest. Destroying one wrapped key is the difference between an
+  erasure request honoured in seconds and one that cannot honestly be honoured,
+  because backups exist. The object key is bound in as AAD, so a ciphertext
+  moved under another tenant's prefix fails to open.
+- **`RefusingScanner` is the default.** A misconfiguration that silently
+  disables virus scanning is indistinguishable from working software until it
+  matters; one that refuses uploads is noticed in minutes.
+- **`MemoryStorage` is exported.** Every service consuming `StoragePort` lives
+  in another repository and needs to test its upload flow without a bucket.
+
+### `comms`
+
+- **Signed per-request inbound addresses.** The address is the credential, so it
+  carries an HMAC tag; without one a predictable local part lets a stranger post
+  documents into a firm's workflow. Its own secret, because an address lives for
+  years in sent folders while a link expires in days.
+- **A MIME parser rather than a dependency.** Inbound mail is the most hostile
+  input the system accepts. Eighty readable lines tested against what actually
+  arrives is a smaller permanent surface than a parser that knows every corner
+  of MIME in order to be asked about six.
+- **A partial unique index on the provider's message id.** Providers redeliver;
+  without it a forwarded bank statement is attached three times. A constraint
+  rather than a check, because two redeliveries can arrive at once.
+- **The message body is never logged.** A reminder is innocuous; inbound mail
+  here is bank statements.
+- **Ports only for sending.** Providers are Phase 5; the seam exists now so the
+  one thing that needs sending sooner has somewhere to go.
+
+### A defect in the scaffolding, found by the editor
+
+`scripts/new-package.mjs` generated a single `tsconfig.json` that both emitted
+to `dist` and excluded `*.test.ts` — so a new package's tests belonged to no
+project and were type-checked by nothing. The build passed while the editor
+showed errors, which is how three genuine type errors in `envelope.test.ts`
+survived a green run.
+
+`files`, `comms` and `workflow` now carry the standard pair the other twelve
+packages already had, and the scaffold writes both. Nothing published changes:
+`dist` never contained tests either way.
+
+### A bug this found
+
+The inbound tag was base64url at first, and every address failed to verify
+itself. `parse` lowercases the address on the way in — correctly, because
+providers lowercase local parts — which destroys a case-sensitive tag. Hex
+costs a few characters in an address nobody types by hand.
+
 ## observability 1.0.1
 
 Never published. An interrupted publish left `1.0.0` partially staged and npm
