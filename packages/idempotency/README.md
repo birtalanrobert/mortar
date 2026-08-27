@@ -6,6 +6,47 @@ This is needed wherever clients double-submit: a
 guest double-taps and the order becomes real food, a retried attack command is
 unrecoverable, a doubled payment is a refund and an apology.
 
+## Using it in a NestJS application
+
+```ts
+import { IdempotencyModule } from '@birtalanrobert/idempotency';
+
+@Module({
+  imports: [
+    // …config, logger, database…
+    IdempotencyModule.forRootAsync({
+      inject: [ConfigModule.token()],
+      useFactory: (config: AppConfig) => ({ ttlMs: config.IDEMPOTENCY_TTL }),
+    }),
+  ],
+})
+export class AppModule {}
+```
+
+`@Global()`, and it registers its own interceptor — there is nothing to add to
+`APP_INTERCEPTOR` yourself.
+
+Register `idempotencyEntities` and `idempotencyMigrations` with the database
+module.
+
+## Marking a route
+
+```ts
+@Post()
+@Idempotent()
+async create(@Body() body: CreateThingDto) { /* … */ }
+```
+
+The client sends `Idempotency-Key`. A repeat with the same key **and the same
+body** replays the first response; the same key with a _different_ body is
+refused rather than replayed, because silently answering a question the caller
+did not ask hides their bug.
+
+Put it on anything a client will retry and that has an effect outside the
+database — sending an email, charging a card, issuing a link. A create that
+times out in the network leaves the caller unable to tell whether it happened,
+and without a key the safe behaviour is also the one that does it twice.
+
 ## The commit boundaries are the design, and they are not symmetrical
 
 **The claim commits immediately, in its own transaction.** A concurrent

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { Reflector } from '@nestjs/core';
 import type { ExecutionContext } from '@nestjs/common';
-import { HealthController, ForbiddenError, UnauthenticatedError } from '@birtalanrobert/http';
+import { ForbiddenError, UnauthenticatedError } from '@birtalanrobert/http';
+import { HealthController } from '@birtalanrobert/http/nestjs';
 import { runInContext } from '@birtalanrobert/context';
 import { PermissionsGuard, Public, RequireAnyPermission, RequirePermissions } from './nest';
 

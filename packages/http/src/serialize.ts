@@ -1,4 +1,3 @@
-import { HttpException } from '@nestjs/common';
 import type { FieldError, ProblemDetails } from './problem';
 import { problemType } from './problem';
 import { MortarError } from './errors';
@@ -35,7 +34,7 @@ export function toProblemDetails(thrown: unknown, options: SerializeOptions = {}
     return thrown.toProblemDetails({ instance, requestId, baseUri });
   }
 
-  if (thrown instanceof HttpException) {
+  if (isHttpException(thrown)) {
     return fromHttpException(thrown, options);
   }
 
@@ -60,6 +59,35 @@ export function toProblemDetails(thrown: unknown, options: SerializeOptions = {}
 }
 
 /**
+ * A Nest `HttpException`, recognised by shape rather than by identity.
+ *
+ * Two reasons, and the second is the one that matters. The first is that
+ * `instanceof` here would mean importing `@nestjs/common` into the framework-
+ * free entry point, for a type guard.
+ *
+ * The second is that `instanceof` is *less* reliable for this particular job.
+ * A monorepo or a mismatched peer range readily ends up with two copies of
+ * `@nestjs/common`, and an exception thrown by one is not `instanceof` the
+ * class from the other — so the framework's own validation errors would
+ * silently fall through to the generic 500 branch. This function is documented
+ * as total; recognising the contract rather than the constructor is what makes
+ * that true.
+ */
+interface HttpExceptionLike {
+  getStatus(): number;
+  getResponse(): string | object;
+}
+
+function isHttpException(value: unknown): value is HttpExceptionLike {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as HttpExceptionLike).getStatus === 'function' &&
+    typeof (value as HttpExceptionLike).getResponse === 'function'
+  );
+}
+
+/**
  * Maps a Nest HttpException, including the shape its built-in ValidationPipe
  * produces, into the same problem document as everything else.
  *
@@ -67,7 +95,10 @@ export function toProblemDetails(thrown: unknown, options: SerializeOptions = {}
  * different to a validation failure from application code, and every client
  * would need two error handlers.
  */
-function fromHttpException(exception: HttpException, options: SerializeOptions): ProblemDetails {
+function fromHttpException(
+  exception: HttpExceptionLike,
+  options: SerializeOptions,
+): ProblemDetails {
   const status = exception.getStatus();
   const response = exception.getResponse();
   const code = statusToCode(status);

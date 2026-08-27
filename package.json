@@ -21,10 +21,11 @@
     "new:migration": "node scripts/new-migration.mjs",
     "new:package": "node scripts/new-package.mjs",
     "check:publishable": "node scripts/check-publishable.mjs",
-    "release:check": "pnpm build && pnpm check:publishable && pnpm test && node scripts/publish-npm.mjs --dry-run",
+    "release:check": "pnpm build && pnpm check:publishable && pnpm check:readmes && pnpm test && node scripts/publish-npm.mjs --dry-run",
     "release": "pnpm build && pnpm check:publishable && node scripts/publish-npm.mjs",
     "version:set": "node scripts/version.mjs",
-    "version:bump": "node scripts/version.mjs"
+    "version:bump": "node scripts/version.mjs",
+    "check:readmes": "node scripts/check-readmes.mjs"
   },
   "devDependencies": {
     "@aws-sdk/client-s3": "^3",

@@ -8,6 +8,35 @@ counting and the metered credit ledger are later work; writing them now would be
 guessing at requirements three projects away. What is here is the seam, and the
 half of it that had to come first.
 
+## Using it in a NestJS application
+
+```ts
+import { CommsModule } from '@birtalanrobert/comms/nestjs';
+import { NoopMessagePort } from '@birtalanrobert/comms';
+
+@Module({
+  imports: [
+    // …config, logger, database…
+    CommsModule.forRootAsync({
+      inject: [ConfigModule.token()],
+      useFactory: (config: AppConfig) => ({
+        ports: { email: new NoopMessagePort('email') }, // a real provider from Phase 5
+        inbound: { domain: config.INBOUND_DOMAIN, secret: config.INBOUND_SECRET },
+      }),
+    }),
+  ],
+})
+export class AppModule {}
+```
+
+`@Global()`, and it provides `CommsService`. Register `commsEntities` and
+`commsMigrations` with the database module.
+
+Both options are optional: a deployment that does not accept inbound mail omits
+`inbound` and `inboundAddressFor` returns `undefined`; a channel with no port
+records a failed message rather than throwing, so a missing provider shows up in
+the log instead of as a 500.
+
 ## Inbound addresses
 
 A per-request address a client can forward an existing document to — the feature

@@ -6,6 +6,75 @@ Deliberately **primitives**: mortar owns the shape, projects own the contents.
 There is no shared enumeration of roles — a "manager" in a repair shop and a
 "manager" in a recruitment agency have nothing in common.
 
+## Using it in a NestJS application
+
+```ts
+import { AuthModule, PermissionsGuard, RequirePermissions } from '@birtalanrobert/auth';
+
+@Module({
+  imports: [
+    // …config, logger, database, redis, http…
+    TenancyModule.forRoot({ resolvers: [sessionResolver()] }),
+
+    AuthModule.forRootAsync({
+      inject: [ConfigModule.token()],
+      useFactory: (config: AppConfig) => ({
+        session: {
+          absoluteTtlMs: config.SESSION_ABSOLUTE_TTL,
+          idleTtlMs: config.SESSION_IDLE_TTL,
+        },
+      }),
+    }),
+  ],
+  providers: [
+    // Fails closed: every route is protected unless it opts out.
+    { provide: APP_GUARD, useClass: PermissionsGuard },
+  ],
+})
+export class AppModule {}
+```
+
+`@Global()`, and it provides `UserService`, `SessionService`, `TokenService` and
+`RoleService`. Register `authEntities` and `authMigrations` with the database
+module.
+
+**Module order matters.** Whatever applies your authentication middleware has to
+run after `HttpModule` — whose middleware opens the request context the actor is
+written into — and before `TenancyModule`, whose session resolver reads the
+tenant that authentication is what sets. Middleware runs in module-initialisation
+order; move it and requests silently lose their tenant.
+
+### Protecting routes
+
+```ts
+@Get()
+@RequirePermissions(PERMISSIONS.requestsRead)
+async list() { /* … */ }
+
+@Get(':token')
+@Public()          // no session required
+@AllowNoTenant()   // and no tenant either
+async checklist() { /* … */ }
+```
+
+The guard is registered globally and **fails closed**: a route with no decorator
+is protected. A route that should be open says so explicitly, which means the
+mistake of forgetting a decorator is a 401 rather than an open endpoint.
+
+`PermissionsGuard` needs the ambient context, so it sits below `HttpModule`'s
+middleware; and it is registered _after_ any rate-limit guard, so a flood of
+unauthenticated requests is rejected before it costs a database round trip
+resolving permissions.
+
+### System roles at boot
+
+```ts
+await app.get(RoleService).syncSystemRoles(SYSTEM_ROLES);
+```
+
+Idempotent, so it runs on every boot and the role definitions stay in step with
+the code that references them.
+
 ## Roles are a table, not a string array
 
 `mortar_role` holds the roles; `mortar_membership_role` grants them. Storing

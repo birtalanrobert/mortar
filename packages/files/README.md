@@ -3,6 +3,46 @@
 Pre-signed direct upload, per-tenant key scoping, virus scanning, envelope
 encryption and retention.
 
+## Using it in a NestJS application
+
+```ts
+import { FilesModule } from '@birtalanrobert/files/nestjs';
+import { S3Storage, ClamAvScanner, EnvelopeCrypto, LocalMasterKey } from '@birtalanrobert/files';
+
+@Module({
+  imports: [
+    // …config, logger, database…
+    FilesModule.forRootAsync({
+      inject: [ConfigModule.token()],
+      useFactory: (config: AppConfig) => ({
+        storage: new S3Storage({
+          bucket: config.S3_BUCKET,
+          region: config.S3_REGION,
+          endpoint: config.S3_ENDPOINT, // MinIO locally
+          forcePathStyle: !!config.S3_ENDPOINT,
+          credentials: { accessKeyId: config.S3_KEY, secretAccessKey: config.S3_SECRET },
+        }),
+        scanner: new ClamAvScanner({ host: config.CLAMAV_HOST, port: config.CLAMAV_PORT }),
+        crypto: new EnvelopeCrypto(new LocalMasterKey(config.MASTER_KEY)),
+        maxBytes: config.UPLOAD_MAX_BYTES,
+      }),
+    }),
+  ],
+})
+export class AppModule {}
+```
+
+`@Global()`, and it provides `FilesService`. Register `fileEntities` and
+`fileMigrations` with the database module.
+
+**The ports are constructed by the application, not by the module.** Which
+bucket, which endpoint, which scanner and whether files are encrypted are
+deployment decisions; a module that reached for them itself would be reading
+configuration nothing had validated.
+
+Omit `scanner` at your peril — the default is `RefusingScanner`, which refuses
+every upload. That is deliberate: see below.
+
 ## The shape, and why
 
 A file goes from a client's phone to a professional's folder in three steps: the

@@ -1,3 +1,12 @@
+/**
+ * The framework-free half.
+ *
+ * Nothing here imports `@nestjs/common`, so a Next.js route handler, an edge
+ * function or a job runner can raise the same errors and produce the same
+ * problem documents as the API without installing a framework to do it. The
+ * filter, middleware, pipe, controller and module that wire these into Nest
+ * live in `@birtalanrobert/http/nestjs`.
+ */
 export {
   DEFAULT_PROBLEM_BASE_URI,
   PROBLEM_CONTENT_TYPE,
@@ -32,17 +41,7 @@ export {
 
 export { toProblemDetails, type SerializeOptions } from './serialize';
 
-export { MortarExceptionFilter, type ExceptionFilterOptions } from './exception.filter';
-
-export {
-  CORRELATION_ID_HEADER,
-  ContextMiddleware,
-  REQUEST_ID_HEADER,
-  negotiateLocale,
-  type ContextMiddlewareOptions,
-} from './context.middleware';
-
-export { createValidationPipe, flattenValidationErrors } from './validation';
+export { CORRELATION_ID_HEADER, REQUEST_ID_HEADER, negotiateLocale } from './headers';
 
 export {
   HealthRegistry,
@@ -52,13 +51,3 @@ export {
   type HealthStatus,
   type IndicatorResult,
 } from './health';
-
-export {
-  HEALTH_OPTIONS,
-  HEALTH_REGISTRY,
-  HealthController,
-  type HealthControllerOptions,
-} from './health.controller';
-
-export { CONTEXT_OPTIONS, HttpModule, type HttpModuleOptions } from './nest';
-export { PUBLIC_ROUTE_KEY, PublicRoute } from './public';

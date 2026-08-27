@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/http",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Error taxonomy, problem-details, request context and health checks",
   "license": "AGPL-3.0-only",
   "type": "commonjs",
@@ -11,16 +11,20 @@
     "src",
     "!src/**/*.test.ts",
     "!src/**/*.spec.ts",
-    "!src/**/__tests__",
     "README.md",
     "LICENSE",
     "NOTICE",
+    "nestjs",
     "CHANGELOG.md"
   ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./nestjs": {
+      "types": "./dist/nestjs/index.d.ts",
+      "default": "./dist/nestjs/index.js"
     },
     "./package.json": "./package.json"
   },
@@ -60,5 +64,10 @@
     "type": "git",
     "url": "git+https://github.com/birtalanrobert/mortar.git",
     "directory": "packages/http"
+  },
+  "mortar": {
+    "entries": [
+      "nestjs"
+    ]
   }
 }

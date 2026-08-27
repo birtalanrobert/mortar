@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getContext } from '@birtalanrobert/context';
-import { ContextMiddleware, negotiateLocale } from './context.middleware';
+import { ContextMiddleware } from './context.middleware';
+import { negotiateLocale } from './headers';
 
 function run(
   request: Record<string, unknown>,

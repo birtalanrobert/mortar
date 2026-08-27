@@ -5,6 +5,32 @@ Integer minor-unit money. No floats, ever, at any point in the chain.
 This requirement comes up in every financial system — _"money in integer minor units, never floats"_ — which is why
 this package exists and why it has no dependencies.
 
+## Using it in a NestJS application
+
+**There is no module to import.** This package is pure functions and a value
+type with no dependencies, so it is imported directly wherever it is needed —
+in a service, in a domain module, in a React component, in a worker.
+
+```ts
+import { money, add, format } from '@birtalanrobert/money';
+
+const price = money(1999, 'RON'); // 19.99 RON
+const total = add(price, money(500, 'RON'));
+```
+
+Persisting it is two columns, never a float. The column helpers live in
+`@birtalanrobert/database`, so that this package stays dependency-free:
+
+```ts
+import { MONEY_AMOUNT_COLUMN, CURRENCY_COLUMN } from '@birtalanrobert/database';
+
+@Column(MONEY_AMOUNT_COLUMN) amount!: number;
+@Column(CURRENCY_COLUMN) currency!: string;
+```
+
+Being dependency-free is the point: a Next.js bundle can format a price without
+installing an ORM, and a worker can total an invoice without a framework.
+
 ## Core ideas
 
 - **`Money` is `{ amount, currency }`**, where `amount` is a safe integer count

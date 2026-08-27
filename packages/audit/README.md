@@ -1,58 +1,83 @@
 # @birtalanrobert/audit
 
-An append-only audit trail that **joins the caller's transaction**.
+The append-only record of what was done, by whom, to what.
 
-## Why this package exists in this form
-
-`record()` writes through the active `EntityManager` when one is open. That
-single property is the reason mortar adopted TypeORM at all: a package holding
-its own connection pool cannot join the caller's transaction, so a rollback
-would leave behind an audit row for a change that never happened — a confident
-record of a lie, which is worse than no record.
+## Using it in a NestJS application
 
 ```ts
-await runInTransaction(dataSource, async () => {
-  await bookingRepo.save(booking);
-  await audit.record({
-    action: 'booking.cancelled',
-    entityType: 'booking',
-    entityId: booking.id,
-    before,
-    after,
-  });
-});
-// Both commit, or neither does.
+import { AuditModule, AuditService } from '@birtalanrobert/audit';
+
+@Module({
+  imports: [
+    // …config, logger, database…
+    AuditModule.forRoot(),
+  ],
+})
+export class AppModule {}
 ```
 
-## Append-only is enforced by the database
+`forRoot()` takes no required options and there is no `forRootAsync`, because
+there is nothing to configure that depends on anything else — the module needs
+the data source, which it injects. `@Global()`.
 
-The service exposes no update or delete for individual rows, **and** the
-migration installs a trigger that raises on `UPDATE`. A trail that merely
-happens not to be edited is worth less than one that cannot be — and these
-projects use it to settle disputes about money, hours worked and who saw whose
-data.
+Register `auditEntities` and `auditMigrations` with the database module:
 
-Bulk time-based purging (`purgeOlderThan`) still works, because retention is a
-policy rather than a way to remove one inconvenient row.
+```ts
+export const entities = [...auditEntities /* … */];
+export const migrations = [...auditMigrations /* … */];
+```
 
-## Context is captured automatically
+## Recording
 
-Tenant, actor, actor name, impersonator, request id, correlation id, address
-and user agent all come from the ambient request context. A caller writes one
-line and the entry is complete.
+```ts
+constructor(private readonly audit: AuditService) {}
 
-**Impersonation records both parties** — the operator and the account they
-acted as — because "who did this" has two answers when support is involved.
+await this.audit.record(
+  {
+    action: 'request.created',
+    entityType: 'request',
+    entityId: request.id,
+    tenantId,
+    before: previous,   // omit on creation
+    after: current,     // omit on deletion
+  },
+  manager,              // the surrounding transaction, if there is one
+);
+```
 
-**The actor's name is denormalised** on purpose: a user who is later renamed or
-deleted must still be identifiable, and a join to a mutable table would quietly
-rewrite history.
+**Pass the manager.** An audit entry written outside the transaction it
+describes survives a rollback, which produces a trail asserting something that
+never happened — worse than no trail, because it will be believed.
 
-## Only changes are stored, and secrets never are
+`before`/`after` are diffed into a `changes` column. For a fact that is not a
+state change — "a link was re-issued to this address" — use `metadata` instead:
+an `after` with no `before` is recorded as a diff from nothing, which reads as
+though those fields had just been set.
 
-`computeChanges()` records just the fields that differ, with password, token,
-key, PIN, card and IBAN-shaped fields replaced by `[redacted]` — the fact of
-the change is recorded, the value is not.
+The actor and tenant come from the ambient context when not given explicitly.
 
-Dates compare by instant rather than identity, so a record re-read from the
-database does not register as changed.
+## Reading
+
+```ts
+// The whole trail for one entity, newest first:
+const history = await audit.forEntity('request', requestId);
+
+// Or a broader query:
+const recent = await audit.query({ tenantId, action: 'request.created', limit: 100 });
+```
+
+## Why it is append-only
+
+There is no update and no delete. A trail that can be edited is a trail that
+answers "what happened" with "whatever somebody last wanted it to say", and the
+questions it exists to answer — a disputed deletion, a regulator's request, an
+incident — are exactly the ones where an editable record is worthless.
+
+Retention is handled by deleting whole partitions of old entries as a policy,
+not by amending individual rows.
+
+## `seq`
+
+A monotonic sequence beside the timestamp. Two entries written in the same
+millisecond are still ordered, and a clock that steps backwards does not
+reorder history.

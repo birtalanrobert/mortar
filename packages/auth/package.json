@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/auth",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Identity, sessions, verification, invitations and RBAC primitives",
   "license": "AGPL-3.0-only",
   "type": "commonjs",

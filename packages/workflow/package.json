@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/workflow",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Lifecycle state machines, due dates and signed public links",
   "license": "AGPL-3.0-only",
   "main": "./dist/index.js",
@@ -51,5 +51,10 @@
     "typeorm": {
       "optional": true
     }
+  },
+  "mortar": {
+    "entries": [
+      "nestjs"
+    ]
   }
 }

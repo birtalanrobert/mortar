@@ -5,6 +5,68 @@ Tenant resolution, scoped repositories and row-level security.
 The highest-stakes package in Tier 1: a single missed `WHERE tenant_id = …` in
 a multi-tenant system is a data breach, not a bug.
 
+## Using it in a NestJS application
+
+```ts
+import { TenancyModule, sessionResolver } from '@birtalanrobert/tenancy';
+
+@Module({
+  imports: [
+    // …config, logger, database, redis, http…
+    TenancyModule.forRoot({ resolvers: [sessionResolver()] }),
+    // AuthModule goes *after* this in module order; see below.
+  ],
+})
+export class AppModule {}
+```
+
+`@Global()`. `forRootAsync` exists for when a resolver needs configuration.
+
+**Resolver order is the security boundary.** `sessionResolver()` is the only
+signal the service issued itself, so it needs no further verification and comes
+first. `subdomainResolver()` and `headerResolver()` are for products where a
+tenant is addressed by hostname or by an API key; both need a slug-to-id lookup,
+and both must come _after_ the session — a request carrying a session and a
+conflicting hostname is a request whose session wins.
+
+**Module order matters too.** `TenancyModule` applies middleware that reads
+`request.user.tenantId`, which authentication is what sets, so the auth module
+must be registered before it. Middleware runs in module-initialisation order;
+move it and requests silently lose their tenant.
+
+### Opting a route out
+
+```ts
+@Public()
+@AllowNoTenant()
+@Get(':token')
+async checklist(@Param('token') token: string) { /* … */ }
+```
+
+A client link has no account and no tenant header — the tenant comes from the
+token's claims instead.
+
+### Reading and binding
+
+```ts
+import { requireTenantId } from '@birtalanrobert/context';
+import { runInTenantTransaction } from '@birtalanrobert/tenancy';
+
+await runInTenantTransaction(
+  dataSource,
+  async (manager) => {
+    // every statement here is bound; RLS applies
+  },
+  { tenantId: requireTenantId() },
+);
+```
+
+**Every read needs this too, not only writes.** Resolving a tenant into ambient
+context does not bind it to a connection — only a transaction can, because
+Postgres scopes the setting with `SET LOCAL`. An unbound read on a protected
+table returns **nothing**, and an empty list reads as a customer with no data
+rather than as a bug.
+
 ## Two layers, deliberately
 
 **`TenantScopedRepository`** stops an unscoped query being _written_. Every read

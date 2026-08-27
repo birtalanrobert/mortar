@@ -2,6 +2,78 @@
 
 Lifecycle state machines, due-date arithmetic and signed public links.
 
+## Using it in a NestJS application
+
+```ts
+import { WorkflowModule } from '@birtalanrobert/workflow/nestjs';
+
+@Module({
+  imports: [
+    // …config, logger, database…
+    WorkflowModule.forRootAsync({
+      inject: [ConfigModule.token()],
+      useFactory: (config: AppConfig) => ({
+        secret: config.LINK_SECRET,
+        defaultTtlMs: config.LINK_TTL,
+      }),
+    }),
+  ],
+})
+export class AppModule {}
+```
+
+`@Global()`, and it provides `LinkService`. Register `workflowEntities` and
+`workflowMigrations` with the database module — the revocation table is what
+lets one link be killed without rotating the secret and invalidating every link
+in the system.
+
+The secret is refused at construction if it is under 32 characters. Finding
+that out when the first client opens a link is too late.
+
+## Issuing and verifying
+
+```ts
+constructor(private readonly links: LinkService) {}
+
+const { token, claims } = await this.links.issue({
+  subject: `request:${request.id}`,
+  tenantId,
+  party: party.key,   // where a subject has several participants
+});
+
+const result = await this.links.verify(token);
+if (!result.ok) throw new UnauthenticatedError('That link is not valid.');
+```
+
+`reissue` revokes the link it replaces in the same call, and `revoke` kills one
+without touching the rest.
+
+**Check `permits` at the point of use as well**, not only at verification: a
+token valid for one request must not be accepted by a handler holding another
+id.
+
+```ts
+if (!permits(claims, { subject: `request:${request.id}`, party: party.key })) {
+  throw new UnauthenticatedError('That link is not valid.');
+}
+```
+
+## Verifying without NestJS
+
+The **root entry point is framework-free and pulls in no database driver**, so a
+Next.js server component or an edge function verifies a token without installing
+an ORM:
+
+```ts
+import { verifyLink } from '@birtalanrobert/workflow';
+
+const result = await verifyLink(token, process.env.LINK_SECRET!);
+```
+
+Verification without a revocation check is the trade: it tells an expired link
+from an invalid one for free, and the API checks revocation on the request that
+follows.
+
 ## Signed public links
 
 How someone outside the system enters a workflow without an account: a client
