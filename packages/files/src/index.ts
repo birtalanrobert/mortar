@@ -1,5 +1,7 @@
 export { detectType, isAccepted, type DetectedType } from './detect';
 
+export { assemblePdf, type AssembleOptions, type PdfPage } from './pdf';
+
 export {
   FilesService,
   type BeginUploadInput,

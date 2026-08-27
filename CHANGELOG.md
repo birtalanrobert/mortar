@@ -4,6 +4,49 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## files 1.1.0
+
+Single-PDF assembly (dossier F-090): several photographed pages become one
+document, which is what a professional actually wants — three separate JPEGs of
+a statement means three files to open in an order only knowable from filenames
+the client did not choose.
+
+### Added
+
+- **`assemblePdf`.** JPEG and PNG are embedded natively, `DCTDecode` and
+  `FlateDecode`, so a photograph reaches the professional as the bytes the
+  camera produced rather than a generational copy. Pages are sized to their
+  image rather than floated on a fixed A4, scaled down but never up.
+- HEIC is refused. A phone produces it, no PDF reader opens it, and converting
+  it needs a decoder this package is not going to carry.
+- No producer or creation date is written: these are a client's bank statements,
+  and the defaults name the software that touched them. It also makes the output
+  deterministic, which a test asserts.
+
+### A dependency, and why this one
+
+`pdf-lib` is a real dependency in a package that has argued against them —
+`@birtalanrobert/comms` writes its own MIME parser, and the ClamAV adapter
+speaks the protocol directly. The distinction is where a failure shows up. A
+MIME parser that gets something wrong loses an attachment, visibly, immediately.
+**A malformed PDF is invisible until a professional cannot open it**, days
+later, with a client who has already put the paper away — and PDF is a format
+with enough subtlety that hand-rolling a writer is a wager on being right about
+all of it.
+
+### A bug found while writing the tests
+
+`pdf-lib` reads an image's **whole backing `ArrayBuffer` and ignores the view's
+`byteOffset`**. Node allocates every Buffer under 4 KB from a shared 8 KB pool,
+so a small page — a compressed scan, or anything fetched from storage — arrives
+at a non-zero offset, and the embedder parses whatever sits at the pool's start.
+
+It is a nasty shape of bug: whether it fires depends on what else the process
+has allocated, so the first several runs passed by reading a stale copy of the
+same image left at position 0. An offset-aware view does not fix it, because it
+shares the ArrayBuffer. `assemblePdf` copies the bytes, and a test builds a
+pooled buffer deliberately.
+
 ## http 2.0.0 — and a minor for everything that depends on it
 
 `@birtalanrobert/http` root entry point is now framework-free.
