@@ -3,7 +3,12 @@ import type { DataSource, EntityManager } from 'typeorm';
 import { InboundAddress, type InboundAddressOptions } from './address';
 import type { InboundMessage } from './inbound/message';
 import { MessageLog } from './message-log.entity';
-import type { Channel, MessagePort, OutboundMessage } from './outbound/port';
+import {
+  MAX_ATTACHMENT_BYTES,
+  type Channel,
+  type MessagePort,
+  type OutboundMessage,
+} from './outbound/port';
 
 export interface CommsServiceOptions {
   /** One per channel. A channel with no port cannot be sent on. */
@@ -66,6 +71,36 @@ export class CommsService {
     const repository = this.manager(manager).getRepository(MessageLog);
     const port = this.ports[message.channel];
 
+    /**
+     * Refused here rather than at the provider.
+     *
+     * An attachment over the limit is bounced by the receiving server, often
+     * silently and always later — which turns into "the firm never got it and
+     * nobody knows why". Failing now records a sentence the sender can act on.
+     */
+    const attached = (message.attachments ?? []).reduce(
+      (total, file) => total + file.content.length,
+      0,
+    );
+
+    if (attached > MAX_ATTACHMENT_BYTES) {
+      return repository.save(
+        repository.create({
+          tenantId: context.tenantId ?? null,
+          direction: 'outbound',
+          channel: message.channel,
+          subject: context.subject ?? null,
+          address: message.to,
+          heading: message.subject ?? null,
+          state: 'failed',
+          detail:
+            `Attachments total ${Math.round(attached / 1024 / 1024)} MB, ` +
+            `over the ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB limit.`,
+          settledAt: new Date(),
+        }),
+      );
+    }
+
     if (!port) {
       return repository.save(
         repository.create({
@@ -98,6 +133,11 @@ export class CommsService {
           // reached a person is a later webhook's news.
           state: 'accepted',
           segments: result.segments ?? null,
+          // What was attached, not what it contained: the log is read by
+          // support, and a client's filenames are not theirs to read.
+          metadata: message.attachments?.length
+            ? { attachments: message.attachments.length, attachedBytes: attached }
+            : {},
         }),
       );
     } catch (error) {

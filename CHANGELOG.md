@@ -4,6 +4,74 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## comms 1.1.0
+
+Attachments, so a completed set of documents can be delivered by email (dossier
+F-174).
+
+### Added
+
+- **`OutboundMessage.attachments`**, and `MAX_ATTACHMENT_BYTES` at 10 MB.
+  Providers differ — many refuse at 10, most at 25 — and base64 inflates an
+  attachment by a third, so the useful limit sits well under the smallest of
+  them.
+- **Refused before the provider sees it.** A receiving server bounces an
+  oversized attachment silently and late, which becomes "they never got it and
+  nobody knows why". The log records a failure with a sentence instead, and
+  nothing is handed to the port.
+- The message log records **how many files and how many bytes**, never their
+  names: the log is read by support, and a client's filenames are not theirs to
+  read.
+
+### Fixed
+
+- **`NoopMessagePort` ids are now unique across processes.** They counted from
+  one, and the message log has a unique index on
+  `(direction, provider_message_id)` — so the second test run against the same
+  database collided, and `CommsService` reported it as a message the provider
+  refused. The failure surfaced in whatever was being tested rather than in the
+  double, and only on the second run.
+
+## files 1.2.0
+
+ZIP archives and provider-enforced retention (dossier F-170, F-178): a completed
+request leaves as one file whose folders and names the receiving firm can file
+without opening it. A ZIP of `IMG_4471.jpg` is worthless; one of
+`Ion_Popescu/03_Bank_statement.pdf` is already filed.
+
+### Added
+
+- **`createZip`.** Hand-written over `node:zlib` rather than taken from a
+  dependency — the essential format is two hundred lines and has not changed
+  since 1993, and every library that writes it brings a stream stack and a
+  supply chain with it.
+- Deterministic when given a `modified` date, so a delivery retry produces the
+  file the destination already has rather than a second copy.
+- Zip-slip paths (`/etc/passwd`, `../../secrets`) are stripped rather than
+  trusted to the extractor; duplicate paths are refused rather than left for the
+  extractor to resolve; names are flagged UTF-8 so a Romanian filename survives.
+- Entries are deflated, and stored instead when deflate would make them bigger —
+  which is every photograph and most PDFs.
+- Verified against `unzip` in the tests, not only against its own reader: an
+  archive only this package can read is not an archive.
+- **`S3Storage.applyLifecycle` / `describeLifecycle`.** Provider-enforced expiry
+  as a backstop under the application's own retention. The failure it covers is
+  the one the application cannot: a sweep broken for a month leaves documents in
+  a bucket and nothing in the application says so. An empty rule list removes
+  the configuration, because S3 refuses one with zero rules.
+- **`S3Storage` now has integration tests**, against MinIO rather than a mocked
+  SDK — whether a presigned URL is actually accepted, what a missing object
+  answers, and whether a lifecycle configuration is written in a shape a
+  provider takes are all things a mock cannot speak to. Mortar's development
+  stack gained a MinIO service on 3052/3053 for it.
+- **`MemoryStorage` gained `has`, `clear`, `failOn` and `stopFailing`.** A suite
+  shares one instance across a file, so without `clear` every object from every
+  earlier test is still there and an assertion about what a cleanup removed
+  silently starts passing for the wrong reason. `failOn` exists because real
+  buckets fail one object at a time, and what matters is what the caller does
+  about it: a retention sweep must not abandon thirty-nine other firms because
+  one object would not delete.
+
 ## files 1.1.0
 
 Single-PDF assembly (dossier F-090): several photographed pages become one

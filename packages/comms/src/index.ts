@@ -9,9 +9,11 @@ export { parseMime } from './inbound/mime';
 export type { InboundAttachment, InboundMessage, InboundParser } from './inbound/message';
 
 export {
+  MAX_ATTACHMENT_BYTES,
   NoopMessagePort,
   type Channel,
   type MessagePort,
+  type OutboundAttachment,
   type OutboundMessage,
   type SendResult,
 } from './outbound/port';

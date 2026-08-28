@@ -127,3 +127,23 @@ inserted: it belongs to another environment sharing the provider account.
 `NoopMessagePort` accepts everything and sends nothing. Unlike the file
 scanner's default, permissive is right here: not sending an email is a visible
 nuisance, while not scanning a file is invisible and dangerous.
+
+### Attachments
+
+```ts
+await comms.send({
+  channel: 'email',
+  to: 'firm@example.com',
+  subject: 'Documents from Ion Popescu',
+  text: 'Everything they sent is attached.',
+  attachments: [{ filename: 'Ion_Popescu.zip', content: archive, contentType: 'application/zip' }],
+});
+```
+
+Bounded by `MAX_ATTACHMENT_BYTES` (10 MB) and **refused before the port sees
+it**. Providers differ — many refuse at 10 MB, most at 25 — and base64 inflates
+an attachment by a third, so the useful limit sits under the smallest of them.
+Refusing here turns a silent late bounce into a log entry with a sentence in it.
+
+The log records how many files and how many bytes, never their names: it is read
+by support, and a client's filenames are not theirs to read.

@@ -1,4 +1,25 @@
+import { randomUUID } from 'node:crypto';
+
 export type Channel = 'email' | 'sms';
+
+export interface OutboundAttachment {
+  /** What the recipient's mail client shows and saves it as. */
+  filename: string;
+  content: Buffer;
+  /** Defaults to `application/octet-stream` at the provider. */
+  contentType?: string;
+}
+
+/**
+ * The most an email may carry.
+ *
+ * Providers differ — many refuse at 10 MB, most at 25, and the base64 encoding
+ * an attachment travels in inflates it by a third — so the useful limit is well
+ * under the smallest of them. Refusing here rather than at the provider turns
+ * "the firm never received it and nobody knows why" into a failure with a
+ * sentence attached.
+ */
+export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
 export interface OutboundMessage {
   channel: Channel;
@@ -13,6 +34,13 @@ export interface OutboundMessage {
   html?: string;
   /** Carried through to the provider so a delivery receipt can be matched up. */
   reference?: string;
+  /**
+   * Files to attach. Email only; SMS ports ignore them.
+   *
+   * Bounded by `MAX_ATTACHMENT_BYTES` and refused above it rather than left for
+   * the provider to bounce silently.
+   */
+  attachments?: OutboundAttachment[];
 }
 
 export interface SendResult {
@@ -62,6 +90,16 @@ export class NoopMessagePort implements MessagePort {
 
   async send(message: OutboundMessage): Promise<SendResult> {
     this.sent.push(message);
-    return { acceptedAt: new Date(), providerMessageId: `noop-${this.sent.length}` };
+
+    /**
+     * Unique across processes, not merely within one.
+     *
+     * The message log has a unique index on `(direction, provider_message_id)`,
+     * so a counter starting at one means the second test run against the same
+     * database collides — and `CommsService` reports that as a message the
+     * provider refused, which is a failure in whatever was being tested rather
+     * than in the double.
+     */
+    return { acceptedAt: new Date(), providerMessageId: `noop-${randomUUID()}` };
   }
 }

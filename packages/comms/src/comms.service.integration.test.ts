@@ -51,6 +51,61 @@ describe('sending', () => {
     expect(email.sent).toHaveLength(1);
   });
 
+  it('carries an attachment through to the provider', async () => {
+    const email = new NoopMessagePort('email');
+    const comms = service({ email });
+
+    const log = await comms.send(
+      {
+        channel: 'email',
+        to: 'firm@example.com',
+        subject: 'Documents',
+        text: 'Everything they sent.',
+        attachments: [
+          {
+            filename: 'Ion_Popescu.zip',
+            content: Buffer.alloc(1024),
+            contentType: 'application/zip',
+          },
+        ],
+      },
+      { tenantId: TENANT, subject: 'request:1' },
+    );
+
+    expect(log.state).toBe('accepted');
+    expect(email.sent[0]?.attachments).toHaveLength(1);
+    // What was attached, not what it contained: the log is read by support, and
+    // a client's filenames are not theirs to read.
+    expect(log.metadata).toMatchObject({ attachments: 1, attachedBytes: 1024 });
+  });
+
+  it('refuses an attachment no mail server would take', async () => {
+    const email = new NoopMessagePort('email');
+    const comms = service({ email });
+
+    const log = await comms.send(
+      {
+        channel: 'email',
+        to: 'firm@example.com',
+        text: 'x',
+        attachments: [{ filename: 'huge.zip', content: Buffer.alloc(11 * 1024 * 1024) }],
+      },
+      { tenantId: TENANT, subject: 'request:1' },
+    );
+
+    /*
+     * Refused here rather than at the provider.
+     *
+     * A receiving server bounces an oversized attachment silently and late,
+     * which becomes "the firm never got it and nobody knows why". This fails
+     * now, with a sentence the sender can act on — and nothing is handed to the
+     * provider at all.
+     */
+    expect(log.state).toBe('failed');
+    expect(log.detail).toContain('over the 10 MB limit');
+    expect(email.sent).toHaveLength(0);
+  });
+
   it('records a failure rather than throwing it at the caller', async () => {
     const broken: MessagePort = {
       channel: 'email',
