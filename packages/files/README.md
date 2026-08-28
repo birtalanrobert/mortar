@@ -127,6 +127,78 @@ An encrypted file cannot be served by a presigned URL — the browser has no key
 so `downloadUrl` refuses and the application serves it through `read`. That is
 slower, and it is the price of being able to destroy it.
 
+## Archives
+
+`createZip(entries, options)` writes a ZIP in memory. Folders come from the
+entry paths — there are no directory records, because every extractor creates
+the parents and writing them too would be two sources of truth about one tree.
+
+```ts
+const archive = createZip(
+  [
+    { path: 'Popescu_Ion/01_Bank_statement.pdf', content: statement },
+    { path: 'Popescu_Ion/02_Signed_contract.pdf', content: contract },
+  ],
+  { modified: request.completedAt },
+);
+```
+
+Written by hand rather than taken from a dependency: the essential format is two
+hundred lines and has not changed since 1993, while every library that writes it
+brings a stream stack and a supply chain. `node:zlib` supplies the only hard
+part.
+
+What it takes responsibility for:
+
+- **Determinism.** Pass `modified` and the same input produces the same bytes,
+  so a delivery retry hands the destination the file it already has rather than
+  a second copy. Without it every entry is stamped with the start of 1980, which
+  is the earliest MS-DOS dates reach.
+- **Zip slip.** Leading slashes and `..` segments are stripped, so no
+  extractor's carefulness is being relied upon.
+- **UTF-8 names.** Flag bit 11 is set, without which `Ștefănescu` arrives as
+  mojibake on a machine in another code page.
+- **Compression that helps.** Entries are deflated, and stored instead whenever
+  deflate produces something larger — which it does for every photograph and
+  most PDFs.
+
+Everything is held in memory, which suits a completed request and does not suit
+a whole firm's history: past 4 GB it refuses rather than silently writing an
+archive no tool can read, because the answer to that is ZIP64 and this is not
+it.
+
+## Lifecycle rules
+
+`applyLifecycle` and `describeLifecycle` configure the provider's own expiry.
+
+```ts
+await storage.applyLifecycle([
+  { id: 'backstop', expireAfterDays: 400, abortIncompleteUploadsAfterDays: 7 },
+]);
+```
+
+This is a **backstop, not the policy**. Per-tenant retention is enforced by the
+application, because a bucket holds every tenant and its rules are per prefix.
+The rule matters for the failure the application cannot cover: a sweep that has
+been broken for a month leaves documents in the bucket and nothing in the
+application will say so. Set it to several times the longest retention any
+tenant can choose.
+
+`abortIncompleteUploadsAfterDays` is worth setting in every bucket. An
+unfinished multipart upload holds storage, is not listed as an object, and is
+billed — and a client closing a page mid-upload creates them.
+
+Applying **replaces the whole configuration**, which is S3's semantics rather
+than a choice made here: pass every rule the bucket should have. An empty list
+removes it altogether — S3 refuses a configuration with zero rules, so that case
+becomes a delete rather than an `InvalidArgument` where the caller meant "take
+the backstop off".
+
+One rule per prefix: two rules over the same prefix are rejected as
+overlapping, so a prefix that wants both an expiry and an abort puts both in one
+rule. MinIO accepts the abort setting and does not report it back; AWS does
+both.
+
 ## Scanning
 
 `ScannerPort`, with `ClamAvScanner` speaking `clamd`'s INSTREAM protocol
@@ -148,3 +220,11 @@ otherwise each writes a fake that disagrees with the interface in its own way.
 Its presigned URLs are not real and nothing can upload to them, which is
 correct: a test that simulates the browser's PUT calls `put`, and one that
 simulates an upload that never arrived simply does not.
+
+Four methods exist only for tests, and each earns its place:
+
+|                                   |                                                                                                                                                         |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `keys`, `has(key)`                | Assert on what a cleanup removed, without `get`'s `NotFoundError`                                                                                       |
+| `clear()`                         | Empty it between tests — one instance is normally shared across a file, and objects otherwise accumulate until an assertion passes for the wrong reason |
+| `failOn(key)`, `stopFailing(key)` | Make one object refuse every operation. Real buckets fail one object at a time, and the behaviour worth testing is what the caller does about it        |

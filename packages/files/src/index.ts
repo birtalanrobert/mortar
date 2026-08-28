@@ -1,6 +1,7 @@
 export { detectType, isAccepted, type DetectedType } from './detect';
 
 export { assemblePdf, type AssembleOptions, type PdfPage } from './pdf';
+export { createZip, type ZipEntry, type ZipOptions } from './zip';
 
 export {
   FilesService,
@@ -28,7 +29,7 @@ export { ClamAvScanner, type ClamAvOptions } from './scanning/clamav.scanner';
 
 export { assertTenantOwns, objectKey, safeFilename, tenantOf, type KeyParts } from './storage/keys';
 export type { PresignedUpload, PutOptions, StoragePort, StoredObject } from './storage/port';
-export { S3Storage, type S3StorageOptions } from './storage/s3.storage';
+export { S3Storage, type LifecycleRule, type S3StorageOptions } from './storage/s3.storage';
 export { MemoryStorage } from './storage/memory.storage';
 
 import { StoredFile } from './stored-file.entity';

@@ -33,3 +33,25 @@ services:
       interval: 2s
       timeout: 3s
       retries: 15
+
+  minio:
+    # S3, locally, so `S3Storage` is tested against something that speaks the
+    # protocol rather than against a mock of the SDK. The parts most likely to
+    # be wrong — presigned URLs, lifecycle configuration, what a missing object
+    # answers — are exactly the parts a mock cannot tell you about.
+    image: minio/minio:latest
+    container_name: mortar-test-minio
+    command: server /data --console-address ':9001'
+    environment:
+      MINIO_ROOT_USER: mortar
+      MINIO_ROOT_PASSWORD: mortar-local-secret
+    ports:
+      - '3052:9000'
+      - '3053:9001'
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 2s
+      timeout: 3s
+      retries: 15

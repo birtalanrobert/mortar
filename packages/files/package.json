@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/files",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Pre-signed uploads, per-tenant key scoping, virus scanning and retention",
   "license": "AGPL-3.0-only",
   "main": "./dist/index.js",
