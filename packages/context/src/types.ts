@@ -39,11 +39,24 @@ export interface Actor {
   /**
    * `user` is a human with an account; `client` is a link-authenticated party
    * with no account (a guest, a candidate, a tenant of a landlord); `system`
-   * is scheduled or internal work; `service` is a machine credential.
+   * is scheduled or internal work; `service` is a machine credential;
+   * `operator` is one of *us* working inside a customer's account.
+   *
+   * `operator` is separate from `user` because the audit trail has to be able
+   * to say which it was. Support access recorded as the customer's own action
+   * is worse than no record at all — it is a confident answer to "who opened
+   * this?" that names the wrong person, and the customer has no way to tell.
    */
-  readonly type: 'user' | 'client' | 'system' | 'service';
+  readonly type: 'user' | 'client' | 'system' | 'service' | 'operator';
   readonly displayName?: string;
   readonly roles?: readonly string[];
-  /** Set when an operator is impersonating; the audit trail records both. */
+  /**
+   * Who is behind the action, when it is not the actor.
+   *
+   * For the shape where an operator acts *as* a named user, so the trail can
+   * say both. Where the operator acts as themselves inside a customer's
+   * account — which is the safer shape, because nothing is disguised — the
+   * actor's own `type` is `operator` and this stays unset.
+   */
   readonly impersonatedBy?: string;
 }

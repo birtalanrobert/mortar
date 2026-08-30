@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/context",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "AsyncLocalStorage request context",
   "license": "AGPL-3.0-only",
   "type": "commonjs",

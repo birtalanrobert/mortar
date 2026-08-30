@@ -4,6 +4,23 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## context 1.1.0
+
+An actor can be an operator.
+
+### Added
+
+- **`Actor.type` accepts `'operator'`** — one of _us_, working inside a
+  customer's account with their consent. Separate from `user` because the audit
+  trail has to be able to say which it was: support access recorded as the
+  customer's own action is worse than no record, being a confident answer to
+  "who opened this?" that names the wrong person. Thirteen of the seventeen
+  specifications describe back-office impersonation, so the type belongs here
+  rather than in each of them.
+- `impersonatedBy` is now documented as the _other_ shape — an operator acting
+  as a named user — with a note that acting as oneself inside the customer's
+  account is the safer one, because nothing is disguised.
+
 ## comms 1.1.0
 
 Attachments, so a completed set of documents can be delivered by email (dossier
