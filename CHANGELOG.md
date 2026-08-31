@@ -4,6 +4,53 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## comms 1.2.0
+
+The vendors, behind the ports that were waiting for them (dossier D-10).
+
+### Added
+
+- **`ResendMessagePort`** — email, on Resend's own SDK. A message may carry its
+  own `from` and `replyTo`, which is how it is branded as a customer without
+  their domain being one the provider can sign for: their name in the display
+  part, their address to reply to, so a client who replies reaches their
+  accountant rather than a mailbox nobody reads.
+- **`TwilioMessagePort`** — SMS, on Twilio's SDK, preferring a messaging service
+  over a single number. The sender identity is a per-market question — an
+  alphanumeric sender ID is permitted in some countries, requires registration
+  in others, and cannot be replied to anywhere — and a messaging service is what
+  lets it change without a deployment. It refuses to be constructed with no
+  sender at all, because the alternative is finding out twelve days into a
+  reminder cadence.
+- **The segment count comes back from the provider**, not from our estimate.
+  `countSegments` decides whether a message is worth sending; the ledger is
+  debited by what was actually charged, and the two differing is the case a
+  ledger exists to catch — one accented character downgrades a message to UCS-2
+  and doubles its cost without changing a word.
+- **`ResendInbound`** — verifying the provider's webhook and fetching the
+  message it names. The webhook carries metadata and no body, so the original is
+  fetched and returned as **raw MIME** for `parseMime` to read: the parser stays
+  ours, and the day the provider changes nothing above it moves. Verification is
+  the vendor's own (Standard Webhooks) and takes the **raw** request body — a
+  parsed object re-serialised has different bytes and fails.
+
+### Notes
+
+- **The vendors' SDKs rather than their REST APIs**, which is the arrangement
+  `files` already has with `@aws-sdk/client-s3`. Both were first written against
+  the published REST documentation, and the SDK types caught a field this got
+  wrong — a received message's download URL. Fewer lines, and the shapes are
+  right by construction.
+- Both ports **throw** on refusal rather than returning a failure, carrying the
+  provider's own sentence. `CommsService` records it in the message log, which
+  is what support reads — a port that swallowed the reason would leave "it did
+  not send" and nothing else.
+- `ResendMessagePort` imposes its own **timeout**: the SDK sets none, and
+  something is usually waiting on a message — a professional who has just
+  pressed send should not hold a response open until a socket gives up.
+- Every port takes an optional `client`, so a deployment can share one and a
+  test can fake the vendor at its own surface rather than stubbing `fetch`.
+
 ## context 1.1.0
 
 An actor can be an operator.

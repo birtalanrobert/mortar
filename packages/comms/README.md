@@ -88,6 +88,31 @@ in its own shape or the raw message, so an adapter is a function into
 `InboundMessage` and choosing differently later is a new adapter rather than a
 change to anything that consumes mail.
 
+## Receiving a provider's webhook
+
+```ts
+const inbound = new ResendInbound({ apiKey, webhookSecret });
+
+const event = inbound.verify(request.rawBody, request.headers);
+if (!event) throw new UnauthenticatedError();
+
+const emailId = ResendInbound.emailIdOf(event);
+if (emailId) await comms.receive(parseMime(await inbound.rawMime(emailId)));
+```
+
+`verify` returns `undefined` for every failure rather than throwing, because the
+caller's correct answer is one unauthenticated response whatever went wrong — an
+exception carrying the reason tempts a route into reporting which check failed.
+
+**`rawBody` means the bytes that arrived.** A parsed object re-serialised has
+different whitespace and key order, and the signature is over bytes, so the
+route has to keep the original.
+
+The event carries metadata and **no body**: `rawMime` fetches the original and
+returns it for `parseMime` to read. Deliberately raw rather than the provider's
+own parsed fields — the parser stays ours, and the day the vendor changes
+nothing above it moves.
+
 ## The message log
 
 Two jobs, and the second shapes the table.
@@ -127,6 +152,41 @@ inserted: it belongs to another environment sharing the provider account.
 `NoopMessagePort` accepts everything and sends nothing. Unlike the file
 scanner's default, permissive is right here: not sending an email is a visible
 nuisance, while not scanning a file is invisible and dangerous.
+
+### The two shipped providers
+
+```ts
+const email = new ResendMessagePort({ apiKey, from: 'no-reply@mail.example.com' });
+const sms = new TwilioMessagePort({ accountSid, authToken, messagingServiceSid });
+```
+
+Both are built on the vendor's own SDK, the same arrangement `files` has with
+`@aws-sdk/client-s3` — fewer lines, and request and response shapes that are
+right by construction rather than transcribed from documentation.
+
+Both **throw** on refusal, carrying the provider's own sentence — `CommsService`
+catches it and records that sentence in the message log, which is what support
+reads. A port that swallowed the reason would leave "it did not send" and
+nothing else.
+
+Each takes an optional `client`, so a deployment can share one and a test can
+fake the vendor at its own surface rather than stubbing `fetch`.
+
+A message may name its own `from` and `replyTo`, which is how it is branded as a
+customer without their domain being one the provider can sign for: their name in
+the display part, their address to reply to.
+
+`TwilioMessagePort` prefers a messaging service to a single number, because the
+sender identity is a per-market question — an alphanumeric sender ID is
+permitted in some countries, needs registration in others, and can never be
+replied to — and a messaging service is what lets it change without a
+deployment. It refuses to be constructed with no sender at all: the alternative
+is finding out twelve days into a reminder cadence.
+
+The segment count in `SendResult` is the provider's, not an estimate. A ledger
+debited by an estimate drifts from the invoice within a month — one accented
+character downgrades a message to UCS-2 and doubles its cost without changing a
+word.
 
 ### Attachments
 

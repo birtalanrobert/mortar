@@ -18,6 +18,11 @@ export {
   type SendResult,
 } from './outbound/port';
 
+export { ResendMessagePort, type ResendMessagePortOptions } from './outbound/resend';
+export { TwilioMessagePort, type TwilioMessagePortOptions } from './outbound/twilio';
+
+export { ResendInbound, type ResendInboundOptions, type VerifiedEvent } from './inbound/resend';
+
 export { MessageLog, type MessageDirection, type MessageState } from './message-log.entity';
 export { CreateMessageLog1787813849846 };
 
