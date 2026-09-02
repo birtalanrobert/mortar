@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/redis",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Redis connections, locks, caching and rate limiting",
   "license": "AGPL-3.0-only",
   "main": "./dist/index.js",

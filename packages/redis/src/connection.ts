@@ -5,7 +5,13 @@ export interface CreateRedisOptions {
   /** Namespaces every key this client touches. */
   keyPrefix?: string;
   connectTimeoutMs?: number;
-  commandTimeoutMs?: number;
+  /**
+   * How long a single command may take before it is abandoned.
+   *
+   * `null` disables it, which is required for any connection issuing blocking
+   * reads — see `createQueueConnection`.
+   */
+  commandTimeoutMs?: number | null;
   maxRetriesPerRequest?: number | null;
   tls?: boolean;
   /** Shown in `CLIENT LIST`, which is how you find a misbehaving connection. */
@@ -40,7 +46,9 @@ export function buildRedisOptions(options: CreateRedisOptions): RedisOptions {
     db: parsed.pathname && parsed.pathname !== '/' ? Number(parsed.pathname.slice(1)) : 0,
     keyPrefix: keyPrefix ? `${keyPrefix}:` : undefined,
     connectTimeout: connectTimeoutMs,
-    commandTimeout: commandTimeoutMs,
+    // `undefined` rather than a number when disabled: ioredis treats any
+    // number as a deadline, and there is no "no timeout" number.
+    commandTimeout: commandTimeoutMs ?? undefined,
     maxRetriesPerRequest,
     enableOfflineQueue,
     connectionName,
@@ -72,6 +80,19 @@ export function createQueueConnection(options: CreateRedisOptions): Redis {
     buildRedisOptions({
       ...options,
       maxRetriesPerRequest: null,
+      /*
+       * No command timeout, for the same reason as `maxRetriesPerRequest`.
+       *
+       * A queue consumer waits for work with blocking reads — `BZPOPMIN` and
+       * friends — which are *designed* to sit there for longer than any
+       * sensible command deadline. With a timeout applied, every idle wait
+       * fails on schedule: a worker with nothing to do logs an error every few
+       * seconds, for ever, and the noise buries the failures that matter.
+       *
+       * Jobs still run, which is what makes this so easy to miss — it looks
+       * like a broken Redis rather than a misconfigured client.
+       */
+      commandTimeoutMs: null,
       enableOfflineQueue: true,
       connectionName: options.connectionName ?? 'mortar-queue',
       // BullMQ manages its own key namespacing through its `prefix` option;

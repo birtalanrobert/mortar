@@ -4,6 +4,19 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## redis 1.0.1
+
+### Fixed
+
+- **A queue connection no longer carries a command timeout.** `createQueueConnection`
+  already cleared `maxRetriesPerRequest` for BullMQ, but left the five-second
+  `commandTimeout` in place — and a queue consumer waits for work with blocking
+  reads that are _designed_ to sit there for longer than any sensible deadline.
+  The result was an idle worker logging `Command timed out` every few seconds,
+  on every queue, for ever. Jobs still ran, which is what made it easy to read
+  as a sick Redis rather than a misconfigured client. `commandTimeoutMs` now
+  accepts `null` to mean "no deadline", and queue connections pass it.
+
 ## comms 1.2.0
 
 The vendors, behind the ports that were waiting for them (dossier D-10).
