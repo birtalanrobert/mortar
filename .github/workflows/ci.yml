@@ -1,9 +1,26 @@
 name: CI
 
+# Paused, deliberately, and not deleted.
+#
+# The pipeline is written and correct; what it is not yet is worth paying for.
+# Nothing here is deployed, every check it runs is run locally before anything
+# is committed, and a workflow firing on every push to a repository nobody
+# deploys from is minutes spent on a report nobody reads.
+#
+# `workflow_dispatch` keeps it one click away: it still appears in the Actions
+# tab and still runs on demand, so the pipeline is exercised when it matters
+# rather than continuously. Restore the `push` and `pull_request` triggers below
+# when this project is deployed, and revisit the steps at the same time — a
+# pipeline that has not run for months is a pipeline that has drifted.
+#
+# on:
+#   push:
+#     branches: [main]
+#   pull_request
+
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
+
 
 jobs:
   verify:
