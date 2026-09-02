@@ -10,6 +10,21 @@
  * lives behind the `./nestjs` subpath.
  */
 export {
+  InvalidMachine,
+  defineMachine,
+  type Machine,
+  type MachineDefinition,
+  type Transition,
+} from './machine';
+export {
+  DEFAULT_CALENDAR,
+  addWorkingDays,
+  heldSinceCutoff,
+  isWorkingDay,
+  workingDaysBetween,
+  type WorkingCalendar,
+} from './machine';
+export {
   permits,
   signLink,
   verifyLink,
