@@ -42,6 +42,19 @@ The root entry point is pure — no database, no framework, no Node built-ins �
 because a console counts segments on every keystroke and that has to run in a
 browser. Everything needing TypeORM is behind `/nestjs`.
 
+## jobs 1.1.1
+
+### Fixed
+
+- **`JobsModule` now closes the Redis connection it opened.** It creates a
+  dedicated connection and hands it to BullMQ, and BullMQ closes connections it
+  created while leaving alone the ones it was given — correctly, since it does
+  not own them. Nothing closed this one. An application that finished its work
+  and called `app.close()` sat there with an open socket for ever: a seed script
+  that never returned, and a deployment step that hung waiting for it. The
+  connection is now provided under `MORTAR_QUEUE_CONNECTION` and closed in
+  `onApplicationShutdown`, after the workers and queues that use it.
+
 ## redis 1.0.1
 
 ### Fixed
