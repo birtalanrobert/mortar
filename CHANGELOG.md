@@ -4,6 +4,17 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## messaging 1.0.1
+
+### Fixed
+
+- **The entity pointed at the wrong table.** `MessageCreditEntry` was mapped to
+  `message_credits` while the migration creates `mortar_message_credits`, so
+  every read through the service failed with `relation "public.message_credits"
+does not exist`. The migration and the raw SQL in the README were right; only
+  the decorator was wrong, which is why the package's own build and typecheck
+  had nothing to say about it.
+
 ## messaging 1.0.0
 
 Extracted from project 13 at its second consumer (project 12), which is the

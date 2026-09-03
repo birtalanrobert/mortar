@@ -14,7 +14,7 @@ export type CreditReason = 'purchase' | 'message' | 'adjustment' | 'refund';
  * The balance is a sum over the entries rather than a column, because a column
  * and a list that disagree is a support conversation nobody can win.
  */
-@Entity('message_credits')
+@Entity('mortar_message_credits')
 @Index('ix_message_credits_tenant', ['tenantId', 'createdAt'])
 @Check('ck_message_credits_reason', `"reason" IN ('purchase', 'message', 'adjustment', 'refund')`)
 export class MessageCreditEntry extends BaseEntity {
