@@ -42,6 +42,31 @@ The root entry point is pure — no database, no framework, no Node built-ins �
 because a console counts segments on every keystroke and that has to run in a
 browser. Everything needing TypeORM is behind `/nestjs`.
 
+## csv 1.0.0
+
+Extracted at the second consumer: project 12 reads a shop's shelf out of a
+spreadsheet, project 13 writes an access log a regulator will open. Both had
+hand-written code, and both had a bug the other did not.
+
+### Added
+
+- **`parseCsv`** — delimiter detected from the file. Every locale that uses a
+  comma as the decimal separator gets semicolon-separated files out of Excel,
+  still called CSV, and the obvious shortcut of honouring both at once splits a
+  field reading `screen cracked; battery dead` in two and shifts every column
+  after it, silently. Blank lines dropped; the mark Excel writes stripped, since
+  left in place it hides in the first header.
+- **`toCsv` and `toCsvFrom`** — quoting that is not optional, empty cells rather
+  than the strings `null` and `undefined`, and a byte-order mark by default,
+  because Excel guesses a file's encoding by looking at it and reads an unmarked
+  UTF-8 file as the system code page — so `Ioană` opens as `IoanÄƒ` for exactly
+  the people whose names have diacritics. `toCsvFrom` takes the column order
+  rather than reading it off the first object's keys.
+
+Pure: no database, no framework, no Node built-ins, so a console can preview an
+upload before it happens. Deliberately not part of `files`, which carries S3,
+virus scanning and PDF assembly.
+
 ## jobs 1.1.1
 
 ### Fixed
