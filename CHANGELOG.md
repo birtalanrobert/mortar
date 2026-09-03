@@ -4,6 +4,33 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## messaging 1.0.0
+
+Extracted from project 13 at its second consumer (project 12), which is the
+rule: written once, moved when a second product needs it.
+
+### Added
+
+- **`countSegments`** — what a message actually costs, counted the way a
+  provider counts rather than the way a person counts characters. A single
+  character outside GSM 03.38 changes the encoding for the whole message and
+  cuts capacity from 160 to 70, so `offenders` names the characters responsible:
+  "your ș and ț are doubling the cost" is something a person can act on.
+- **Quiet hours** — `isQuiet`, `nextAllowed`, `localTime`, in the _business's_
+  zone rather than the recipient's. A phone number says nothing about where
+  somebody is sitting.
+- **`assessSmsRisk`** — pumping detection. Fraud that costs money rather than
+  data, and visible only in the shape of recent traffic rather than in any one
+  message.
+- **`MessageCreditsService`** and `mortar_message_credits` (`/nestjs`) — credit
+  as a ledger, append-only, with the balance summed from the entries rather than
+  kept in a column that can disagree with them. No foreign key to whatever the
+  segments were spent on, which is what lets two products share it.
+
+The root entry point is pure — no database, no framework, no Node built-ins —
+because a console counts segments on every keystroke and that has to run in a
+browser. Everything needing TypeORM is behind `/nestjs`.
+
 ## redis 1.0.1
 
 ### Fixed
