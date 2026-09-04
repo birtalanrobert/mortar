@@ -19,6 +19,7 @@ export {
 } from './outbound/port';
 
 export { ResendMessagePort, type ResendMessagePortOptions } from './outbound/resend';
+export { SmtpMessagePort, type SmtpMessagePortOptions } from './outbound/smtp';
 export { TwilioMessagePort, type TwilioMessagePortOptions } from './outbound/twilio';
 
 export { ResendInbound, type ResendInboundOptions, type VerifiedEvent } from './inbound/resend';

@@ -153,24 +153,45 @@ inserted: it belongs to another environment sharing the provider account.
 scanner's default, permissive is right here: not sending an email is a visible
 nuisance, while not scanning a file is invisible and dangerous.
 
-### The two shipped providers
+### The three shipped transports
 
 ```ts
 const email = new ResendMessagePort({ apiKey, from: 'no-reply@mail.example.com' });
 const sms = new TwilioMessagePort({ accountSid, authToken, messagingServiceSid });
+const smtp = new SmtpMessagePort({ url: 'smtp://localhost:3014', from: 'no-reply@example.com' });
 ```
 
-Both are built on the vendor's own SDK, the same arrangement `files` has with
-`@aws-sdk/client-s3` — fewer lines, and request and response shapes that are
-right by construction rather than transcribed from documentation.
+Each is built on the vendor's own client — the same arrangement `files` has with
+`@aws-sdk/client-s3`, and for SMTP the protocol's long-standing implementation
+rather than a socket and a state machine written here. Fewer lines, and request
+and response shapes that are right by construction rather than transcribed from
+documentation.
 
-Both **throw** on refusal, carrying the provider's own sentence — `CommsService`
-catches it and records that sentence in the message log, which is what support
-reads. A port that swallowed the reason would leave "it did not send" and
-nothing else.
+All three **throw** on refusal, carrying the server's own sentence —
+`CommsService` catches it and records that sentence in the message log, which is
+what support reads. A port that swallowed the reason would leave "it did not
+send" and nothing else.
 
-Each takes an optional `client`, so a deployment can share one and a test can
-fake the vendor at its own surface rather than stubbing `fetch`.
+Each takes an optional client or transport, so a deployment can share one and a
+test can work at that surface rather than stubbing `fetch`.
+
+`SmtpMessagePort` is the one every local stack already has somewhere to point
+at: each project's Compose file runs Mailpit, and until this existed nothing
+could reach it — so an invitation, a receipt or a password reset could not be
+followed end to end on a developer's machine without a vendor account. It is
+not only a development seam: a customer with their own mail server, a provider
+offering a relay rather than an API, and a deployment where mail may not leave
+the building are all this class with a different URL.
+
+Two things about it are worth knowing. A server can accept the conversation and
+refuse the address — `sendMail` resolves in that case, with the address under
+`rejected`, and treating that as success writes "delivered" against a message
+the server explicitly refused; this port throws instead. And certificates are
+verified: `allowSelfSignedCertificate` exists for a mail catcher or a private
+relay and must stay off against anything public, because a certificate nobody
+checks makes STARTTLS an encrypted conversation with whoever answered. Its tests
+run a real SMTP server in-process rather than mocking the client, which is the
+only way either of those behaviours can be asserted.
 
 A message may name its own `from` and `replyTo`, which is how it is branded as a
 customer without their domain being one the provider can sign for: their name in

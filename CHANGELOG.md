@@ -4,6 +4,25 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## comms 1.3.0
+
+### Added
+
+- `SmtpMessagePort`: email over SMTP, built on nodemailer. Every project's
+  Compose file runs Mailpit and nothing could reach it, so an invitation, a
+  receipt or a password reset could not be followed end to end on a developer's
+  machine without a vendor account. It is a production transport too — a
+  customer's own mail server, a relay offered instead of an API, a deployment
+  where mail may not leave the building.
+- A recipient the server refuses after accepting the conversation is a failure
+  rather than a success. `sendMail` resolves in that case, and recording it as
+  sent writes "delivered" against a message the server explicitly refused.
+- Certificates are verified by default. `allowSelfSignedCertificate` is for a
+  local catcher or a private relay, and named so nobody enables it casually.
+- Its tests run a real SMTP server in-process rather than mocking the client:
+  neither the refused recipient nor the untrusted certificate can be asserted
+  against a mock.
+
 ## messaging 1.0.1
 
 ### Fixed
