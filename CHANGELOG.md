@@ -4,6 +4,21 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## phone 1.0.0
+
+### Added
+
+- Telephone numbers as the durable identity of a customer: `normalisePhone`,
+  `formatPhone`, `dialable`, `isSearchablePhone`, for Romania and Hungary.
+  Extracted from project 12 when project 02 needed the same matching, which is
+  the second consumer the policy asks for.
+- **Three forms, and they are not interchangeable**: as typed, normalised (a
+  search key) and dialable (E.164). Project 12 shipped a pumping check that
+  refused a perfectly good normalised number for having no plus, which is what
+  the distinction exists to prevent.
+- No dependencies and nothing framework-shaped, so a browser bundle can decide
+  whether a lookup is worth making before the keystroke lands.
+
 ## comms 1.3.0
 
 ### Added

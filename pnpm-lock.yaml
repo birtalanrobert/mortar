@@ -317,6 +317,8 @@ importers:
         specifier: ^7.0.0
         version: 7.8.2
 
+  packages/phone: {}
+
   packages/redis:
     dependencies:
       '@birtalanrobert/config':
