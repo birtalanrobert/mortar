@@ -100,6 +100,9 @@ export class TwilioMessagePort implements MessagePort {
           (failure.code ? `, code ${failure.code}` : '') +
           ')' +
           (failure.message ? `: ${failure.message}` : ''),
+        // The vendor's own error as the cause: the sentence above is what
+        // support reads, and this is what a stack trace needs.
+        { cause: error },
       );
     }
 

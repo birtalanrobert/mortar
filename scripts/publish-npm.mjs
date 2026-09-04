@@ -56,7 +56,9 @@ if (!dryRun) {
     try {
       belongs = run('npm', ['org', 'ls', org]).includes(user);
     } catch {
-      belongs = false;
+      // Left false. Assigning it again here says the same thing twice, which
+      // eslint 10's `no-useless-assignment` objects to — the initialiser above
+      // is the answer for every failing path.
     }
 
     if (!belongs) {

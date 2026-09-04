@@ -105,7 +105,15 @@ export class ClamAvScanner implements ScannerPort {
         finish(() => reject(new Error('The virus scanner did not answer in time.'))),
       );
       socket.on('error', (error) => finish(() => reject(error)));
-      socket.on('data', (chunk) => chunks.push(chunk));
+      /*
+       * Typed as a `Buffer` because this socket never has an encoding set.
+       *
+       * `@types/node` 26 types the `data` payload as `string | Buffer`, which is
+       * correct in general — a socket given `setEncoding` emits strings — and
+       * wrong for this one. Saying so here is more honest than widening
+       * `chunks`, which would make `Buffer.concat` unsound.
+       */
+      socket.on('data', (chunk: Buffer) => chunks.push(chunk));
       socket.on('end', () => finish(() => resolve(Buffer.concat(chunks).toString('utf8'))));
 
       socket.connect(this.port, this.host, () => {
