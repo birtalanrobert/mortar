@@ -13,6 +13,8 @@
  */
 export { countSegments, type SegmentCount } from './segments';
 
+export { placeholdersIn, renderTemplate, unknownPlaceholders, type RenderResult } from './template';
+
 export { DEFAULT_QUIET_HOURS, isQuiet, localTime, nextAllowed, type QuietHours } from './quiet';
 
 export {
