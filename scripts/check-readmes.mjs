@@ -9,7 +9,23 @@ import { join } from 'node:path';
 function exportsOf(spec) {
   const [, name, sub] = /^@birtalanrobert\/([^/]+)(?:\/(.+))?$/.exec(spec) ?? [];
   if (!name) return null;
-  const file = join('packages', name, 'dist', sub ? `${sub}/index.d.ts` : 'index.d.ts');
+
+  /*
+   * Resolved through the package's own `exports` map, not by guessing.
+   *
+   * The first version assumed every subpath was `dist/<sub>/index.d.ts`, which
+   * held while `/nestjs` was the only one there was. `commerce/stripe` points
+   * at `dist/providers/stripe.d.ts`, and a checker that cannot find a file
+   * reports the README as wrong when it is the checker that is.
+   */
+  const manifest = join('packages', name, 'package.json');
+  if (!existsSync(manifest)) return null;
+
+  const entry = JSON.parse(readFileSync(manifest, 'utf8')).exports?.[sub ? `./${sub}` : '.'];
+  const types = typeof entry === 'string' ? entry : entry?.types;
+  if (!types) return null;
+
+  const file = join('packages', name, types);
   if (!existsSync(file)) return null;
   const s = readFileSync(file, 'utf8');
   const out = new Set();

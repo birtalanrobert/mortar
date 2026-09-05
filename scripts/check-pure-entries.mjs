@@ -32,6 +32,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
  * Add to it when a product's front end starts importing a package's root.
  */
 const BROWSER_IMPORTED = new Set([
+  '@birtalanrobert/billing',
   '@birtalanrobert/commerce',
   '@birtalanrobert/config',
   '@birtalanrobert/http',

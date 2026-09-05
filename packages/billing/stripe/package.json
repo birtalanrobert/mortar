@@ -1,0 +1,5 @@
+{
+  "main": "../dist/providers/stripe.js",
+  "types": "../dist/providers/stripe.d.ts",
+  "sideEffects": false
+}
