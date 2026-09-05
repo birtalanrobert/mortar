@@ -28,6 +28,20 @@ export interface OnboardingLink {
 export interface ChargeRequest {
   /** The business being paid, as the provider knows it. */
   readonly account: string;
+  /**
+   * The customer, where one is being charged again rather than for the first
+   * time. Held on *our* account rather than the business's, because that is
+   * where a saved card lives under a destination charge.
+   */
+  readonly customer?: string;
+  /**
+   * A card already saved, to charge without anybody present.
+   *
+   * The whole point of storing one: a no-show fee is decided days later, and
+   * asking somebody who did not turn up to enter a card is a conversation that
+   * does not happen.
+   */
+  readonly paymentMethod?: string;
   readonly amount: number;
   readonly currency: string;
   /** Our cut, taken on top rather than out of the business's money. */
@@ -57,8 +71,46 @@ export interface ChargeResult {
    * failure and must not be handled as one.
    */
   readonly redirectUrl?: string;
+  /**
+   * What the browser needs to finish paying, when the customer is present.
+   *
+   * A charge created on the server has no card attached to it yet — the card is
+   * entered in a browser, against the provider's own script, so that the number
+   * never reaches us. Without this the payment can be created and never paid,
+   * which is the state a customer reads as "it took my booking and lost my
+   * money".
+   */
+  readonly clientSecret?: string;
   readonly instrument?: string;
   readonly detail?: string;
+}
+
+/** A card being stored for later, rather than charged now. */
+export interface SaveCardRequest {
+  /** An existing customer to attach it to, where the person already has one. */
+  readonly customer?: string;
+  /** What it is being saved for, carried through for matching a webhook back. */
+  readonly subject: string;
+  readonly reference: string;
+}
+
+export interface SaveCardResult {
+  /** The customer the card will hang off, created here if there was none. */
+  readonly customer: string;
+  /** The provider's handle on this attempt, to read the result back from. */
+  readonly externalId: string;
+  /** What the browser confirms against. */
+  readonly clientSecret: string;
+}
+
+/** A card that was actually stored, read back after the browser confirmed it. */
+export interface StoredCard {
+  readonly customer: string;
+  readonly paymentMethod: string;
+  readonly brand?: string;
+  readonly last4?: string;
+  readonly expiryMonth?: number;
+  readonly expiryYear?: number;
 }
 
 export interface RefundRequest {
@@ -94,6 +146,28 @@ export interface PaymentProvider {
 
   /** Releases a hold without taking anything. */
   release(externalId: string): Promise<void>;
+
+  /**
+   * Starts storing a card without charging it.
+   *
+   * The strongest thing a business can do about no-shows short of taking money:
+   * nothing leaves the customer's account, and the card is there if a fee is
+   * later decided on. A hold is not a substitute — providers expire one within
+   * days, and an appointment is usually further away than that.
+   */
+  saveCard(request: SaveCardRequest): Promise<SaveCardResult>;
+
+  /**
+   * What was actually stored, once the browser says it finished.
+   *
+   * Read back from the provider rather than believed from the browser: what a
+   * page reports is what a page was told to report, and a saved card is
+   * something a business will later charge money against.
+   */
+  storedCard(externalId: string): Promise<StoredCard | undefined>;
+
+  /** Forgets a stored card, at the customer's request or the business's. */
+  forgetCard(paymentMethod: string): Promise<void>;
 
   refund(request: RefundRequest): Promise<{ externalId: string }>;
 

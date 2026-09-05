@@ -6,6 +6,7 @@ import {
   payoutBlockReason,
   type DepositPolicy,
 } from './deposits';
+import { isRefundable, refundableAmount } from './payments';
 
 const percentage = (value: number): DepositPolicy => ({ kind: 'percentage', value });
 
@@ -87,5 +88,31 @@ describe('the payout gate', () => {
     expect(payoutBlockReason('pending')).toBe('in-progress');
     expect(payoutBlockReason('restricted')).toBe('needs-attention');
     expect(payoutBlockReason('ready')).toBeNull();
+  });
+});
+
+describe('what may still be done to a payment', () => {
+  it('offers a refund only where money actually moved', () => {
+    expect(isRefundable('captured')).toBe(true);
+    expect(isRefundable('partially_refunded')).toBe(true);
+  });
+
+  it('refuses one on a held card, which has taken nothing yet', () => {
+    /*
+     * The trap this exists to close: an authorised card looks refundable to
+     * anyone reasoning from "there is a payment row here", and releasing a hold
+     * is a different operation with a different name.
+     */
+    expect(isRefundable('authorized')).toBe(false);
+    expect(isRefundable('pending')).toBe(false);
+    expect(isRefundable('failed')).toBe(false);
+    expect(isRefundable('cancelled')).toBe(false);
+    expect(isRefundable('refunded')).toBe(false);
+  });
+
+  it('never reports more left to give back than was taken', () => {
+    expect(refundableAmount(10_000, 4_000)).toBe(6_000);
+    expect(refundableAmount(10_000, 10_000)).toBe(0);
+    expect(refundableAmount(10_000, 12_000)).toBe(0);
   });
 });

@@ -174,6 +174,131 @@ describe('reading Stripe’s answers', () => {
       // connection does not charge somebody twice.
       expect(options.idempotencyKey).toBe('ref-1');
     });
+
+    it('hands back what the browser needs to finish paying', async () => {
+      /*
+       * A charge created here has no card attached to it yet — the number is
+       * entered against Stripe's own script so that it never reaches us.
+       * Dropping the secret produces a payment that can be created and never
+       * paid, which a customer reads as "it took my booking and lost my money".
+       */
+      const result = await chargeWith({
+        id: 'pi_1',
+        status: 'requires_payment_method',
+        client_secret: 'pi_1_secret_x',
+      });
+
+      expect(result.clientSecret).toBe('pi_1_secret_x');
+      expect(result.state).toBe('pending');
+    });
+
+    it('charges a stored card with nobody present, and asks for no redirect', async () => {
+      const create = vi.fn().mockResolvedValue({ id: 'pi_2', status: 'succeeded' });
+
+      await connect({ paymentIntents: { create } }).charge({
+        account: 'acct_business',
+        customer: 'cus_1',
+        paymentMethod: 'pm_1',
+        amount: 5_000,
+        currency: 'RON',
+        applicationFee: 0,
+        subject: 'booking:1',
+        capture: true,
+        reference: 'fee-1',
+      });
+
+      const [body] = create.mock.calls[0] as [Record<string, unknown>];
+
+      /*
+       * `off_session` is what tells the network nobody is sitting there — and
+       * what makes a bank decline rather than ask for a code it has nobody to
+       * ask. That is the honest outcome for a fee charged three days later.
+       */
+      expect(body).toMatchObject({ customer: 'cus_1', payment_method: 'pm_1', off_session: true });
+      expect(body.confirm).toBe(true);
+
+      // Offering a redirect method to a charge already confirmed against a
+      // stored card is a contradiction the provider rejects.
+      expect(body.automatic_payment_methods).toBeUndefined();
+    });
+  });
+
+  describe('a card kept for later', () => {
+    it('creates the customer on our account, not the business\u2019s', async () => {
+      /*
+       * Under a destination charge the money lands on the business's account
+       * while the card stays ours to charge. A customer created on the
+       * business's account cannot be used from here at all.
+       */
+      const customers = { create: vi.fn().mockResolvedValue({ id: 'cus_new' }) };
+      const create = vi.fn().mockResolvedValue({ id: 'seti_1', client_secret: 'seti_1_secret_x' });
+
+      const result = await connect({
+        customers,
+        setupIntents: { create },
+      }).saveCard({ subject: 'customer:7', reference: 'card-7' });
+
+      expect(result.customer).toBe('cus_new');
+      expect(result.clientSecret).toBe('seti_1_secret_x');
+
+      const [body] = create.mock.calls[0] as [Record<string, unknown>];
+
+      // Off-session, because the whole point is charging it when the person is
+      // not there.
+      expect(body).toMatchObject({ customer: 'cus_new', usage: 'off_session' });
+    });
+
+    it('joins a second card to the customer somebody already has', async () => {
+      const customers = { create: vi.fn() };
+
+      await connect({
+        customers,
+        setupIntents: { create: vi.fn().mockResolvedValue({ id: 'seti_2', client_secret: 's' }) },
+      }).saveCard({ subject: 'customer:7', customer: 'cus_existing', reference: 'card-8' });
+
+      // Otherwise a person acquires a stranger with their own name every time
+      // they add a card, and their first one becomes unreachable.
+      expect(customers.create).not.toHaveBeenCalled();
+    });
+
+    it('reads back only enough of the card to recognise it', async () => {
+      const stored = await connect({
+        setupIntents: {
+          retrieve: vi.fn().mockResolvedValue({
+            id: 'seti_1',
+            customer: 'cus_1',
+            payment_method: {
+              id: 'pm_1',
+              card: { brand: 'visa', last4: '4242', exp_month: 4, exp_year: 2030 },
+            },
+          }),
+        },
+      }).storedCard('seti_1');
+
+      expect(stored).toEqual({
+        customer: 'cus_1',
+        paymentMethod: 'pm_1',
+        brand: 'visa',
+        last4: '4242',
+        expiryMonth: 4,
+        expiryYear: 2030,
+      });
+    });
+
+    it('reports nothing stored when the browser never finished', async () => {
+      /*
+       * Read back from the provider rather than believed from the browser: what
+       * a page reports is what a page was told to report, and this is a row a
+       * business will later charge real money against.
+       */
+      const stored = await connect({
+        setupIntents: {
+          retrieve: vi.fn().mockResolvedValue({ id: 'seti_1', customer: 'cus_1' }),
+        },
+      }).storedCard('seti_1');
+
+      expect(stored).toBeUndefined();
+    });
   });
 
   describe('a webhook', () => {

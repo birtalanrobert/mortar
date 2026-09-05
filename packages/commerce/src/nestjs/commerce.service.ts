@@ -7,7 +7,9 @@ import { ConflictError, NotFoundError, ValidationError } from '@birtalanrobert/h
 import { canTakeMoney, type PayoutStatus } from '../deposits';
 import type { PaymentProvider, ProviderEvent } from '../providers/port';
 import { PayoutAccount } from './payout-account.entity';
+import { isRefundable, type PaymentKind } from '../payments';
 import { Payment, PaymentRefund, type PaymentMethod } from './payment.entity';
+import { SavedCard } from './saved-card.entity';
 
 /** The provider this deployment uses, injected so tests can supply their own. */
 export const COMMERCE_PROVIDER = Symbol('COMMERCE_PROVIDER');
@@ -18,6 +20,15 @@ export interface TakePayment {
   readonly currency: string;
   readonly applicationFee?: number;
   readonly description?: string;
+  /** What it is for. `sale` unless said otherwise. */
+  readonly kind?: PaymentKind;
+  /**
+   * A stored card to charge without anybody present.
+   *
+   * The whole reason for keeping one: a fee is decided days after the fact, and
+   * the customer is not there to be asked.
+   */
+  readonly savedCardId?: string;
   /** False holds the money instead of taking it. See `capture`. */
   readonly capture?: boolean;
   /**
@@ -34,7 +45,30 @@ export interface RecordPayment {
   readonly amount: number;
   readonly currency: string;
   readonly method: Exclude<PaymentMethod, 'card'>;
+  readonly kind?: PaymentKind;
   readonly detail?: string;
+}
+
+/**
+ * A charge, and what the browser needs to finish it.
+ *
+ * The secret is returned rather than stored: a charge created on the server has
+ * no card attached to it yet, and the card is entered against the provider's own
+ * script so the number never reaches us. Without handing it back, a payment can
+ * be created and never paid — which a customer reads as "it took my booking and
+ * lost my money".
+ */
+export interface TakenPayment {
+  readonly payment: Payment;
+  readonly clientSecret?: string;
+}
+
+/** A card being stored, and what the browser confirms it with. */
+export interface CardToSave {
+  readonly subject: string;
+  readonly reference: string;
+  /** What the customer was told they were agreeing to, in their own language. */
+  readonly consentText: string;
 }
 
 /**
@@ -120,11 +154,17 @@ export class CommerceService {
    * customer debited and the money nowhere anybody can see it, and the first
    * the business hears is asking where it went.
    */
-  async take(tenantId: string, input: TakePayment): Promise<Payment> {
+  async take(tenantId: string, input: TakePayment): Promise<TakenPayment> {
     const account = await this.payoutAccount(tenantId);
 
     if (!account || !canTakeMoney(account.status)) {
       throw new ConflictError('This business cannot take card payments yet.');
+    }
+
+    const saved = input.savedCardId ? await this.savedCard(tenantId, input.savedCardId) : null;
+
+    if (input.savedCardId && !saved) {
+      throw new NotFoundError('SavedCard', input.savedCardId);
     }
 
     if (input.amount <= 0) {
@@ -142,10 +182,11 @@ export class CommerceService {
       subject: input.subject,
       capture: input.capture ?? true,
       ...(input.description ? { description: input.description } : {}),
+      ...(saved ? { customer: saved.customerRef, paymentMethod: saved.paymentMethodRef } : {}),
       reference: input.reference,
     });
 
-    return runInTenantTransaction(
+    const payment = await runInTenantTransaction(
       this.dataSource,
       async (scoped) => {
         const repository = scoped.getRepository(Payment);
@@ -155,6 +196,7 @@ export class CommerceService {
             tenantId,
             subject: input.subject,
             method: 'card',
+            kind: input.kind ?? 'sale',
             state: result.state,
             amount: String(input.amount),
             currency: input.currency,
@@ -171,6 +213,130 @@ export class CommerceService {
           }),
         );
       },
+      { tenantId },
+    );
+
+    /*
+     * The secret is handed back and never written down.
+     *
+     * It authorises whoever holds it to pay this one charge, so it belongs in
+     * the response to the person paying and nowhere else — not in a column, not
+     * in a log line, and not in an error.
+     */
+    return { payment, ...(result.clientSecret ? { clientSecret: result.clientSecret } : {}) };
+  }
+
+  /**
+   * Starts storing a card without charging it, and records what was agreed.
+   *
+   * Two steps, because there is a browser in the middle: this creates the
+   * intent and hands back a secret, and `confirmCard` writes the row once the
+   * provider says a card really is stored. Believing the browser instead would
+   * mean a business holding a card reference that charges nothing.
+   */
+  async saveCard(
+    tenantId: string,
+    input: CardToSave,
+  ): Promise<{ externalId: string; clientSecret: string }> {
+    const existing = await this.savedCards(tenantId, input.subject);
+
+    const result = await this.provider.saveCard({
+      subject: input.subject,
+      reference: input.reference,
+      // Reuse the customer this person already has, so a second card joins the
+      // first rather than creating a stranger with the same name.
+      ...(existing[0] ? { customer: existing[0].customerRef } : {}),
+    });
+
+    return { externalId: result.externalId, clientSecret: result.clientSecret };
+  }
+
+  /**
+   * Writes down the card the provider says is now stored.
+   *
+   * Read back from the provider rather than taken from the browser: what a page
+   * reports is what a page was told to report, and this row is what a business
+   * will later charge real money against.
+   */
+  async confirmCard(
+    tenantId: string,
+    externalId: string,
+    input: CardToSave,
+  ): Promise<SavedCard | null> {
+    const stored = await this.provider.storedCard(externalId);
+    if (!stored) return null;
+
+    return runInTenantTransaction(
+      this.dataSource,
+      async (scoped) => {
+        const repository = scoped.getRepository(SavedCard);
+
+        const already = await repository.findOne({
+          where: { tenantId, paymentMethodRef: stored.paymentMethod },
+        });
+
+        // Confirming twice is the ordinary case on a slow connection, not an
+        // exotic one, and it must not leave two rows for one card.
+        if (already) return already;
+
+        return repository.save(
+          repository.create({
+            tenantId,
+            subject: input.subject,
+            provider: this.provider.name,
+            customerRef: stored.customer,
+            paymentMethodRef: stored.paymentMethod,
+            brand: stored.brand ?? null,
+            last4: stored.last4 ?? null,
+            expiryMonth: stored.expiryMonth ?? null,
+            expiryYear: stored.expiryYear ?? null,
+            consentText: input.consentText,
+            consentedAt: new Date(),
+            storedBy: getActor()?.id ?? null,
+          }),
+        );
+      },
+      { tenantId },
+    );
+  }
+
+  /** Every card kept for somebody, newest first. */
+  async savedCards(tenantId: string, subject: string): Promise<SavedCard[]> {
+    return runInTenantTransaction(
+      this.dataSource,
+      (scoped) =>
+        scoped
+          .getRepository(SavedCard)
+          .find({ where: { tenantId, subject }, order: { createdAt: 'DESC' } }),
+      { tenantId },
+    );
+  }
+
+  async savedCard(tenantId: string, id: string): Promise<SavedCard | null> {
+    return runInTenantTransaction(
+      this.dataSource,
+      (scoped) => scoped.getRepository(SavedCard).findOne({ where: { tenantId, id } }),
+      { tenantId },
+    );
+  }
+
+  /**
+   * Forgets a card, at the customer's request or the business's.
+   *
+   * The provider is told first. A row deleted while the provider still holds
+   * the card is a card nobody can see and anybody with the reference can
+   * charge; the reverse — a detached card with a row still here — is merely a
+   * charge that fails.
+   */
+  async forgetCard(tenantId: string, id: string): Promise<void> {
+    const card = await this.savedCard(tenantId, id);
+    if (!card) return;
+
+    await this.provider.forgetCard(card.paymentMethodRef);
+
+    await runInTenantTransaction(
+      this.dataSource,
+      (scoped) => scoped.getRepository(SavedCard).delete({ tenantId, id }),
       { tenantId },
     );
   }
@@ -202,6 +368,7 @@ export class CommerceService {
             tenantId,
             subject: input.subject,
             method: input.method,
+            kind: input.kind ?? 'sale',
             // Captured immediately: the money is in the till. There is no
             // provider to wait for and nothing that can fail later.
             state: 'captured',
@@ -275,7 +442,7 @@ export class CommerceService {
   ): Promise<Payment> {
     const payment = await this.find(tenantId, paymentId);
 
-    if (payment.state !== 'captured' && payment.state !== 'partially_refunded') {
+    if (!isRefundable(payment.state)) {
       throw new ConflictError('That payment cannot be refunded.');
     }
 

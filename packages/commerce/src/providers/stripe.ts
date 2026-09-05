@@ -7,6 +7,9 @@ import type {
   ProviderAccount,
   ProviderEvent,
   RefundRequest,
+  SaveCardRequest,
+  SaveCardResult,
+  StoredCard,
 } from './port';
 
 export interface StripeConnectOptions {
@@ -95,10 +98,31 @@ export class StripeConnect implements PaymentProvider {
           ...(request.applicationFee > 0 ? { application_fee_amount: request.applicationFee } : {}),
           capture_method: request.capture ? 'automatic' : 'manual',
           ...(request.description ? { description: request.description } : {}),
+          ...(request.customer ? { customer: request.customer } : {}),
+          /*
+           * A stored card is confirmed here and now, with nobody present.
+           *
+           * `off_session` is what tells the network the customer is not sitting
+           * there — it is also what makes the bank decline rather than ask for
+           * a code it has nobody to ask, which is the honest outcome for a fee
+           * charged three days after an appointment.
+           */
+          ...(request.paymentMethod
+            ? {
+                payment_method: request.paymentMethod,
+                confirm: true,
+                off_session: true,
+              }
+            : {}),
           // Carried through so a webhook can be matched back to what it paid
           // for without a lookup table of our own.
           metadata: { subject: request.subject },
-          automatic_payment_methods: { enabled: true },
+          /*
+           * Only where a card still has to be entered. Offering a redirect
+           * method to a charge that is already confirmed against a stored card
+           * is a contradiction the provider rejects.
+           */
+          ...(request.paymentMethod ? {} : { automatic_payment_methods: { enabled: true } }),
         },
         // The provider's own idempotency, so a retried request — a timeout, a
         // double submit — does not charge somebody twice.
@@ -126,6 +150,70 @@ export class StripeConnect implements PaymentProvider {
 
   async release(externalId: string): Promise<void> {
     await this.stripe.paymentIntents.cancel(externalId);
+  }
+
+  /**
+   * Starts storing a card without charging it.
+   *
+   * The customer is created on **our** account rather than the business's. That
+   * is not a preference: under a destination charge the money lands on the
+   * business's account while the card is ours to charge, and a customer created
+   * on the business's account cannot be used from here at all.
+   */
+  async saveCard(request: SaveCardRequest): Promise<SaveCardResult> {
+    const customer =
+      request.customer ??
+      (
+        await this.stripe.customers.create(
+          { metadata: { subject: request.subject } },
+          { idempotencyKey: `customer-${request.reference}` },
+        )
+      ).id;
+
+    const intent = await this.stripe.setupIntents.create(
+      {
+        customer,
+        usage: 'off_session',
+        payment_method_types: ['card'],
+        metadata: { subject: request.subject },
+      },
+      { idempotencyKey: request.reference },
+    );
+
+    return {
+      customer,
+      externalId: intent.id,
+      // Non-null because a setup intent is created precisely to be confirmed.
+      clientSecret: intent.client_secret ?? '',
+    };
+  }
+
+  async storedCard(externalId: string): Promise<StoredCard | undefined> {
+    const intent = await this.stripe.setupIntents.retrieve(externalId, {
+      expand: ['payment_method'],
+    });
+
+    const method = intent.payment_method;
+    if (!method || typeof method === 'string' || !intent.customer) return undefined;
+
+    const customer = typeof intent.customer === 'string' ? intent.customer : intent.customer.id;
+
+    return {
+      customer,
+      paymentMethod: method.id,
+      ...(method.card
+        ? {
+            brand: method.card.brand,
+            last4: method.card.last4,
+            expiryMonth: method.card.exp_month,
+            expiryYear: method.card.exp_year,
+          }
+        : {}),
+    };
+  }
+
+  async forgetCard(paymentMethod: string): Promise<void> {
+    await this.stripe.paymentMethods.detach(paymentMethod);
   }
 
   async refund(request: RefundRequest): Promise<{ externalId: string }> {
@@ -205,6 +293,7 @@ function interpretIntent(intent: Stripe.PaymentIntent): ChargeResult {
   return {
     externalId: intent.id,
     state,
+    ...(intent.client_secret ? { clientSecret: intent.client_secret } : {}),
     ...(intent.next_action?.redirect_to_url?.url
       ? { redirectUrl: intent.next_action.redirect_to_url.url }
       : {}),

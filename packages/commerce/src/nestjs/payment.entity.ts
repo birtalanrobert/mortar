@@ -1,33 +1,14 @@
 import { Column, Entity, Index, Unique } from 'typeorm';
 import { BaseEntity, MONEY_AMOUNT_COLUMN } from '@birtalanrobert/database';
+import type { PaymentKind, PaymentMethod, PaymentState } from '../payments';
 
-/**
- * How the money arrived.
+/*
+ * The lifecycle types live in the pure entry point and are re-exported here.
  *
- * `card` is the only one this package processes. The rest are **recorded, not
- * taken** — and recording them is not a lesser feature: a salon is mostly cash
- * at the counter, a restaurant's till takes meal vouchers, and a box office
- * takes notes. A report that only counts what a provider processed tells a
- * business a fraction of its own takings, which is worse than telling it
- * nothing because it looks complete.
+ * A console renders a refund button from the same union the entity is typed
+ * with, and it must not reach TypeORM to get it.
  */
-export type PaymentMethod = 'card' | 'cash' | 'terminal' | 'voucher' | 'transfer';
-
-/**
- * Where a payment is.
- *
- * `authorized` is separate from `captured` on purpose: a card held against a
- * no-show fee is authorised and never captured unless the fee is applied, and
- * that decision is a human one.
- */
-export type PaymentState =
-  | 'pending'
-  | 'authorized'
-  | 'captured'
-  | 'failed'
-  | 'refunded'
-  | 'partially_refunded'
-  | 'cancelled';
+export type { PaymentKind, PaymentMethod, PaymentState } from '../payments';
 
 /**
  * One movement of money between a customer and a business.
@@ -57,6 +38,17 @@ export class Payment extends BaseEntity {
 
   @Column('varchar', { length: 16 })
   method!: PaymentMethod;
+
+  /**
+   * What it was for.
+   *
+   * A tip belongs to the person who earned it and a product to neither the
+   * service nor the diary — a report counting all three as service income tells
+   * a business its haircuts are more profitable than they are, and no amount of
+   * arithmetic afterwards can separate them again.
+   */
+  @Column('varchar', { length: 16, default: 'sale' })
+  kind!: PaymentKind;
 
   @Column('varchar', { length: 24, default: 'pending' })
   state!: PaymentState;

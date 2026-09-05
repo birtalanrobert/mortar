@@ -27,6 +27,14 @@ export {
   type PayoutStatus,
 } from './deposits';
 
+export {
+  isRefundable,
+  refundableAmount,
+  type PaymentKind,
+  type PaymentMethod,
+  type PaymentState,
+} from './payments';
+
 export type {
   ChargeRequest,
   ChargeResult,
@@ -35,6 +43,9 @@ export type {
   ProviderAccount,
   ProviderEvent,
   RefundRequest,
+  SaveCardRequest,
+  SaveCardResult,
+  StoredCard,
 } from './providers/port';
 
 export { StripeConnect, type StripeConnectOptions } from './providers/stripe';
