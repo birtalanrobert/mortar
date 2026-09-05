@@ -27,7 +27,7 @@ canTakeMoney('pending'); // false — the provider has not verified them yet
 ## Using it in a NestJS application
 
 ```ts
-import { StripeConnect } from '@birtalanrobert/commerce';
+import { StripeConnect } from '@birtalanrobert/commerce/stripe';
 import {
   COMMERCE_PROVIDER,
   CommerceService,
@@ -54,6 +54,14 @@ export class PaymentsModule {}
 
 Register `commerceEntities` and `commerceMigrations` with the data source, as
 with every other package here.
+
+**Three entry points, and the split is deliberate.** The root is pure — what a
+deposit comes to, whether a business may sell yet, whether a payment can still
+be refunded — because a console decides all three while somebody drags a
+slider. `/nestjs` holds the service, the entities and the migrations.
+`/stripe` holds the vendor's client on its own, because importing it pulls in
+the whole SDK, and a barrel that re-exported it once put a payments SDK into a
+booking console's first load.
 
 ## The parts worth knowing before using it
 

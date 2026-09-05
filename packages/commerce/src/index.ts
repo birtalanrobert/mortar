@@ -12,10 +12,12 @@
  * the mistake that makes both hard to reason about — they differ in who pays
  * whom, in which Stripe account, and in what happens when one fails.
  *
- * **This entry point is pure.** What a deposit comes to and whether a business
- * may sell yet are decided without a database or a provider, because a console
- * shows both while somebody drags a slider. Everything needing storage or
- * somebody else's money-moving licence is behind `/nestjs`.
+ * **This entry point is pure**, and stays that way by leaving things out. What
+ * a deposit comes to and whether a business may sell yet are decided without a
+ * database or a provider, because a console shows both while somebody drags a
+ * slider. Storage and the container are behind `/nestjs`; the Stripe client is
+ * behind `/stripe`, because a barrel that re-exports it puts the vendor's whole
+ * SDK into every bundle that wanted to divide a price by three.
  */
 export {
   balanceAfter,
@@ -48,4 +50,13 @@ export type {
   StoredCard,
 } from './providers/port';
 
-export { StripeConnect, type StripeConnectOptions } from './providers/stripe';
+/*
+ * `StripeConnect` is deliberately NOT re-exported here.
+ *
+ * It lives at `@birtalanrobert/commerce/stripe`, because importing it pulls in
+ * the vendor's whole SDK — and this entry point is imported by browser code
+ * that only wants to know what a deposit comes to. Re-exporting it put 30 KB of
+ * a payments SDK into a console's first load for a screen that never calls it:
+ * a barrel is a bundling decision, and the only way to keep this one pure is to
+ * leave the heavy thing out of it.
+ */
