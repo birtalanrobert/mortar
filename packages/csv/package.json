@@ -3,8 +3,24 @@
   "version": "1.0.0",
   "description": "Reading and writing the CSV files a spreadsheet actually produces",
   "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/birtalanrobert/mortar.git",
+    "directory": "packages/csv"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "commonjs",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist",
     "src",
@@ -15,22 +31,11 @@
     "NOTICE",
     "CHANGELOG.md"
   ],
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    },
-    "./package.json": "./package.json"
-  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "clean": "rm -rf dist *.tsbuildinfo",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
-  "publishConfig": {
-    "access": "public"
-  },
-  "type": "commonjs",
   "dependencies": {
     "papaparse": "^5.7.0"
   },

@@ -79,6 +79,32 @@ for (const dir of readdirSync('packages')) {
   if (!existsSync(manifestPath)) continue;
   const pkg = JSON.parse(readFileSync(manifestPath, 'utf8'));
 
+  /*
+   * A scoped package defaults to *restricted*, and npm refuses to publish it
+   * publicly without being told.
+   *
+   * The failure is not an error at publish time — the release reports success —
+   * it is a 404 in whichever repository tries to install it next, saying the
+   * package "is not in the npm registry, or you have no permission". That cost
+   * a round trip the first time `commerce` was released, which is why it is
+   * checked here rather than remembered.
+   */
+  if (pkg.publishConfig?.access !== 'public') {
+    console.error(`  ✗ ${pkg.name} → package.json`);
+    console.error('    publishConfig.access must be "public", or the publish is private');
+    findings += 1;
+  }
+
+  /*
+   * And where the source is, which the AGPL's "corresponding source" is about
+   * and which npm shows beside the package.
+   */
+  if (!pkg.repository?.url || !pkg.repository?.directory) {
+    console.error(`  ✗ ${pkg.name} → package.json`);
+    console.error('    repository.url and repository.directory are missing');
+    findings += 1;
+  }
+
   // Ask npm exactly which files would ship, rather than guessing from `files`.
   let files;
   try {

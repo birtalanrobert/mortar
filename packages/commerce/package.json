@@ -4,6 +4,14 @@
   "description": "Taking money on a business's behalf: payout onboarding, payments, refunds and the record of both",
   "license": "AGPL-3.0-only",
   "author": "Robert Birtalan",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/birtalanrobert/mortar.git",
+    "directory": "packages/commerce"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "commonjs",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
