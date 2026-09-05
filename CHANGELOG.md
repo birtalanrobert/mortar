@@ -4,6 +4,20 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## commerce 1.0.0
+
+### Added
+
+- Taking money on a business's behalf, for projects 01, 02 and 11: payout
+  onboarding with a hard gate, card payments through Stripe Connect as
+  destination charges, holds that are captured only by a human decision,
+  manually recorded cash, terminal, voucher and transfer takings, partial
+  refunds with a required reason, and webhook verification.
+- `depositFor` and `canTakeMoney` at the pure root entry point, because a
+  console shows both while somebody drags a slider.
+- **We never hold anybody's funds** — the customer pays the business directly
+  and our cut is an application fee. Everything in the package follows from it.
+
 ## phone 1.0.0
 
 ### Added
