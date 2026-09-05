@@ -37,6 +37,8 @@ export {
   type PaymentState,
 } from './payments';
 
+export { NoPayments } from './providers/none';
+
 export type {
   ChargeRequest,
   ChargeResult,

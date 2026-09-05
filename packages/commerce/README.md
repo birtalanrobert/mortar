@@ -55,6 +55,12 @@ export class PaymentsModule {}
 Register `commerceEntities` and `commerceMigrations` with the data source, as
 with every other package here.
 
+Where a deployment takes no card payments — which is most of them in some
+categories — provide `NoPayments` instead of `StripeConnect`. It reports `none`
+and refuses every operation, so every gate that already asks whether a business
+can be paid out answers no. **Do not construct the vendor client with an empty
+key**: it throws inside its own constructor and the application does not start.
+
 **Three entry points, and the split is deliberate.** The root is pure — what a
 deposit comes to, whether a business may sell yet, whether a payment can still
 be refunded — because a console decides all three while somebody drags a

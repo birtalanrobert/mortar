@@ -15,7 +15,14 @@
 /** Where a business's money goes, as the provider knows it. */
 export interface ProviderAccount {
   readonly externalId: string;
-  readonly status: 'pending' | 'restricted' | 'ready';
+  /**
+   * `none` is a real answer, not an absence.
+   *
+   * It is what a deployment with no payment provider configured says, and it is
+   * different from `pending`: `pending` means somebody is checking, and a
+   * business told that will wait for an email nobody is going to send.
+   */
+  readonly status: 'none' | 'pending' | 'restricted' | 'ready';
   /** What the provider still wants, in its own words. */
   readonly requirements: readonly string[];
 }
