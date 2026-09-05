@@ -24,6 +24,8 @@ export { TwilioMessagePort, type TwilioMessagePortOptions } from './outbound/twi
 
 export { ResendInbound, type ResendInboundOptions, type VerifiedEvent } from './inbound/resend';
 
+export { TwilioReceipts, type TwilioReceipt, type TwilioStatusCallback } from './receipts/twilio';
+
 export { MessageLog, type MessageDirection, type MessageState } from './message-log.entity';
 export { CreateMessageLog1787813849846 };
 

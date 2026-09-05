@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/comms",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Outbound email and SMS behind provider ports, inbound email parsing",
   "license": "AGPL-3.0-only",
   "main": "./dist/index.js",
