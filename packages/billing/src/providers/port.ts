@@ -62,6 +62,16 @@ export interface ProviderSubscription {
 export interface BillingEvent {
   readonly kind: 'subscription' | 'invoice' | 'checkout' | 'other';
   readonly externalId: string;
+  /**
+   * The customer, where the event names one.
+   *
+   * The only handle an **invoice** event shares with anything we store: its own
+   * identifier is the invoice's, which we have never seen. Without this, an
+   * unpaid invoice can be verified, read and understood, and still not be
+   * attributable to anybody — so nothing happens and the business runs unpaid
+   * for ever.
+   */
+  readonly customer?: string;
   readonly subscription?: ProviderSubscription;
   /** Set on an invoice event: whether it was paid, and what it came to. */
   readonly paid?: boolean;

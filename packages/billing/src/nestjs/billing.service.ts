@@ -387,11 +387,21 @@ export class BillingService {
   private async tenantFor(event: BillingEvent): Promise<string | null> {
     if (event.subject?.startsWith('tenant:')) return event.subject.slice('tenant:'.length);
 
+    /*
+     * By the customer first, then the subscription.
+     *
+     * An **invoice** event's own identifier is the invoice's, which we have
+     * never seen — the customer is the only handle it shares with anything we
+     * store. Matching on `externalId` alone meant an unpaid invoice could be
+     * verified, read and understood, and still attributed to nobody, so the
+     * business ran unpaid for ever with nothing in any log to say why.
+     */
     const rows = await this.dataSource.query<Array<{ tenant_id: string }>>(
       `SELECT "tenant_id" FROM "mortar_subscriptions"
-        WHERE "external_id" = $1 OR "customer_ref" = $1
+        WHERE ($1::text IS NOT NULL AND "customer_ref" = $1)
+           OR "external_id" = $2
         LIMIT 1`,
-      [event.externalId],
+      [event.customer ?? null, event.externalId],
     );
 
     return rows[0]?.tenant_id ?? null;

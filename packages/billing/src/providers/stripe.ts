@@ -242,6 +242,9 @@ function interpretEvent(event: Stripe.Event): BillingEvent {
         kind: 'subscription',
         externalId: read.externalId,
         subscription: read,
+        ...(customerOf(subscription.customer)
+          ? { customer: customerOf(subscription.customer)! }
+          : {}),
         ...(subscription.metadata?.subject ? { subject: subscription.metadata.subject } : {}),
       };
     }
@@ -253,6 +256,12 @@ function interpretEvent(event: Stripe.Event): BillingEvent {
       return {
         kind: 'invoice',
         externalId: invoice.id ?? '',
+        /*
+         * The customer, because it is the only handle this event shares with
+         * anything we store — an invoice's own identifier is one we have never
+         * seen, and without this the event is attributable to nobody.
+         */
+        ...(customerOf(invoice.customer) ? { customer: customerOf(invoice.customer)! } : {}),
         paid: event.type === 'invoice.paid',
         amount: invoice.amount_due,
         currency: invoice.currency.toUpperCase(),
@@ -266,6 +275,7 @@ function interpretEvent(event: Stripe.Event): BillingEvent {
       return {
         kind: 'checkout',
         externalId: session.id,
+        ...(customerOf(session.customer) ? { customer: customerOf(session.customer)! } : {}),
         ...(session.metadata?.subject ? { subject: session.metadata.subject } : {}),
         paid: session.payment_status === 'paid',
         ...(session.amount_total === null ? {} : { amount: session.amount_total }),
@@ -281,4 +291,19 @@ function interpretEvent(event: Stripe.Event): BillingEvent {
        */
       return { kind: 'other', externalId: event.id };
   }
+}
+
+/**
+ * The customer's identifier, however the vendor chose to send it.
+ *
+ * Expanded objects and bare strings both appear on the same field depending on
+ * the event and the API version, and a reader that assumes one of them silently
+ * finds nothing on half the traffic.
+ */
+function customerOf(customer: unknown): string | undefined {
+  if (typeof customer === 'string') return customer;
+  if (customer && typeof customer === 'object' && 'id' in customer) {
+    return String((customer as { id: unknown }).id);
+  }
+  return undefined;
 }

@@ -198,7 +198,7 @@ describe('reading Stripe’s answers', () => {
       const client = withSecret({
         id: 'evt_1',
         type: 'invoice.payment_failed',
-        data: { object: { id: 'in_1', amount_due: 14_900, currency: 'ron' } },
+        data: { object: { id: 'in_1', customer: 'cus_1', amount_due: 14_900, currency: 'ron' } },
       });
 
       expect(client.verify('{}', 'v1=ok')).toMatchObject({
@@ -208,6 +208,37 @@ describe('reading Stripe’s answers', () => {
         amount: 14_900,
         currency: 'RON',
       });
+    });
+
+    it('carries the customer, because an invoice’s own id is one we have never seen', () => {
+      /*
+       * The only handle an invoice event shares with anything we store. Without
+       * it the event can be verified, read and understood, and still be
+       * attributable to nobody — so an unpaid business runs on for ever with
+       * nothing in any log to say why.
+       */
+      const client = withSecret({
+        id: 'evt_4',
+        type: 'invoice.paid',
+        data: { object: { id: 'in_2', customer: 'cus_7', amount_due: 0, currency: 'ron' } },
+      });
+
+      expect(client.verify('{}', 'v1=ok')?.customer).toBe('cus_7');
+    });
+
+    it('reads the customer whether it arrives expanded or as a string', () => {
+      // Both appear on the same field depending on the event and the API
+      // version, and a reader that assumes one finds nothing on half the
+      // traffic.
+      const client = withSecret({
+        id: 'evt_5',
+        type: 'invoice.paid',
+        data: {
+          object: { id: 'in_3', customer: { id: 'cus_9' }, amount_due: 0, currency: 'ron' },
+        },
+      });
+
+      expect(client.verify('{}', 'v1=ok')?.customer).toBe('cus_9');
     });
 
     it('carries the tenant back from a subscription event', () => {

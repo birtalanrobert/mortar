@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/billing",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Our own revenue: plans, subscriptions, seat and usage metering, invoicing and the plan-feature gate",
   "license": "AGPL-3.0-only",
   "main": "./dist/index.js",
