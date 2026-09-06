@@ -120,14 +120,38 @@ describe('NestLoggerAdapter', () => {
 });
 
 describe('LoggingInterceptor', () => {
-  function makeContext(overrides: Record<string, unknown> = {}) {
-    const request = { method: 'GET', url: '/bookings/abc', route: { path: '/bookings/:id' } };
+  function makeContext(overrides: Record<string, unknown> = {}, url = '/bookings/abc') {
+    const request = { method: 'GET', url, route: { path: '/bookings/:id' } };
     const response = { statusCode: 200, ...overrides };
     return {
       getType: () => 'http',
       switchToHttp: () => ({ getRequest: () => request, getResponse: () => response }),
     } as unknown as ExecutionContext;
   }
+
+  it('keeps a credential out of the URL it writes down', async () => {
+    /*
+     * The exposure this closes. A signed link is often the only credential a
+     * customer without an account has, and the request log records the URL —
+     * so anybody who could read the logs could use it. Path-based redaction
+     * cannot help: the token is inside a string, under a field called `url`.
+     */
+    const { logger, lines } = capture();
+    const interceptor = new LoggingInterceptor(logger, new InMemoryMetrics());
+    const next: CallHandler = { handle: () => of({ ok: true }) };
+
+    await new Promise<void>((resolve) =>
+      interceptor
+        .intercept(makeContext({}, '/by-link?token=eyJhbGciOi.abc&from=2026-03-02'), next)
+        .subscribe({ complete: () => resolve() }),
+    );
+
+    const line = lines()[0] as { url: string };
+
+    expect(line.url).not.toContain('eyJhbGciOi.abc');
+    // And what is left is still worth reading.
+    expect(line.url).toContain('from=2026-03-02');
+  });
 
   it('logs one line on completion with duration and status', async () => {
     const { logger, lines } = capture();
