@@ -10,6 +10,7 @@ import type { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import type { Logger } from '../types';
 import type { Metrics } from '../metrics';
+import { safeUrl } from '../redaction';
 import { MORTAR_LOGGER, MORTAR_METRICS } from './tokens';
 
 /**
@@ -44,7 +45,9 @@ export class LoggingInterceptor implements NestInterceptor {
       const fields = {
         method,
         route,
-        url: request?.url,
+        // The credentials stripped out of it. A signed link's token in a log
+        // line is a credential anybody with log access can use.
+        url: safeUrl(request?.url),
         statusCode,
         durationMs: Math.round(durationMs * 1000) / 1000,
       };

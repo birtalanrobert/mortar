@@ -57,3 +57,68 @@ export function buildRedactionPaths(extra: readonly string[] = []): string[] {
   }
   return [...paths];
 }
+
+/**
+ * Query-string parameters whose *value* is a credential.
+ *
+ * Path-based redaction cannot help here: the URL is logged as one string under
+ * a field called `url`, and a signed link's token sits inside it. Anybody who
+ * can read the logs can then read, move or cancel the booking it points at —
+ * and a signed link is often the *only* credential a customer without an
+ * account has.
+ *
+ * Matched case-insensitively, and on the whole parameter name, so `token`
+ * catches `token` and `access_token` catches itself without `tokenCount`
+ * becoming unreadable.
+ */
+const CREDENTIAL_PARAMETERS = new Set([
+  'token',
+  'access_token',
+  'refresh_token',
+  'id_token',
+  'code',
+  'secret',
+  'apikey',
+  'api_key',
+  'key',
+  'password',
+  'signature',
+  'sig',
+  'session',
+]);
+
+/**
+ * A URL safe to write down.
+ *
+ * Keeps the path and every ordinary parameter — a log line with the query
+ * stripped entirely is one nobody can debug from — and replaces only the values
+ * that are credentials.
+ *
+ * Deliberately string-in, string-out and tolerant of a malformed URL: this runs
+ * on the logging path of every request, and a logger that throws is worse than
+ * one that logs a little too much.
+ */
+export function safeUrl(url: string | undefined): string | undefined {
+  if (!url) return url;
+
+  const split = url.indexOf('?');
+  if (split === -1) return url;
+
+  const path = url.slice(0, split);
+  const query = url.slice(split + 1);
+
+  const cleaned = query
+    .split('&')
+    .map((pair) => {
+      const equals = pair.indexOf('=');
+      if (equals === -1) return pair;
+
+      const name = pair.slice(0, equals);
+      return CREDENTIAL_PARAMETERS.has(decodeURIComponent(name).toLowerCase())
+        ? `${name}=${REDACTED}`
+        : pair;
+    })
+    .join('&');
+
+  return `${path}?${cleaned}`;
+}
