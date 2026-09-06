@@ -3,6 +3,8 @@ import type { DataSource, EntityManager } from 'typeorm';
 import { InboundAddress, type InboundAddressOptions } from './address';
 import type { InboundMessage } from './inbound/message';
 import { MessageLog } from './message-log.entity';
+import { Suppression } from './suppression.entity';
+import { REFUSALS_BEFORE_SUPPRESSING, suppressionExpiry } from './suppression';
 import {
   MAX_ATTACHMENT_BYTES,
   type Channel,
@@ -99,6 +101,50 @@ export class CommsService {
           settledAt: new Date(),
         }),
       );
+    }
+
+    /*
+     * An address that has said no, before the provider is troubled.
+     *
+     * Checked here rather than by each caller, because "did this number refuse
+     * last week?" is not a question a reminder scheduler should have to
+     * remember to ask — and forgetting it costs money on every send and, at
+     * scale, a sender identity.
+     */
+    if (context.tenantId) {
+      const stopped = await this.suppressionFor(
+        context.tenantId,
+        message.channel,
+        message.to,
+        manager,
+      );
+
+      if (stopped) {
+        return repository.save(
+          repository.create({
+            tenantId: context.tenantId,
+            direction: 'outbound',
+            channel: message.channel,
+            subject: context.subject ?? null,
+            address: message.to,
+            heading: message.subject ?? null,
+            /*
+             * `discarded`, not `failed`.
+             *
+             * Nothing went wrong and nobody should be alerted: we chose not to
+             * write to somebody who asked us not to, or to a number that has
+             * refused repeatedly. A failure rate that counted these would
+             * measure the product obeying its own rules.
+             */
+            state: 'discarded',
+            detail:
+              stopped.reason === 'unsubscribed'
+                ? 'They asked not to be contacted.'
+                : `That address has refused ${stopped.failures} times. ${stopped.detail ?? ''}`.trim(),
+            settledAt: new Date(),
+          }),
+        );
+      }
     }
 
     if (!port) {
@@ -241,5 +287,138 @@ export class CommsService {
     return this.manager(manager)
       .getRepository(MessageLog)
       .find({ where: { tenantId, subject }, order: { createdAt: 'DESC' } });
+  }
+
+  // ── Addresses that have said no ──────────────────────────────────────────
+
+  /**
+   * The live suppression for an address, if there is one.
+   *
+   * An expired refusal is not one: people change telephones, and holding a
+   * number for ever over one bad fortnight loses a customer nobody meant to
+   * lose.
+   */
+  async suppressionFor(
+    tenantId: string,
+    channel: Channel,
+    address: string,
+    manager?: EntityManager,
+  ): Promise<Suppression | null> {
+    const found = await this.manager(manager)
+      .getRepository(Suppression)
+      .findOne({ where: { tenantId, channel, address } });
+
+    if (!found) return null;
+    if (found.expiresAt && found.expiresAt.getTime() <= Date.now()) return null;
+
+    return found;
+  }
+
+  /**
+   * Records that an address refused, and stops writing to it once it is clear.
+   *
+   * Counted rather than acted on immediately: one failure is a telephone
+   * switched off, and suppressing on the first would silence a customer who was
+   * on an aeroplane. The threshold and the hold are in `suppression.ts`.
+   */
+  async recordRefusal(
+    tenantId: string,
+    channel: Channel,
+    address: string,
+    detail?: string,
+    manager?: EntityManager,
+  ): Promise<Suppression> {
+    const repository = this.manager(manager).getRepository(Suppression);
+    const existing = await repository.findOne({ where: { tenantId, channel, address } });
+
+    if (!existing) {
+      return repository.save(
+        repository.create({
+          tenantId,
+          channel,
+          address,
+          reason: 'refused',
+          detail: detail ?? null,
+          failures: 1,
+          // Nothing is suppressed on the first refusal, so the hold starts only
+          // once the count says the address is genuinely gone.
+          expiresAt: new Date(0),
+        }),
+      );
+    }
+
+    /*
+     * An unsubscribe is never downgraded to a refusal.
+     *
+     * They arrive in either order — a person replies STOP and their number is
+     * later disconnected — and a refusal's ninety-day expiry would quietly
+     * resume writing to somebody who asked us to stop.
+     */
+    if (existing.reason === 'unsubscribed') return existing;
+
+    const failures = existing.failures + 1;
+
+    await repository.update(
+      { id: existing.id, tenantId },
+      {
+        failures,
+        detail: detail ?? existing.detail,
+        expiresAt:
+          failures >= REFUSALS_BEFORE_SUPPRESSING ? suppressionExpiry('refused') : new Date(0),
+      },
+    );
+
+    return (await repository.findOneOrFail({
+      where: { id: existing.id, tenantId },
+    })) as Suppression;
+  }
+
+  /**
+   * Records that a person asked not to be contacted.
+   *
+   * Immediate, permanent, and it overrides whatever was there — the opposite of
+   * a refusal in every respect, because it is a decision rather than a fact
+   * about a network.
+   */
+  async unsubscribe(
+    tenantId: string,
+    channel: Channel,
+    address: string,
+    detail?: string,
+    manager?: EntityManager,
+  ): Promise<Suppression> {
+    const repository = this.manager(manager).getRepository(Suppression);
+    const existing = await repository.findOne({ where: { tenantId, channel, address } });
+
+    if (existing) {
+      await repository.update(
+        { id: existing.id, tenantId },
+        { reason: 'unsubscribed', detail: detail ?? existing.detail, expiresAt: null },
+      );
+
+      return repository.findOneOrFail({ where: { id: existing.id, tenantId } });
+    }
+
+    return repository.save(
+      repository.create({
+        tenantId,
+        channel,
+        address,
+        reason: 'unsubscribed',
+        detail: detail ?? null,
+        failures: 0,
+        expiresAt: null,
+      }),
+    );
+  }
+
+  /** Lets an address be written to again, at the business's request. */
+  async allowAgain(
+    tenantId: string,
+    channel: Channel,
+    address: string,
+    manager?: EntityManager,
+  ): Promise<void> {
+    await this.manager(manager).getRepository(Suppression).delete({ tenantId, channel, address });
   }
 }

@@ -4,7 +4,9 @@ import type { DataSource } from 'typeorm';
 import { CommsService } from './comms.service';
 import { parseMime } from './inbound/mime';
 import { MessageLog } from './message-log.entity';
+import { Suppression } from './suppression.entity';
 import { CreateMessageLog1787813849846 } from './migrations/1787813849846-CreateMessageLog';
+import { CreateSuppressions1790400000000 } from './migrations/1790400000000-CreateSuppressions';
 import { NoopMessagePort, type MessagePort } from './outbound/port';
 
 const TENANT = '11111111-1111-4111-8111-111111111111';
@@ -13,12 +15,13 @@ const SECRET = 'a-secret-that-is-at-least-thirty-two-characters';
 let dataSource: DataSource;
 
 beforeEach(async () => {
-  dataSource ??= await createTestDataSource([MessageLog], {
+  dataSource ??= await createTestDataSource([MessageLog, Suppression], {
     // The real migration, not `synchronize`: the partial unique index is the
     // part that matters here and synchronize does not create it.
-    migrations: [CreateMessageLog1787813849846],
+    migrations: [CreateMessageLog1787813849846, CreateSuppressions1790400000000],
   });
   await dataSource.getRepository(MessageLog).clear();
+  await dataSource.getRepository(Suppression).clear();
 });
 
 afterAll(async () => {
@@ -307,5 +310,90 @@ describe('without inbound configured', () => {
     const comms = new CommsService(dataSource, {});
 
     expect(comms.inboundAddressFor('request-1')).toBeUndefined();
+  });
+});
+
+describe('addresses that have said no', () => {
+  const TENANT = '11111111-1111-4111-8111-111111111111';
+
+  it('writes to a number that has refused once, because it may be switched off', async () => {
+    /*
+     * One failure is a telephone in a tunnel. Suppressing on the first would
+     * silence a customer who was on an aeroplane, and they would never know.
+     */
+    const comms = service();
+
+    await comms.recordRefusal(TENANT, 'sms', '+40722000001', 'unreachable');
+
+    const sent = await comms.send(
+      { channel: 'sms', to: '+40722000001', text: 'Reminder' },
+      { tenantId: TENANT },
+    );
+
+    expect(sent.state).not.toBe('discarded');
+  });
+
+  it('stops after enough refusals, and says how many', async () => {
+    const comms = service();
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await comms.recordRefusal(TENANT, 'sms', '+40722000002', '21610: unsubscribed recipient');
+    }
+
+    const sent = await comms.send(
+      { channel: 'sms', to: '+40722000002', text: 'Reminder' },
+      { tenantId: TENANT },
+    );
+
+    /*
+     * `discarded`, not `failed`. Nothing went wrong: we chose not to write to a
+     * number that keeps refusing. A failure rate counting these would measure
+     * the product obeying its own rules.
+     */
+    expect(sent.state).toBe('discarded');
+    expect(sent.detail).toContain('refused 3 times');
+    // The provider's own words, because "suppressed" is not something a
+    // business can act on.
+    expect(sent.detail).toContain('21610');
+  });
+
+  it('stops immediately when a person asks, and never resumes', async () => {
+    const comms = service();
+
+    await comms.unsubscribe(TENANT, 'sms', '+40722000003', 'STOP');
+
+    const sent = await comms.send(
+      { channel: 'sms', to: '+40722000003', text: 'Reminder' },
+      { tenantId: TENANT },
+    );
+
+    expect(sent.state).toBe('discarded');
+    expect(sent.detail).toContain('asked not to be contacted');
+
+    // And a later refusal does not downgrade it to something that expires.
+    await comms.recordRefusal(TENANT, 'sms', '+40722000003', 'unreachable');
+    expect((await comms.suppressionFor(TENANT, 'sms', '+40722000003'))?.expiresAt).toBeNull();
+  });
+
+  it('is one business’s decision, not everybody’s', async () => {
+    /*
+     * A customer telling one salon to stop has not told the salon down the road
+     * anything — and a shared list would reveal that the two share a customer.
+     */
+    const other = '22222222-2222-4222-8222-222222222222';
+    const comms = service();
+
+    await comms.unsubscribe(TENANT, 'sms', '+40722000004', 'STOP');
+
+    expect(await comms.suppressionFor(other, 'sms', '+40722000004')).toBeNull();
+  });
+
+  it('lets a business put an address back', async () => {
+    const comms = service();
+
+    await comms.unsubscribe(TENANT, 'sms', '+40722000005', 'STOP');
+    await comms.allowAgain(TENANT, 'sms', '+40722000005');
+
+    expect(await comms.suppressionFor(TENANT, 'sms', '+40722000005')).toBeNull();
   });
 });

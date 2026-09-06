@@ -1,5 +1,7 @@
 import { MessageLog } from './message-log.entity';
 import { CreateMessageLog1787813849846 } from './migrations/1787813849846-CreateMessageLog';
+import { Suppression } from './suppression.entity';
+import { CreateSuppressions1790400000000 } from './migrations/1790400000000-CreateSuppressions';
 
 export { InboundAddress, type InboundAddressOptions, type ParsedAddress } from './address';
 
@@ -27,8 +29,15 @@ export { ResendInbound, type ResendInboundOptions, type VerifiedEvent } from './
 export { TwilioReceipts, type TwilioReceipt, type TwilioStatusCallback } from './receipts/twilio';
 
 export { MessageLog, type MessageDirection, type MessageState } from './message-log.entity';
-export { CreateMessageLog1787813849846 };
+export { Suppression, type SuppressionReason } from './suppression.entity';
+export {
+  isStopRequest,
+  suppressionExpiry,
+  REFUSALS_BEFORE_SUPPRESSING,
+  REFUSAL_HOLDS_FOR_DAYS,
+} from './suppression';
+export { CreateMessageLog1787813849846, CreateSuppressions1790400000000 };
 
 /** Everything the consuming service must register with TypeORM. */
-export const commsEntities = [MessageLog];
-export const commsMigrations = [CreateMessageLog1787813849846];
+export const commsEntities = [MessageLog, Suppression];
+export const commsMigrations = [CreateMessageLog1787813849846, CreateSuppressions1790400000000];
