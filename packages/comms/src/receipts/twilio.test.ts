@@ -107,3 +107,30 @@ describe('Twilio delivery receipts', () => {
     expect(receipts.verify(URL, params, sign(URL, params))).toBeUndefined();
   });
 });
+
+describe('an inbound message, which is signed the same way', () => {
+  const receipts = new TwilioReceipts(TOKEN);
+  const url = 'https://api.example.com/webhooks/sms/inbound';
+  const inbound = { From: '+40722123456', To: '+40700000000', Body: 'STOP' };
+
+  it('accepts a genuine signature without trying to read it as a receipt', () => {
+    /*
+     * `verify` would refuse this: there is no `MessageStatus` to interpret. The
+     * signature is the one part that is security rather than parsing, and a
+     * second implementation of it is a second thing to get wrong.
+     */
+    expect(receipts.verifySignature(url, inbound, sign(url, inbound))).toBe(true);
+  });
+
+  it('refuses a forged one, and one with no signature at all', () => {
+    expect(receipts.verifySignature(url, inbound, 'not-it')).toBe(false);
+    expect(receipts.verifySignature(url, inbound, undefined)).toBe(false);
+  });
+
+  it('refuses when the body has been changed after signing', () => {
+    // The whole point: the signature covers every parameter, so an attacker
+    // cannot turn somebody else's "hello" into a "STOP".
+    const signature = sign(url, inbound);
+    expect(receipts.verifySignature(url, { ...inbound, Body: 'hello' }, signature)).toBe(false);
+  });
+});

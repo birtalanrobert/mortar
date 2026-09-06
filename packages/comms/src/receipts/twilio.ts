@@ -57,21 +57,36 @@ export class TwilioReceipts {
     params: TwilioStatusCallback,
     signature: string | undefined,
   ): TwilioReceipt | undefined {
-    if (!signature) return undefined;
+    return this.verifySignature(url, params, signature) ? interpret(params) : undefined;
+  }
+
+  /**
+   * Whether a request really came from Twilio, without interpreting it.
+   *
+   * An **inbound message** is signed the same way and says something else
+   * entirely — `From`, `Body`, a person replying "STOP". Reusing `verify` for
+   * one would refuse it, because there is no `MessageStatus` to interpret; and
+   * a second implementation of the signature is a second thing to get wrong
+   * about the one part of this that is security rather than parsing.
+   */
+  verifySignature(
+    url: string,
+    params: Record<string, string | undefined>,
+    signature: string | undefined,
+  ): boolean {
+    if (!signature) return false;
 
     const expected = this.sign(url, params);
     const offered = Buffer.from(signature);
     const computed = Buffer.from(expected);
 
-    if (offered.length !== computed.length || !timingSafeEqual(offered, computed)) {
-      return undefined;
-    }
-
-    return interpret(params);
+    // Length first: `timingSafeEqual` throws on a mismatch rather than
+    // answering, and a thrown error is a different response from a false one.
+    return offered.length === computed.length && timingSafeEqual(offered, computed);
   }
 
   /** Twilio's own scheme, and the only reason it is here rather than inline. */
-  private sign(url: string, params: TwilioStatusCallback): string {
+  private sign(url: string, params: Record<string, string | undefined>): string {
     const payload = Object.keys(params)
       .sort()
       .reduce((joined, key) => joined + key + (params[key] ?? ''), url);
