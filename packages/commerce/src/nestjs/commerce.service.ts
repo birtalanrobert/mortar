@@ -126,6 +126,9 @@ export class CommerceService {
       existing?.externalId ?? null,
       options.country,
       options.email,
+      // Written into the provider's metadata at creation, so an account event
+      // months later can say whose it is.
+      tenantId,
     );
 
     await this.saveAccount(tenantId, account);
@@ -175,6 +178,7 @@ export class CommerceService {
     }
 
     const result = await this.provider.charge({
+      tenantId,
       account: account.externalId,
       amount: input.amount,
       currency: input.currency,
@@ -241,6 +245,7 @@ export class CommerceService {
     const existing = await this.savedCards(tenantId, input.subject);
 
     const result = await this.provider.saveCard({
+      tenantId,
       subject: input.subject,
       reference: input.reference,
       // Reuse the customer this person already has, so a second card joins the
@@ -541,37 +546,47 @@ export class CommerceService {
    * books.
    */
   async settle(event: ProviderEvent): Promise<Payment | PayoutAccount | undefined> {
+    /*
+     * The tenant comes from the metadata we wrote on the way out, and there is
+     * no fallback.
+     *
+     * The obvious alternative — look the provider's identifier up in our own
+     * table — **cannot work here**, and fails in the worst way: every one of
+     * these tables is under `FORCE ROW LEVEL SECURITY`, so a query with no
+     * tenant bound returns *no rows at all* rather than an error. The webhook
+     * then verifies, reads, understands and changes nothing, and the only
+     * evidence is a payment stuck in whatever state it was in.
+     *
+     * An event with no tenant on it is about something this deployment did not
+     * create — another environment sharing the provider account — and ignoring
+     * it is the right answer rather than a limitation.
+     */
+    const tenantId = event.tenantId;
+    if (!tenantId) return undefined;
+
     if (event.kind === 'account' && event.accountStatus) {
-      const rows = await this.dataSource.query<Array<{ tenant_id: string }>>(
-        `SELECT "tenant_id" FROM "mortar_payout_accounts" WHERE "external_id" = $1`,
-        [event.externalId],
-      );
-
-      const tenantId = rows[0]?.tenant_id;
-      if (!tenantId) return undefined;
-
       await this.saveAccount(tenantId, event.accountStatus);
       return (await this.payoutAccount(tenantId)) ?? undefined;
     }
 
     if (event.kind !== 'payment' || !event.state) return undefined;
 
-    /*
-     * Found by the provider's identifier, which is the only thing both sides
-     * share — and read without a tenant because a webhook does not carry one.
-     * The row itself says whose it is.
-     */
-    const rows = await this.dataSource.query<Array<{ id: string; tenant_id: string }>>(
-      `SELECT "id", "tenant_id" FROM "mortar_payments" WHERE "external_id" = $1`,
-      [event.externalId],
+    // Inside the tenant's own policy, which is the only way this table can be
+    // read at all.
+    const found = await runInTenantTransaction(
+      this.dataSource,
+      (scoped) =>
+        scoped
+          .getRepository(Payment)
+          .findOne({ where: { tenantId, externalId: event.externalId } }),
+      { tenantId },
     );
 
-    const found = rows[0];
     if (!found) return undefined;
 
     const state = event.state === 'refunded' ? 'refunded' : event.state;
 
-    return this.update(found.tenant_id, found.id, {
+    return this.update(tenantId, found.id, {
       state,
       ...(state === 'captured' ? { takenAt: new Date() } : {}),
       ...(event.instrument ? { instrument: event.instrument } : {}),

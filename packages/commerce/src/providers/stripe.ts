@@ -46,6 +46,7 @@ export class StripeConnect implements PaymentProvider {
     externalId: string | null,
     country: string,
     email?: string,
+    tenantId?: string,
   ): Promise<ProviderAccount> {
     const account = externalId
       ? await this.stripe.accounts.retrieve(externalId)
@@ -53,6 +54,9 @@ export class StripeConnect implements PaymentProvider {
           type: 'express',
           country,
           ...(email ? { email } : {}),
+          // Written once, at creation, so an account event months later can say
+          // whose it is without a lookup that row-level security would refuse.
+          ...(tenantId ? { metadata: { tenant: tenantId } } : {}),
           capabilities: { card_payments: { requested: true }, transfers: { requested: true } },
         });
 
@@ -116,7 +120,15 @@ export class StripeConnect implements PaymentProvider {
             : {}),
           // Carried through so a webhook can be matched back to what it paid
           // for without a lookup table of our own.
-          metadata: { subject: request.subject },
+          /*
+           * The tenant as well as the subject.
+           *
+           * A webhook names the provider's identifiers and nothing of ours, and
+           * the table that could translate one into the other is under
+           * row-level security — so a lookup with no tenant returns nothing at
+           * all. This is what makes an event attributable.
+           */
+          metadata: { subject: request.subject, tenant: request.tenantId },
           /*
            * Only where a card still has to be entered. Offering a redirect
            * method to a charge that is already confirmed against a stored card
@@ -165,7 +177,7 @@ export class StripeConnect implements PaymentProvider {
       request.customer ??
       (
         await this.stripe.customers.create(
-          { metadata: { subject: request.subject } },
+          { metadata: { subject: request.subject, tenant: request.tenantId } },
           { idempotencyKey: `customer-${request.reference}` },
         )
       ).id;
@@ -175,7 +187,7 @@ export class StripeConnect implements PaymentProvider {
         customer,
         usage: 'off_session',
         payment_method_types: ['card'],
-        metadata: { subject: request.subject },
+        metadata: { subject: request.subject, tenant: request.tenantId },
       },
       { idempotencyKey: request.reference },
     );
@@ -311,6 +323,7 @@ function interpretEvent(event: Stripe.Event): ProviderEvent {
       const result = interpretIntent(intent);
 
       return {
+        ...(intent.metadata?.tenant ? { tenantId: intent.metadata.tenant } : {}),
         kind: 'payment',
         externalId: intent.id,
         state:
@@ -335,7 +348,13 @@ function interpretEvent(event: Stripe.Event): ProviderEvent {
 
     case 'account.updated': {
       const account = event.data.object as Stripe.Account;
-      return { kind: 'account', externalId: account.id, accountStatus: interpretAccount(account) };
+
+      return {
+        kind: 'account',
+        externalId: account.id,
+        ...(account.metadata?.tenant ? { tenantId: account.metadata.tenant } : {}),
+        accountStatus: interpretAccount(account),
+      };
     }
 
     default:

@@ -253,14 +253,23 @@ function interpretEvent(event: Stripe.Event): BillingEvent {
     case 'invoice.payment_failed': {
       const invoice = event.data.object as Stripe.Invoice;
 
+      /*
+       * The subscription's metadata, snapshotted onto the invoice.
+       *
+       * This is where our `tenant:<id>` subject survives to, and it is the only
+       * thing that makes an invoice event attributable: the invoice's own
+       * identifier is one we have never seen, and the table that could
+       * translate the customer into a tenant is under `FORCE ROW LEVEL
+       * SECURITY` — so a lookup with no tenant bound returns *no rows* rather
+       * than an error, and the event changes nothing while appearing handled.
+       */
+      const details = (invoice as { subscription_details?: { metadata?: Stripe.Metadata | null } })
+        .subscription_details;
+
       return {
         kind: 'invoice',
         externalId: invoice.id ?? '',
-        /*
-         * The customer, because it is the only handle this event shares with
-         * anything we store — an invoice's own identifier is one we have never
-         * seen, and without this the event is attributable to nobody.
-         */
+        ...(details?.metadata?.subject ? { subject: details.metadata.subject } : {}),
         ...(customerOf(invoice.customer) ? { customer: customerOf(invoice.customer)! } : {}),
         paid: event.type === 'invoice.paid',
         amount: invoice.amount_due,

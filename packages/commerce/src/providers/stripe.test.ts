@@ -73,6 +73,7 @@ describe('reading Stripe’s answers', () => {
       connect({
         paymentIntents: { create: vi.fn().mockResolvedValue(intent) },
       }).charge({
+        tenantId: 'tenant-1',
         account: 'acct_1',
         amount: 4_500,
         currency: 'RON',
@@ -129,6 +130,7 @@ describe('reading Stripe’s answers', () => {
       });
 
       const result = await refused.charge({
+        tenantId: 'tenant-1',
         account: 'acct_1',
         amount: 4_500,
         currency: 'RON',
@@ -148,6 +150,7 @@ describe('reading Stripe’s answers', () => {
       const create = vi.fn().mockResolvedValue({ id: 'pi_1', status: 'succeeded' });
 
       await connect({ paymentIntents: { create } }).charge({
+        tenantId: 'tenant-1',
         account: 'acct_business',
         amount: 4_500,
         currency: 'RON',
@@ -173,6 +176,17 @@ describe('reading Stripe’s answers', () => {
       // And the provider's own idempotency, so a double submit on a slow
       // connection does not charge somebody twice.
       expect(options.idempotencyKey).toBe('ref-1');
+
+      /*
+       * The tenant, in the provider's metadata.
+       *
+       * The only thing that ties a webhook back to a business: every table
+       * that could translate a provider's identifier into a tenant is under
+       * `FORCE ROW LEVEL SECURITY`, so a lookup with no tenant bound returns
+       * *no rows* rather than an error — and the event changes nothing while
+       * appearing to have been handled.
+       */
+      expect(body.metadata).toMatchObject({ tenant: 'tenant-1' });
     });
 
     it('hands back what the browser needs to finish paying', async () => {
@@ -196,6 +210,7 @@ describe('reading Stripe’s answers', () => {
       const create = vi.fn().mockResolvedValue({ id: 'pi_2', status: 'succeeded' });
 
       await connect({ paymentIntents: { create } }).charge({
+        tenantId: 'tenant-1',
         account: 'acct_business',
         customer: 'cus_1',
         paymentMethod: 'pm_1',
@@ -236,7 +251,7 @@ describe('reading Stripe’s answers', () => {
       const result = await connect({
         customers,
         setupIntents: { create },
-      }).saveCard({ subject: 'customer:7', reference: 'card-7' });
+      }).saveCard({ tenantId: 'tenant-1', subject: 'customer:7', reference: 'card-7' });
 
       expect(result.customer).toBe('cus_new');
       expect(result.clientSecret).toBe('seti_1_secret_x');
@@ -254,7 +269,12 @@ describe('reading Stripe’s answers', () => {
       await connect({
         customers,
         setupIntents: { create: vi.fn().mockResolvedValue({ id: 'seti_2', client_secret: 's' }) },
-      }).saveCard({ subject: 'customer:7', customer: 'cus_existing', reference: 'card-8' });
+      }).saveCard({
+        tenantId: 'tenant-1',
+        subject: 'customer:7',
+        customer: 'cus_existing',
+        reference: 'card-8',
+      });
 
       // Otherwise a person acquires a stranger with their own name every time
       // they add a card, and their first one becomes unreachable.
@@ -356,6 +376,33 @@ describe('reading Stripe’s answers', () => {
       expect(connect.verify('{}', 'v1=ok')).toMatchObject({
         externalId: 'pi_1',
         state: 'refunded',
+      });
+    });
+
+    it('reads the tenant back out of a payment event', () => {
+      /*
+       * The round trip that makes a webhook actionable at all. Without it the
+       * event names Stripe's identifiers and nothing of ours, and every table
+       * that could translate between them refuses an unbound read.
+       */
+      const connect = withSecret(
+        vi.fn().mockReturnValue({
+          type: 'payment_intent.succeeded',
+          id: 'evt_9',
+          data: {
+            object: {
+              id: 'pi_9',
+              status: 'succeeded',
+              metadata: { tenant: 'tenant-1', subject: 'booking:7' },
+            },
+          },
+        }),
+      );
+
+      expect(connect.verify('{}', 'v1=ok')).toMatchObject({
+        kind: 'payment',
+        externalId: 'pi_9',
+        tenantId: 'tenant-1',
       });
     });
 

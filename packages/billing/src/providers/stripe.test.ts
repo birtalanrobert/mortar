@@ -210,6 +210,31 @@ describe('reading Stripe’s answers', () => {
       });
     });
 
+    it('carries the tenant from the subscription’s metadata onto the invoice', () => {
+      /*
+       * The only thing that makes an invoice event actionable. Its own
+       * identifier is one we have never seen, and the subscriptions table that
+       * could translate the customer into a tenant is under row-level security
+       * — an unbound read of it returns *no rows* rather than an error, so the
+       * event would verify, read, be understood and change nothing.
+       */
+      const client = withSecret({
+        id: 'evt_6',
+        type: 'invoice.payment_failed',
+        data: {
+          object: {
+            id: 'in_4',
+            customer: 'cus_1',
+            amount_due: 14_900,
+            currency: 'ron',
+            subscription_details: { metadata: { subject: 'tenant:abc' } },
+          },
+        },
+      });
+
+      expect(client.verify('{}', 'v1=ok')?.subject).toBe('tenant:abc');
+    });
+
     it('carries the customer, because an invoice’s own id is one we have never seen', () => {
       /*
        * The only handle an invoice event shares with anything we store. Without

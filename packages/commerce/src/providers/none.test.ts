@@ -22,6 +22,7 @@ describe('no payment provider at all', () => {
 
   it('refuses a charge instead of quietly reporting success', async () => {
     const result = await provider.charge({
+      tenantId: 'tenant-1',
       account: 'acct_1',
       amount: 5_000,
       currency: 'RON',

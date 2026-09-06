@@ -342,7 +342,7 @@ export class BillingService {
    */
   async settle(event: BillingEvent): Promise<boolean> {
     if (event.kind === 'subscription' && event.subscription) {
-      const tenantId = await this.tenantFor(event);
+      const tenantId = this.tenantFor(event);
       if (!tenantId) return false;
 
       await this.remember(tenantId, {
@@ -360,7 +360,7 @@ export class BillingService {
     }
 
     if (event.kind === 'invoice') {
-      const tenantId = await this.tenantFor(event);
+      const tenantId = this.tenantFor(event);
       if (!tenantId) return false;
 
       await this.remember(tenantId, {
@@ -384,27 +384,22 @@ export class BillingService {
    * provider's identifier otherwise — read unbound, because a webhook carries
    * no tenant and the row itself says whose it is.
    */
-  private async tenantFor(event: BillingEvent): Promise<string | null> {
-    if (event.subject?.startsWith('tenant:')) return event.subject.slice('tenant:'.length);
-
+  private tenantFor(event: BillingEvent): string | null {
     /*
-     * By the customer first, then the subscription.
+     * From the metadata we set on the way out, and nowhere else.
      *
-     * An **invoice** event's own identifier is the invoice's, which we have
-     * never seen — the customer is the only handle it shares with anything we
-     * store. Matching on `externalId` alone meant an unpaid invoice could be
-     * verified, read and understood, and still attributed to nobody, so the
-     * business ran unpaid for ever with nothing in any log to say why.
+     * The obvious alternative — look the provider's customer up in our own
+     * subscriptions table — **cannot work**, and fails in the worst way:
+     * `mortar_subscriptions` is under `FORCE ROW LEVEL SECURITY`, so a query
+     * with no tenant bound returns *no rows at all* rather than an error. The
+     * webhook then verifies, reads, understands and changes nothing, and the
+     * only evidence is a business that runs unpaid for ever.
+     *
+     * A subscription carries the subject because we put it there; an invoice
+     * carries a snapshot of the subscription's metadata for the same reason.
+     * An event with neither is about something this deployment did not create.
      */
-    const rows = await this.dataSource.query<Array<{ tenant_id: string }>>(
-      `SELECT "tenant_id" FROM "mortar_subscriptions"
-        WHERE ($1::text IS NOT NULL AND "customer_ref" = $1)
-           OR "external_id" = $2
-        LIMIT 1`,
-      [event.customer ?? null, event.externalId],
-    );
-
-    return rows[0]?.tenant_id ?? null;
+    return event.subject?.startsWith('tenant:') ? event.subject.slice('tenant:'.length) : null;
   }
 
   /** Creates or updates the one subscription row this tenant has. */

@@ -33,6 +33,16 @@ export interface OnboardingLink {
 }
 
 export interface ChargeRequest {
+  /**
+   * Whose charge this is, carried into the provider's own metadata.
+   *
+   * **The only thing that ties a webhook back to a tenant.** A provider's
+   * event names the provider's identifiers and nothing of ours, and the tables
+   * that could translate one into the other are under row-level security — so
+   * an unbound lookup returns *nothing*, silently, and the event changes
+   * nothing while appearing to have been handled.
+   */
+  readonly tenantId: string;
   /** The business being paid, as the provider knows it. */
   readonly account: string;
   /**
@@ -94,6 +104,8 @@ export interface ChargeResult {
 
 /** A card being stored for later, rather than charged now. */
 export interface SaveCardRequest {
+  /** Whose card this is. See `ChargeRequest.tenantId`. */
+  readonly tenantId: string;
   /** An existing customer to attach it to, where the person already has one. */
   readonly customer?: string;
   /** What it is being saved for, carried through for matching a webhook back. */
@@ -131,6 +143,14 @@ export interface RefundRequest {
 export interface ProviderEvent {
   readonly kind: 'payment' | 'account' | 'other';
   readonly externalId: string;
+  /**
+   * Whose it is, read back from the metadata we set on the way out.
+   *
+   * Absent means the event is about something this deployment did not create —
+   * another environment sharing the provider account — and the right response
+   * is to ignore it rather than to go looking.
+   */
+  readonly tenantId?: string;
   readonly state?: 'authorized' | 'captured' | 'failed' | 'refunded';
   readonly accountStatus?: ProviderAccount;
   readonly instrument?: string;
@@ -143,8 +163,18 @@ export interface PaymentProvider {
   /** Starts or resumes onboarding, and says where to send the business. */
   onboard(tenantId: string, returnUrl: string, refreshUrl: string): Promise<OnboardingLink>;
 
-  /** Creates the account if there is none, and reports where it stands. */
-  account(externalId: string | null, country: string, email?: string): Promise<ProviderAccount>;
+  /**
+   * Creates the account if there is none, and reports where it stands.
+   *
+   * `tenantId` is written into the provider's metadata when an account is
+   * created, so that an account webhook months later can say whose it is.
+   */
+  account(
+    externalId: string | null,
+    country: string,
+    email?: string,
+    tenantId?: string,
+  ): Promise<ProviderAccount>;
 
   charge(request: ChargeRequest): Promise<ChargeResult>;
 
