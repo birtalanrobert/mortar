@@ -33,6 +33,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
  */
 const BROWSER_IMPORTED = new Set([
   '@birtalanrobert/billing',
+  '@birtalanrobert/calendars',
   '@birtalanrobert/commerce',
   '@birtalanrobert/config',
   '@birtalanrobert/http',

@@ -1,0 +1,5 @@
+{
+  "main": "../dist/providers/microsoft.js",
+  "types": "../dist/providers/microsoft.d.ts",
+  "sideEffects": false
+}

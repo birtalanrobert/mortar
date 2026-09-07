@@ -39,3 +39,5 @@ export {
   type DatabaseModuleOptions,
 } from './nest';
 export { TEST_DATABASE_URL, createTestDataSource, isTestDatabaseAvailable } from './testing';
+
+export { isSealed, openSecret, sealSecret, sealingKey, secretsMatch } from './sealed';

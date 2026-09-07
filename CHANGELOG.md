@@ -4,6 +4,41 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## calendars 1.0.0
+
+### Added
+
+- Two-way calendar sync for projects 02 and 08. **The rules come first**,
+  because a one-way feed cannot corrupt the diary it exports and a sync can: the
+  diary owns appointments and the external calendar holds a copy, the external
+  calendar owns everything else and we never touch it, and disconnecting leaves
+  every appointment exactly where it was. "Last write wins" is what this refuses
+  to be.
+- `driftOf` recognises a copy somebody moved, renamed or deleted, and the next
+  sync puts it back. `busyFrom` merges their events into the stretches of
+  unavailable time a diary should hold — skipping our own copies, anything
+  marked free, and cancelled events providers keep returning.
+- Adapters for Google Calendar and Microsoft Graph through the vendors' own
+  clients, behind `/google` and `/microsoft` so a product using one does not
+  install the other's SDK. Refresh tokens are sealed with AES-256-GCM.
+- Their events are never stored: read in a window, turned into busy periods,
+  forgotten. And `pull` _returns_ those periods rather than writing into a
+  product's own diary — a shared package with a foreign key into a product's
+  tables is not a shared package.
+
+## database 1.1.0
+
+### Added
+
+- `sealSecret` / `openSecret`: AES-256-GCM for a credential that has to live in
+  a column — a third-party refresh token, a provider key. Authenticated, so a
+  tampered value fails to open rather than decrypting to rubbish some code path
+  then uses as a credential; versioned, so the algorithm can change without
+  making old rows unreadable; and `sealingKey` refuses a key of the wrong length
+  loudly, because a silently padded one works until the day it does not.
+- `secretsMatch`, for comparing a presented secret against a stored one in
+  constant time.
+
 ## vouchers 1.0.0
 
 ### Added

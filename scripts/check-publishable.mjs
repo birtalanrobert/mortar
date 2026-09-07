@@ -24,8 +24,18 @@ const RULES = [
   },
   {
     name: 'non-public hostname',
-    // Anything that is not localhost, a reserved documentation domain
-    // (including its subdomains), or ours.
+    /*
+     * Anything that is not localhost, a reserved documentation domain
+     * (including its subdomains), ours, or a **vendor's own public API
+     * endpoint**.
+     *
+     * That last group is the distinction this rule is actually about. It exists
+     * to catch an internal hostname — a staging box, a customer's server, a
+     * private registry — that somebody pasted into a package. `googleapis.com`
+     * is none of those: it is where Google's API lives, it is in Google's own
+     * documentation, and a package that talks to Google has to name it. The
+     * list already allowed `aka.ms` for the same reason.
+     */
     pattern: new RegExp(
       'https?://(?!' +
         [
@@ -39,6 +49,9 @@ const RULES = [
           'github\\.com',
           'aka\\.ms',
           'vite\\.dev',
+          '(?:[a-z0-9-]+\\.)*googleapis\\.com',
+          'login\\.microsoftonline\\.com',
+          'graph\\.microsoft\\.com',
         ].join('|') +
         ')[a-z0-9.-]+\\.[a-z]{2,}',
       'i',

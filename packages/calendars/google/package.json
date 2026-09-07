@@ -1,0 +1,5 @@
+{
+  "main": "../dist/providers/google.js",
+  "types": "../dist/providers/google.d.ts",
+  "sideEffects": false
+}
