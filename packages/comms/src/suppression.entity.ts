@@ -41,7 +41,7 @@ export class Suppression extends BaseEntity {
   tenantId!: string;
 
   @Column('varchar', { length: 8 })
-  channel!: 'email' | 'sms';
+  channel!: 'email' | 'sms' | 'whatsapp';
 
   /** As the provider was given it: E.164, or the email address. */
   @Column('varchar', { length: 320 })

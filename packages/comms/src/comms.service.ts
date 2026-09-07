@@ -112,12 +112,20 @@ export class CommsService {
      * scale, a sender identity.
      */
     if (context.tenantId) {
-      const stopped = await this.suppressionFor(
-        context.tenantId,
-        message.channel,
-        message.to,
-        manager,
-      );
+      /*
+       * The channel asked for, and the one the port may divert to.
+       *
+       * A port that falls back — WhatsApp to SMS — would otherwise write to
+       * somebody who replied STOP to a text, because their refusal is recorded
+       * against `sms` and the message was addressed to `whatsapp`. Both are
+       * checked, and either one stops it: we cannot promise which channel will
+       * carry it, so we must honour the answer on both.
+       */
+      const stopped =
+        (await this.suppressionFor(context.tenantId, message.channel, message.to, manager)) ??
+        (port?.fallbackChannel
+          ? await this.suppressionFor(context.tenantId, port.fallbackChannel, message.to, manager)
+          : null);
 
       if (stopped) {
         return repository.save(
@@ -170,7 +178,9 @@ export class CommsService {
         repository.create({
           tenantId: context.tenantId ?? null,
           direction: 'outbound',
-          channel: message.channel,
+          // What carried it, which is not always what was asked for: a port may
+          // divert, and the log is the answer to "how did this reach them?".
+          channel: result.channel ?? message.channel,
           subject: context.subject ?? null,
           providerMessageId: result.providerMessageId ?? null,
           address: message.to,

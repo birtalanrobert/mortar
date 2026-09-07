@@ -1,6 +1,14 @@
 import { randomUUID } from 'node:crypto';
 
-export type Channel = 'email' | 'sms';
+/**
+ * How a message travels.
+ *
+ * `whatsapp` is not simply a third kind of text message: outside twenty-four
+ * hours of the customer's last message only a **pre-approved template** may be
+ * sent, and it is billed per conversation rather than per segment. Both facts
+ * shape `OutboundMessage.template` and what a port returns.
+ */
+export type Channel = 'email' | 'sms' | 'whatsapp';
 
 export interface OutboundAttachment {
   /** What the recipient's mail client shows and saves it as. */
@@ -35,6 +43,25 @@ export interface OutboundMessage {
   /** Carried through to the provider so a delivery receipt can be matched up. */
   reference?: string;
   /**
+   * The approved template to send, where the channel requires one.
+   *
+   * WhatsApp only permits free-form text within twenty-four hours of the
+   * customer's own last message, so anything a business initiates — a reminder,
+   * a confirmation — must be a template Meta approved in advance, with its
+   * variables filled in. Ignored by the SMS and email ports, which have no such
+   * rule.
+   *
+   * `text` is still required and still sent to the log: what a business needs
+   * to read back months later is **the words that went out**, not a pointer to
+   * a template that has since been edited.
+   */
+  template?: {
+    /** The provider's identifier for the approved template. */
+    id: string;
+    /** Values for its placeholders, by the provider's own key. */
+    variables?: Record<string, string>;
+  };
+  /**
    * Files to attach. Email only; SMS ports ignore them.
    *
    * Bounded by `MAX_ATTACHMENT_BYTES` and refused above it rather than left for
@@ -53,6 +80,15 @@ export interface SendResult {
    * debited by what was actually charged rather than by an estimate.
    */
   segments?: number;
+  /**
+   * The channel it actually left on, when that is not the one asked for.
+   *
+   * A port may divert — WhatsApp to SMS, for a number that is not on WhatsApp —
+   * and the log has to say which one carried it. "Sent on WhatsApp" for a
+   * message that went by SMS is an answer to "why was my customer charged for a
+   * text?" that happens to be wrong, and it is the ledger's answer too.
+   */
+  channel?: Channel;
   acceptedAt: Date;
 }
 
@@ -72,6 +108,14 @@ export interface SendResult {
  */
 export interface MessagePort {
   readonly channel: Channel;
+  /**
+   * Where this port may divert to when its own channel cannot deliver.
+   *
+   * Declared rather than discovered, because it changes a decision made
+   * *before* the send: an address suppressed on the fallback channel must not
+   * be written to by a port that might quietly switch to it.
+   */
+  readonly fallbackChannel?: Channel;
   send(message: OutboundMessage): Promise<SendResult>;
 }
 

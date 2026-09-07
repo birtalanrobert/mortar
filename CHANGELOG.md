@@ -4,6 +4,49 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## comms 1.7.0
+
+### Added
+
+- **WhatsApp**, as a transport beside SMS and SMTP — four of the seventeen
+  specifications want it and none of them wants a second implementation.
+  `WhatsAppMessagePort` sends through Twilio, which the products that want this
+  already hold credentials for and which already models the two things that
+  make WhatsApp _not_ a third kind of text message: outside twenty-four hours
+  of the customer's own last message only a **template Meta approved in
+  advance** may be sent, and it is billed per conversation rather than per
+  segment.
+- `OutboundMessage.template` carries that approved template and its variables.
+  `text` is still required and still logged: what a business needs to read back
+  months later is the words that went out, not a pointer to a template that has
+  since been edited.
+- `FallbackMessagePort` tries one channel and then another, on the **two**
+  refusals that mean "this channel will never work for this person" — a number
+  that is not on WhatsApp, and a closed window with no template. Everything else
+  is raised, because silently sending every message by SMS when a token expired
+  is a bill nobody expected and a fault nobody saw.
+- `AllowWhatsApp` widens the channel constraints on the message log **and the
+  suppression list**. The type and the constraint move together: adding a member
+  to a union lets the code compile and leaves the database refusing the row —
+  the mistake that cost a release in `commerce` and is not repeated here.
+- `whatsAppEnvSchema` — the sender and the approved templates, read from the
+  environment. Shared because more than one service reads them and they have to
+  agree: the worker builds the port, and whatever surface a business configures
+  its messages on has to know whether the channel exists before offering it.
+- `SendResult.channel` names what actually carried a message, and
+  `MessagePort.fallbackChannel` declares where a port may divert to. The log
+  records the first, so "sent on WhatsApp" is never the answer for something
+  that went by SMS — a business reads that row when it asks why it was charged
+  for texts.
+
+### Changed
+
+- A suppression is honoured on the channel a port **may divert to** as well as
+  the one addressed. Somebody who replied STOP to a text message has their
+  refusal recorded against `sms`; addressing the same number on WhatsApp must
+  not be a way round it, because nothing can promise which channel will carry
+  it.
+
 ## calendars 1.0.0
 
 ### Added

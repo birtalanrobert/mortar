@@ -27,7 +27,7 @@ export type MessageState =
 @Index('ix_mortar_message_log_subject', ['tenantId', 'subject'])
 @Index('ix_mortar_message_log_state', ['state', 'createdAt'])
 @Check('ck_mortar_message_log_direction', `"direction" IN ('inbound', 'outbound')`)
-@Check('ck_mortar_message_log_channel', `"channel" IN ('email', 'sms')`)
+@Check('ck_mortar_message_log_channel', `"channel" IN ('email', 'sms', 'whatsapp')`)
 export class MessageLog extends BaseEntity {
   /** Null for a message that arrived before we knew whose it was. */
   @Column({ type: 'uuid', nullable: true })
@@ -37,7 +37,7 @@ export class MessageLog extends BaseEntity {
   direction!: MessageDirection;
 
   @Column({ type: 'varchar', length: 16 })
-  channel!: 'email' | 'sms';
+  channel!: 'email' | 'sms' | 'whatsapp';
 
   /** What this is about, as `type:id`. Null when it could not be routed. */
   @Column({ type: 'varchar', length: 160, nullable: true })

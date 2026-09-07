@@ -7,7 +7,10 @@ import { MessageLog } from './message-log.entity';
 import { Suppression } from './suppression.entity';
 import { CreateMessageLog1787813849846 } from './migrations/1787813849846-CreateMessageLog';
 import { CreateSuppressions1790400000000 } from './migrations/1790400000000-CreateSuppressions';
-import { NoopMessagePort, type MessagePort } from './outbound/port';
+import { AllowWhatsApp1791400000000 } from './migrations/1791400000000-AllowWhatsApp';
+import { FallbackMessagePort } from './outbound/fallback';
+import { NoopMessagePort, type Channel, type MessagePort } from './outbound/port';
+import { WhatsAppRefused, NOT_ON_WHATSAPP } from './outbound/whatsapp';
 
 const TENANT = '11111111-1111-4111-8111-111111111111';
 const SECRET = 'a-secret-that-is-at-least-thirty-two-characters';
@@ -18,7 +21,11 @@ beforeEach(async () => {
   dataSource ??= await createTestDataSource([MessageLog, Suppression], {
     // The real migration, not `synchronize`: the partial unique index is the
     // part that matters here and synchronize does not create it.
-    migrations: [CreateMessageLog1787813849846, CreateSuppressions1790400000000],
+    migrations: [
+      CreateMessageLog1787813849846,
+      CreateSuppressions1790400000000,
+      AllowWhatsApp1791400000000,
+    ],
   });
   await dataSource.getRepository(MessageLog).clear();
   await dataSource.getRepository(Suppression).clear();
@@ -28,7 +35,7 @@ afterAll(async () => {
   if (dataSource?.isInitialized) await dataSource.destroy();
 });
 
-function service(ports: Partial<Record<'email' | 'sms', MessagePort>> = {}) {
+function service(ports: Partial<Record<Channel, MessagePort>> = {}) {
   return new CommsService(dataSource, {
     ports,
     inbound: { domain: 'in.example.com', secret: SECRET },
@@ -148,6 +155,66 @@ describe('sending', () => {
     const log = await comms.send({ channel: 'sms', to: '+40712345678', text: 'a long message' });
 
     expect(log.segments).toBe(3);
+  });
+});
+
+describe('a port that diverts to another channel', () => {
+  /** Refuses the way Twilio does for a number that is not on WhatsApp. */
+  const notOnWhatsApp: MessagePort = {
+    channel: 'whatsapp',
+    async send() {
+      throw new WhatsAppRefused('not on WhatsApp', NOT_ON_WHATSAPP);
+    },
+  };
+
+  it('records the channel that carried it, not the one asked for', async () => {
+    const sms = new NoopMessagePort('sms');
+    const comms = service({ whatsapp: new FallbackMessagePort(notOnWhatsApp, sms) });
+
+    const log = await comms.send(
+      { channel: 'whatsapp', to: '+40722000111', text: 'Tomorrow at ten.' },
+      { tenantId: TENANT, subject: 'booking:1' },
+    );
+
+    // "Sent on WhatsApp" for a message that went by SMS is an answer to "why
+    // was I billed for texts?" that happens to be wrong.
+    expect(log.state).toBe('accepted');
+    expect(log.channel).toBe('sms');
+    expect(sms.sent).toHaveLength(1);
+  });
+
+  it('honours a refusal recorded against the channel it would divert to', async () => {
+    const sms = new NoopMessagePort('sms');
+    const comms = service({ whatsapp: new FallbackMessagePort(notOnWhatsApp, sms) });
+
+    await comms.unsubscribe(TENANT, 'sms', '+40722000222');
+
+    const log = await comms.send(
+      { channel: 'whatsapp', to: '+40722000222', text: 'Tomorrow at ten.' },
+      { tenantId: TENANT, subject: 'booking:2' },
+    );
+
+    /*
+     * They replied STOP to a text message, and their refusal is recorded
+     * against `sms`. Addressing the same number on WhatsApp must not be a way
+     * round it, because we cannot promise which channel will carry it.
+     */
+    expect(log.state).toBe('discarded');
+    expect(sms.sent).toHaveLength(0);
+  });
+
+  it('still sends when only an unrelated channel has been refused', async () => {
+    const sms = new NoopMessagePort('sms');
+    const comms = service({ whatsapp: new FallbackMessagePort(notOnWhatsApp, sms) });
+
+    await comms.unsubscribe(TENANT, 'email', 'ion@example.com');
+
+    const log = await comms.send(
+      { channel: 'whatsapp', to: '+40722000333', text: 'Tomorrow at ten.' },
+      { tenantId: TENANT, subject: 'booking:3' },
+    );
+
+    expect(log.state).toBe('accepted');
   });
 });
 

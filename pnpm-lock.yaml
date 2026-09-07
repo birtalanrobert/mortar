@@ -200,6 +200,9 @@ importers:
 
   packages/comms:
     dependencies:
+      '@birtalanrobert/config':
+        specifier: workspace:^
+        version: link:../config
       '@birtalanrobert/context':
         specifier: workspace:^
         version: link:../context
