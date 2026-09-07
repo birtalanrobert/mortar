@@ -4,6 +4,27 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## clock 1.0.0
+
+### Added
+
+- **Wall-clock and interval arithmetic across time zones**, extracted from
+  project 02's slot engine at its second consumer — project 07's rota. Two
+  sentences account for most scheduling bugs in this catalogue and both are in
+  here: **a date is not an instant** — "Tuesday the fourteenth" is a different
+  span of real time in Bucharest and Budapest — and **a duration is not a
+  difference of wall clocks**, because a 22:00–06:00 shift is seven hours on the
+  spring-forward night and nine on the autumn one.
+- Extracted rather than copied because six of the seventeen specifications
+  schedule against somebody's local wall clock, and a second copy of DST
+  arithmetic is one that goes subtly wrong in a single place. What stays in each
+  project is the engine built _on_ it — the slot engine, the scheduling rules
+  engine, the costing engine — which share this substrate and no logic.
+- `offsetMinutesAt` reads `Intl` rather than a table, so the tz database is the
+  runtime's. `toInstant` reports `gap` and `ambiguous` rather than hiding them.
+  `MinuteOfDay` may exceed 1440, which is what makes an overnight span one
+  interval. Project 02's 102 tests came with it.
+
 ## comms 1.7.0
 
 ### Added
