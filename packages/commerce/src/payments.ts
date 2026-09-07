@@ -42,8 +42,14 @@ export type PaymentState =
  * as service income tells a business its haircuts are more profitable than they
  * are. The distinction has to survive into the row, because it cannot be
  * recovered from an amount afterwards.
+ *
+ * `voucher` is money taken for stored value — a gift card sold, a package
+ * bought — and it is deliberately a payment while a *redemption* is not one at
+ * all. Selling a voucher brings money in; spending it later brings none, and
+ * counting both would tell a business it earned the same two hundred twice.
+ * Redemptions live in `@birtalanrobert/vouchers`' own ledger.
  */
-export type PaymentKind = 'sale' | 'deposit' | 'fee' | 'tip' | 'product';
+export type PaymentKind = 'sale' | 'deposit' | 'fee' | 'tip' | 'product' | 'voucher';
 
 /**
  * Whether money actually moved, and so can be given back.

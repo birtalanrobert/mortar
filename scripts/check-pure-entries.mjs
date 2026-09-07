@@ -38,6 +38,7 @@ const BROWSER_IMPORTED = new Set([
   '@birtalanrobert/http',
   '@birtalanrobert/messaging',
   '@birtalanrobert/money',
+  '@birtalanrobert/vouchers',
   '@birtalanrobert/workflow',
 ]);
 

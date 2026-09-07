@@ -4,6 +4,39 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## vouchers 1.0.0
+
+### Added
+
+- Stored value for projects 02 and 06: gift vouchers, prepaid packages and
+  balances, as an **append-only ledger** rather than a counter. The balance is
+  the sum of the entries; the `balance` column is a cache written in the same
+  transaction with `CHECK (balance >= 0)` behind it, so overspending is
+  impossible even when the application is wrong and the history still explains
+  the number.
+- `money` and `units` are separate denominations on purpose — ten sessions and
+  a thousand lei must never be added — and a package carries the `subject` it
+  was sold for, so a course of physiotherapy cannot be spent on haircuts.
+- Expiry is **null by default**, because rules for stored value differ by
+  jurisdiction and several treat an unused voucher as the customer's money for
+  years. `expiryFrom` clamps a month's arithmetic to the end of a shorter month
+  rather than rolling into the next one.
+- Codes in Crockford's base32, with its substitutions applied on the way in: a
+  customer reading a code off a photograph is not told their voucher does not
+  exist because they typed a letter O.
+- The root entry point is framework-free and browser-safe; entities, migration
+  and `VouchersService` live behind `/nestjs`.
+
+## commerce 4.1.0
+
+### Added
+
+- `voucher` as a payment kind: money taken for stored value, a gift card sold
+  or a package bought. A _redemption_ is deliberately not a payment — selling a
+  voucher brings money in and spending it later brings none, and counting both
+  would tell a business it earned the same two hundred twice. Redemptions are
+  entries in `@birtalanrobert/vouchers`' ledger instead.
+
 ## commerce 1.0.0
 
 ### Added
