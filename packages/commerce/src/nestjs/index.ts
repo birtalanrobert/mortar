@@ -24,13 +24,19 @@ export {
 } from './commerce.service';
 export { CreateCommerce1789800000000 } from '../migrations/1789800000000-CreateCommerce';
 export { AddSavedCardsAndKind1790000000000 } from '../migrations/1790000000000-AddSavedCardsAndKind';
+export { AllowVoucherPayments1791100000000 } from '../migrations/1791100000000-AllowVoucherPayments';
 
 import { PayoutAccount } from './payout-account.entity';
 import { Payment, PaymentRefund } from './payment.entity';
 import { SavedCard } from './saved-card.entity';
 import { CreateCommerce1789800000000 } from '../migrations/1789800000000-CreateCommerce';
 import { AddSavedCardsAndKind1790000000000 } from '../migrations/1790000000000-AddSavedCardsAndKind';
+import { AllowVoucherPayments1791100000000 } from '../migrations/1791100000000-AllowVoucherPayments';
 
 /** Register with the data source, the way every other mortar package is. */
 export const commerceEntities = [PayoutAccount, Payment, PaymentRefund, SavedCard];
-export const commerceMigrations = [CreateCommerce1789800000000, AddSavedCardsAndKind1790000000000];
+export const commerceMigrations = [
+  CreateCommerce1789800000000,
+  AddSavedCardsAndKind1790000000000,
+  AllowVoucherPayments1791100000000,
+];
