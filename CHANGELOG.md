@@ -4,6 +4,39 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## comms 1.9.0
+
+### Added
+
+- **Web push**, as a channel and the subscriptions it needs. Three of the
+  seventeen specifications send to a PWA (02, 04, 07), and every one of them
+  would otherwise reimplement the same thing: registering an endpoint,
+  de-duplicating it, and — the part that goes wrong — **deleting it on 410
+  Gone**. A browser that has revoked permission answers that for ever, and a
+  product still trying has delivery figures that are quietly meaningless.
+
+  `WebPushMessagePort` is a transport and knows nothing about who is subscribed:
+  `CommsService` owns `mortar_push_subscription` and hands the port a resolver.
+  `subject` names the relationship rather than one product's noun — an employee
+  here, a customer there — because a foreign key to either is exactly what would
+  stop the table being shared.
+
+  `PushSubscriptionGone` is raised for 404 and 410 and for an endpoint with no
+  keys, so a caller has one behaviour to reason about rather than three. A 503
+  is an ordinary failure and does **not** delete anything: a push service having
+  a bad minute is not a person revoking permission.
+
+  `OutboundMessage.url` carries where a tap should land. In the encrypted
+  payload rather than a header, because it is the service worker that decides
+  what a notification does and it reads the payload.
+
+### Changed
+
+- **`MessageLog.channel` and `Suppression.channel` now import `Channel`** rather
+  than spelling the union out. It was written in three places that had to move
+  together with no compiler check that they did — and adding a member is already
+  a schema change in disguise without also being a search.
+
 ## csv 1.1.1
 
 ### Changed

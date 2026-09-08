@@ -3,6 +3,8 @@ import { CreateMessageLog1787813849846 } from './migrations/1787813849846-Create
 import { Suppression } from './suppression.entity';
 import { CreateSuppressions1790400000000 } from './migrations/1790400000000-CreateSuppressions';
 import { AllowWhatsApp1791400000000 } from './migrations/1791400000000-AllowWhatsApp';
+import { PushSubscription } from './push-subscription.entity';
+import { AllowPush1792600000000 } from './migrations/1792600000000-AllowPush';
 
 export { InboundAddress, type InboundAddressOptions, type ParsedAddress } from './address';
 
@@ -51,12 +53,32 @@ export {
   CreateMessageLog1787813849846,
   CreateSuppressions1790400000000,
   AllowWhatsApp1791400000000,
+  AllowPush1792600000000,
 };
 
+export { PushSubscription } from './push-subscription.entity';
+
+/*
+ * Writing to a browser that has agreed to it.
+ *
+ * Three of the seventeen products send to a PWA, and every one of them would
+ * otherwise reimplement registering, de-duplicating and — the part that goes
+ * wrong — **deleting on 410 Gone**. A browser that has revoked permission
+ * answers that for ever, and a product still trying has delivery figures that
+ * are quietly meaningless.
+ */
+export {
+  PushSubscriptionGone,
+  WebPushMessagePort,
+  type VapidKeys,
+  type WebPushOptions,
+} from './outbound/web-push';
+
 /** Everything the consuming service must register with TypeORM. */
-export const commsEntities = [MessageLog, Suppression];
+export const commsEntities = [MessageLog, Suppression, PushSubscription];
 export const commsMigrations = [
   CreateMessageLog1787813849846,
   CreateSuppressions1790400000000,
   AllowWhatsApp1791400000000,
+  AllowPush1792600000000,
 ];

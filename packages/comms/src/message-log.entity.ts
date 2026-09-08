@@ -1,5 +1,6 @@
 import { Check, Column, Entity, Index } from 'typeorm';
 import { BaseEntity, JSON_COLUMN, TIMESTAMP_COLUMN } from '@birtalanrobert/database';
+import type { Channel } from './outbound/port';
 
 export type MessageDirection = 'inbound' | 'outbound';
 
@@ -37,7 +38,15 @@ export class MessageLog extends BaseEntity {
   direction!: MessageDirection;
 
   @Column({ type: 'varchar', length: 16 })
-  channel!: 'email' | 'sms' | 'whatsapp';
+  /**
+   * The one definition, imported rather than written out again.
+   *
+   * This union used to be spelled here, in the suppression entity and in
+   * `Channel` — three places that had to move together and no compiler check
+   * that they did. Adding a member is already a schema change in disguise; it
+   * should not also be a search.
+   */
+  channel!: Channel;
 
   /** What this is about, as `type:id`. Null when it could not be routed. */
   @Column({ type: 'varchar', length: 160, nullable: true })

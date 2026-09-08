@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
  * sent, and it is billed per conversation rather than per segment. Both facts
  * shape `OutboundMessage.template` and what a port returns.
  */
-export type Channel = 'email' | 'sms' | 'whatsapp';
+export type Channel = 'email' | 'sms' | 'whatsapp' | 'push';
 
 export interface OutboundAttachment {
   /** What the recipient's mail client shows and saves it as. */
@@ -42,6 +42,18 @@ export interface OutboundMessage {
   html?: string;
   /** Carried through to the provider so a delivery receipt can be matched up. */
   reference?: string;
+  /**
+   * Where a tap should land, for a channel that has somewhere to land.
+   *
+   * Push only. It travels in the encrypted payload rather than in a header,
+   * because it is the service worker that decides what a notification does and
+   * the service worker reads the payload. A notification a person taps and
+   * which opens nothing in particular is one they stop tapping.
+   *
+   * Ignored by every other port: an email already carries its own links, and an
+   * SMS has no notion of a destination beyond the words in it.
+   */
+  url?: string;
   /**
    * The approved template to send, where the channel requires one.
    *

@@ -3,6 +3,7 @@ import type { DataSource, EntityManager } from 'typeorm';
 import { InboundAddress, type InboundAddressOptions } from './address';
 import type { InboundMessage } from './inbound/message';
 import { MessageLog } from './message-log.entity';
+import { PushSubscription } from './push-subscription.entity';
 import { Suppression } from './suppression.entity';
 import { REFUSALS_BEFORE_SUPPRESSING, suppressionExpiry } from './suppression';
 import {
@@ -73,6 +74,85 @@ export class CommsService {
    */
   serves(channel: Channel): boolean {
     return this.ports[channel] !== undefined;
+  }
+
+  /**
+   * A browser saying it will accept notifications.
+   *
+   * **Idempotent on the endpoint**, because the browser mints exactly one and a
+   * PWA that reloads offers it again. A second row would send that person
+   * everything twice, which is the fastest way to have push permission revoked.
+   *
+   * The subject is the product's own reference — an employee, a customer, a rep
+   * — and moving an endpoint to a different subject is a real case: a shared
+   * tablet somebody else signs into.
+   */
+  async subscribeToPush(
+    input: {
+      subject: string;
+      endpoint: string;
+      p256dh: string;
+      auth: string;
+      tenantId?: string;
+      label?: string;
+    },
+    manager?: EntityManager,
+  ): Promise<PushSubscription> {
+    const repository = this.manager(manager).getRepository(PushSubscription);
+
+    await repository.upsert(
+      {
+        subject: input.subject,
+        endpoint: input.endpoint,
+        p256dh: input.p256dh,
+        auth: input.auth,
+        tenantId: input.tenantId ?? null,
+        label: input.label ?? null,
+      },
+      ['endpoint'],
+    );
+
+    return repository.findOneOrFail({ where: { endpoint: input.endpoint } });
+  }
+
+  /**
+   * Forgetting a browser.
+   *
+   * Called when somebody turns notifications off, and called by the port when a
+   * push service answers 410 — **the same operation for both**, because "they
+   * asked us to stop" and "the browser has gone" leave the same row behind and
+   * a product that only handled the first would accumulate the second for ever.
+   */
+  async unsubscribeFromPush(endpoint: string, manager?: EntityManager): Promise<void> {
+    await this.manager(manager).getRepository(PushSubscription).delete({ endpoint });
+  }
+
+  /** Every browser this subject has agreed to be written to on. */
+  async pushSubscriptionsFor(
+    subject: string,
+    manager?: EntityManager,
+  ): Promise<PushSubscription[]> {
+    return this.manager(manager)
+      .getRepository(PushSubscription)
+      .find({ where: { subject }, order: { createdAt: 'ASC' } });
+  }
+
+  /**
+   * The keys that encrypt to an endpoint.
+   *
+   * Handed to `WebPushMessagePort` so the transport never learns who is
+   * subscribed — it knows an address and the two keys for it, which is all a
+   * transport should know.
+   */
+  async pushKeysFor(
+    endpoint: string,
+    manager?: EntityManager,
+  ): Promise<{ p256dh: string; auth: string } | null> {
+    const found = await this.manager(manager)
+      .getRepository(PushSubscription)
+      .findOne({ where: { endpoint } });
+
+    return found ? { p256dh: found.p256dh, auth: found.auth } : null;
   }
 
   /**

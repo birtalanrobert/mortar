@@ -1,5 +1,6 @@
 import { Column, Entity, Index, Unique } from 'typeorm';
 import { BaseEntity } from '@birtalanrobert/database';
+import type { Channel } from './outbound/port';
 
 /**
  * Why an address is not written to any more.
@@ -41,7 +42,15 @@ export class Suppression extends BaseEntity {
   tenantId!: string;
 
   @Column('varchar', { length: 8 })
-  channel!: 'email' | 'sms' | 'whatsapp';
+  /**
+   * The one definition, imported rather than written out again.
+   *
+   * This union used to be spelled here, in the suppression entity and in
+   * `Channel` — three places that had to move together and no compiler check
+   * that they did. Adding a member is already a schema change in disguise; it
+   * should not also be a search.
+   */
+  channel!: Channel;
 
   /** As the provider was given it: E.164, or the email address. */
   @Column('varchar', { length: 320 })

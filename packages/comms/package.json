@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/comms",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "description": "Outbound email and SMS behind provider ports, inbound email parsing",
   "license": "AGPL-3.0-only",
   "repository": {
@@ -47,7 +47,8 @@
     "@birtalanrobert/http": "workspace:^",
     "nodemailer": "^10.0.0",
     "resend": "^6.25.0",
-    "twilio": "^6.1.0"
+    "twilio": "^6.1.0",
+    "web-push": "^3.6.7"
   },
   "peerDependencies": {
     "@nestjs/common": "^11.0.0",
@@ -65,5 +66,8 @@
     "entries": [
       "nestjs"
     ]
+  },
+  "devDependencies": {
+    "@types/web-push": "^3.6.4"
   }
 }
