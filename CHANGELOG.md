@@ -4,6 +4,32 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## csv 1.1.0
+
+### Added
+
+- **`@birtalanrobert/csv/xlsx`** — writing the `.xlsx` a bookkeeper opens. Four
+  of the seventeen specifications ask for Excel *beside* CSV (03, 04, 05, 07)
+  and the reason is always the same: a CSV opened in Excel is reinterpreted on
+  the way in. An employee reference of `0042` becomes the number 42, and `7,50`
+  becomes either seven and a half or the text "7,50" depending on a setting
+  nobody in the business can find. An `.xlsx` says what each cell is.
+
+  **Behind a subpath, deliberately.** The CSV side of this package is
+  browser-safe and small; a spreadsheet writer is neither, and a console
+  counting segments on every keystroke must not be shipping a zip library to do
+  it. Only what needs Excel pays for Excel.
+
+  Strings stay strings and numbers stay numbers, which is the whole contract:
+  the caller decides, because a reference is text and a column somebody wants to
+  sum is not.
+
+### Changed
+
+- The package description now says *tabular files* rather than *CSV files*. The
+  name stays `csv`, because renaming a published package costs every consumer a
+  change for no gain.
+
 ## auth 1.2.0
 
 ### Added

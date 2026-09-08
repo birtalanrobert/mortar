@@ -1,7 +1,7 @@
 {
   "name": "@birtalanrobert/csv",
-  "version": "1.0.0",
-  "description": "Reading and writing the CSV files a spreadsheet actually produces",
+  "version": "1.1.0",
+  "description": "Reading and writing the tabular files a spreadsheet actually produces",
   "license": "AGPL-3.0-only",
   "repository": {
     "type": "git",
@@ -18,6 +18,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./xlsx": {
+      "types": "./dist/xlsx.d.ts",
+      "default": "./dist/xlsx.js"
     },
     "./package.json": "./package.json"
   },
@@ -37,6 +41,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "exceljs": "^4.4.0",
     "papaparse": "^5.7.0"
   },
   "devDependencies": {
