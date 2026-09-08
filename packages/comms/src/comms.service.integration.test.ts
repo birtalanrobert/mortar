@@ -145,6 +145,26 @@ describe('sending', () => {
     expect(log.detail).toContain('No sms provider');
   });
 
+  it('lets a caller with a choice ask before making the wrong one', async () => {
+    /*
+     * The question is which of two real options to take, not whether to try.
+     *
+     * Somebody with a mobile number and an email address on a deployment with
+     * no text provider should receive an email, not a recorded failure — and
+     * the caller cannot know that without asking, because the ports are the
+     * deployment's business rather than the product's.
+     */
+    const comms = service({ email: new NoopMessagePort('email') });
+
+    expect(comms.serves('email')).toBe(true);
+    expect(comms.serves('sms')).toBe(false);
+
+    // Not a substitute for `send`'s honesty: a caller with only a number still
+    // sends on it, and the failure is still recorded.
+    const log = await comms.send({ channel: 'sms', to: '+40712345678', text: 'x' });
+    expect(log.state).toBe('failed');
+  });
+
   it('keeps the segment count, because the ledger is debited by it', async () => {
     const sms: MessagePort = {
       channel: 'sms',

@@ -4,6 +4,22 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## comms 1.8.0
+
+### Added
+
+- **`CommsService.serves(channel)`** — whether anything is configured that could
+  carry a channel. For callers holding a genuine choice: somebody with both a
+  mobile number and an email address, on a deployment that has SMTP and no text
+  provider, should receive an email rather than a recorded failure, and the
+  caller cannot know which without asking. The ports are the deployment's
+  business rather than the product's, and until now they were private.
+
+  It is deliberately not a promise of delivery and not a way around `send`'s
+  honesty: a caller with only one address still sends on it and still gets the
+  failure recorded, because "we tried and there was no way to reach them" is a
+  fact a business needs.
+
 ## clock 1.0.0
 
 ### Added

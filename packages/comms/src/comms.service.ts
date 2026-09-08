@@ -58,6 +58,24 @@ export class CommsService {
   }
 
   /**
+   * Whether anything is configured that could carry this channel.
+   *
+   * For callers that hold a **choice** — somebody with both a mobile number and
+   * an email address — rather than an obligation. Without this, a deployment
+   * with no text provider records a failure for every such person, when an
+   * email would have reached them; asking first turns that into a delivery.
+   *
+   * It is deliberately not a promise of delivery, and not a substitute for
+   * `send`'s honesty. A caller with only one address still sends on it and
+   * still gets the failure recorded, because "we tried and there was no way to
+   * reach them" is a fact a business needs. This answers the narrower question
+   * of which of two real options to take.
+   */
+  serves(channel: Channel): boolean {
+    return this.ports[channel] !== undefined;
+  }
+
+  /**
    * Sends, and records the attempt either way.
    *
    * The log entry is written after the provider answers rather than before,
