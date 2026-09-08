@@ -1,4 +1,4 @@
-import ExcelJS from 'exceljs';
+import writeXlsxFile, { type Cell as SheetCell } from 'write-excel-file/node';
 
 /**
  * Writing the `.xlsx` a bookkeeper opens.
@@ -16,6 +16,15 @@ import ExcelJS from 'exceljs';
  * becomes whatever the reader's locale thinks, and `7,50` becomes either seven
  * and a half or the text "7,50" depending on a setting nobody in the business
  * can find. An `.xlsx` says what each cell is and the file survives the trip.
+ *
+ * ## Why this library
+ *
+ * `write-excel-file` writes and does not read, and its whole dependency tree is
+ * one MIT package. The obvious alternative — ExcelJS — reaches an *unlicensed*
+ * transitive dependency through its reading path (`unzipper` → `binary` →
+ * `buffers`, which declares no licence at all), and a product that ships has no
+ * rights to code nobody has granted rights to. Writing is all this needs; the
+ * reading half was buying a licence problem for a capability with no consumer.
  */
 
 export interface XlsxOptions {
@@ -31,6 +40,8 @@ export interface XlsxOptions {
   readonly header?: boolean;
 }
 
+type Cell = string | number | boolean | null | undefined;
+
 /**
  * A workbook, from rows of values.
  *
@@ -45,53 +56,62 @@ export interface XlsxOptions {
  * "undefined" — the same choice `toCsv` makes, for the same reason.
  */
 export async function toXlsx(
-  rows: ReadonlyArray<ReadonlyArray<string | number | boolean | null | undefined>>,
+  rows: ReadonlyArray<ReadonlyArray<Cell>>,
   options: XlsxOptions = {},
 ): Promise<Buffer> {
-  const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet(options.sheetName ?? 'Export');
-
-  for (const row of rows) {
-    sheet.addRow(row.map((cell) => (cell === null || cell === undefined ? null : cell)));
-  }
-
   const withHeader = options.header !== false && rows.length > 0;
 
-  if (withHeader) {
-    sheet.getRow(1).font = { bold: true };
-    sheet.views = [{ state: 'frozen', ySplit: 1 }];
-  }
+  const sheet: SheetCell[][] = rows.map((row, index) =>
+    row.map((cell): SheetCell => {
+      /*
+       * An empty cell is `null`, not an object with a null value.
+       *
+       * The same choice `toCsv` makes: `null` and `undefined` become empty
+       * cells rather than the strings "null" and "undefined", which is what a
+       * naive join produces and what a regulator then reads.
+       */
+      if (cell === null || cell === undefined) return null;
+
+      /*
+       * The type travels with the cell.
+       *
+       * Left to the library to infer, a string of digits is a candidate for
+       * becoming a number again — which is the exact trip this file exists to
+       * survive. Saying `String` for a string is not redundant here; it is the
+       * whole point.
+       */
+      const bold = withHeader && index === 0 ? { fontWeight: 'bold' as const } : {};
+
+      if (typeof cell === 'number') return { value: cell, type: Number, ...bold };
+      if (typeof cell === 'boolean') return { value: cell, type: Boolean, ...bold };
+
+      return { value: cell, type: String, ...bold };
+    }),
+  );
 
   /*
    * Columns wide enough to read, and no wider.
    *
-   * A file whose every column shows `########` is one the recipient has to
-   * fix before they can check it, which is exactly the friction this export
-   * exists to remove. Capped, because one long cell — a list of clock event
-   * ids, say — must not push a column off the screen.
+   * A file whose every column shows `########` is one the recipient has to fix
+   * before they can check it, which is exactly the friction this export exists
+   * to remove. Capped, because one long cell — a list of clock event ids, say —
+   * must not push every other column off the screen.
    */
-  /*
-   * `columns` is *null* on a sheet with no rows, whatever the types say.
-   *
-   * ExcelJS declares it as an array and returns null until something has been
-   * added — so an export for a period nobody worked crashed here, which is a
-   * real answer failing rather than a bug in the data. Guarded rather than
-   * asserted, because the honest output for an empty period is an empty file.
-   */
-  (sheet.columns ?? []).forEach((column, index) => {
+  const columns = (rows[0] ?? []).map((_, index) => {
     let widest = 0;
     for (const row of rows) {
       const cell = row[index];
       if (cell === null || cell === undefined) continue;
       widest = Math.max(widest, String(cell).length);
     }
-    column.width = Math.min(Math.max(widest + 2, 8), 40);
+    return { width: Math.min(Math.max(widest + 2, 8), 40) };
   });
 
-  /*
-   * `Buffer.from`, because ExcelJS resolves to an `ArrayBuffer` whose type its
-   * own declarations describe loosely. Converting here means every caller gets
-   * something it can write to a response or a file without a cast of its own.
-   */
-  return Buffer.from(await workbook.xlsx.writeBuffer());
+  return writeXlsxFile(sheet, {
+    // `sheet`, not `sheetName`: the option is named for the tab it labels.
+    sheet: options.sheetName ?? 'Export',
+    ...(columns.length > 0 ? { columns } : {}),
+    // Frozen, so the header survives scrolling to row thirty.
+    ...(withHeader ? { stickyRowsCount: 1 } : {}),
+  }).toBuffer();
 }

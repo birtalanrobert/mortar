@@ -4,6 +4,25 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## csv 1.1.1
+
+### Changed
+
+- **`toXlsx` now writes with `write-excel-file` rather than ExcelJS**, and the
+  reason is a licence rather than a feature. ExcelJS reaches an *unlicensed*
+  transitive dependency through its **reading** path — `unzipper` → `binary` →
+  `buffers`, and `buffers@0.1.1` declares no licence anywhere, which under
+  copyright means no rights granted. A product that ships cannot rely on code
+  nobody has granted rights to, and `pnpm licenses:check` in project 07 refused
+  it on exactly those grounds.
+
+  Writing is all this subpath does. The replacement writes and does not read,
+  and its whole dependency tree is one MIT package — so the reading half was
+  buying a licence problem for a capability with no consumer.
+
+  The interface is unchanged: same `toXlsx(rows, options)`, same contract that
+  strings stay strings and numbers stay numbers.
+
 ## csv 1.1.0
 
 ### Added
