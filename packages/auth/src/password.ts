@@ -1,4 +1,5 @@
 import {
+  pbkdf2,
   randomBytes,
   scrypt,
   timingSafeEqual,
@@ -142,6 +143,136 @@ export class ScryptHasher implements PasswordHasher {
       parsed.parallelization < this.options.parallelization
     );
   }
+}
+
+/**
+ * PBKDF2 options. The iteration count is the only lever that matters.
+ *
+ * OWASP's current floor for PBKDF2-HMAC-SHA256 is 600,000, which is what this
+ * defaults to.
+ */
+export interface Pbkdf2Options {
+  iterations?: number;
+  keyLength?: number;
+  saltLength?: number;
+}
+
+const PBKDF2_DEFAULTS: Required<Pbkdf2Options> = {
+  iterations: 600_000,
+  keyLength: 32,
+  saltLength: 16,
+};
+
+/**
+ * PBKDF2-HMAC-SHA256 hashing, for a secret a **browser** must also verify.
+ *
+ * `ScryptHasher` is the right default and stays it: scrypt is memory-hard and
+ * PBKDF2 is not, so an attacker with a GPU gets far more out of the same money
+ * here. This exists for one situation, and only that one — a credential that
+ * has to be checked with no network, on a device.
+ *
+ * The Web Crypto API implements PBKDF2 and does not implement scrypt. A
+ * surface that must authenticate offline therefore either verifies a PBKDF2
+ * hash with the platform's own primitive, or ships a JavaScript scrypt into
+ * every bundle, or holds a *second* hash of the same secret in a second
+ * format. The third is the worst of the three: two representations of one
+ * secret is two things to keep in step, and the day they disagree is the day
+ * somebody cannot clock in.
+ *
+ * **Use it only where offline verification is the requirement**, and only for
+ * secrets whose real protection is something else — a rate limit, a locked
+ * cabinet, a short lifetime. For an account password, use scrypt.
+ *
+ * Encoded as `pbkdf2$sha256$iterations$salt$hash`, so the parameters travel
+ * with the hash and can be raised later without invalidating what exists.
+ */
+export class Pbkdf2Hasher implements PasswordHasher {
+  readonly id = 'pbkdf2';
+  private readonly options: Required<Pbkdf2Options>;
+
+  constructor(options: Pbkdf2Options = {}) {
+    this.options = { ...PBKDF2_DEFAULTS, ...options };
+  }
+
+  async hash(password: string): Promise<string> {
+    assertPasswordLength(password);
+    const { iterations, keyLength, saltLength } = this.options;
+    const salt = randomBytes(saltLength);
+    const derived = await pbkdf2Async(password.normalize('NFKC'), salt, iterations, keyLength);
+
+    return [
+      'pbkdf2',
+      'sha256',
+      iterations,
+      salt.toString('base64'),
+      derived.toString('base64'),
+    ].join('$');
+  }
+
+  async verify(password: string, encoded: string): Promise<boolean> {
+    const parsed = parsePbkdf2(encoded);
+    if (!parsed) return false;
+
+    try {
+      const derived = await pbkdf2Async(
+        password.normalize('NFKC'),
+        parsed.salt,
+        parsed.iterations,
+        parsed.hash.length,
+      );
+
+      return timingSafeEqual(derived, parsed.hash);
+    } catch {
+      return false;
+    }
+  }
+
+  needsRehash(encoded: string): boolean {
+    const parsed = parsePbkdf2(encoded);
+    if (!parsed) return true;
+    return parsed.iterations < this.options.iterations;
+  }
+}
+
+interface ParsedPbkdf2 {
+  iterations: number;
+  salt: Buffer;
+  hash: Buffer;
+}
+
+function parsePbkdf2(encoded: string): ParsedPbkdf2 | null {
+  const parts = encoded.split('$');
+  if (parts.length !== 5 || parts[0] !== 'pbkdf2' || parts[1] !== 'sha256') return null;
+
+  const parsed: ParsedPbkdf2 = {
+    iterations: Number(parts[2]),
+    salt: Buffer.from(parts[3] ?? '', 'base64'),
+    hash: Buffer.from(parts[4] ?? '', 'base64'),
+  };
+
+  if (!Number.isInteger(parsed.iterations) || parsed.iterations < 1000) return null;
+  if (parsed.salt.length < 8) return null;
+  /*
+   * The same truncation trap as scrypt's, and for the same reason: PBKDF2 is
+   * prefix-stable, so verifying at the *stored* length means a digest truncated
+   * to one byte matches roughly one attempt in 256.
+   */
+  if (parsed.hash.length < MIN_DIGEST_BYTES) return null;
+
+  return parsed;
+}
+
+function pbkdf2Async(
+  password: string,
+  salt: Buffer,
+  iterations: number,
+  keyLength: number,
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    pbkdf2(password, salt, iterations, keyLength, 'sha256', (error, derived) =>
+      error ? reject(error) : resolve(derived),
+    );
+  });
 }
 
 interface ParsedHash {

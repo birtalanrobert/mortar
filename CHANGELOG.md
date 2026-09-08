@@ -4,6 +4,30 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## auth 1.2.0
+
+### Added
+
+- **`Pbkdf2Hasher`**, for a secret a **browser** must also verify. `ScryptHasher`
+  remains the default and should stay it — scrypt is memory-hard and PBKDF2 is
+  not — but the Web Crypto API implements PBKDF2 and does not implement scrypt.
+  A surface that has to authenticate with no network therefore either verifies a
+  PBKDF2 hash with the platform's own primitive, ships a JavaScript scrypt into
+  every bundle, or holds a *second* hash of the same secret in a second format.
+  The third is the worst of the three: two representations of one secret is two
+  things to keep in step, and the day they disagree is the day somebody cannot
+  clock in.
+
+  Encoded as `pbkdf2$sha256$iterations$salt$hash`, so the parameters travel with
+  the hash. Defaults to OWASP's current floor of 600,000 iterations, and refuses
+  a truncated digest for the same reason scrypt's parser does — PBKDF2 is
+  prefix-stable, so verifying at the stored length would let a one-byte digest
+  match roughly one attempt in 256.
+
+  Use it only where offline verification is the requirement, and only for
+  secrets whose real protection is something else: a rate limit, a locked
+  cabinet, a short lifetime. For an account password, use scrypt.
+
 ## comms 1.8.0
 
 ### Added

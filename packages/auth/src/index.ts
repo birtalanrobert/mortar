@@ -1,8 +1,10 @@
 export {
   MAX_PASSWORD_LENGTH,
+  Pbkdf2Hasher,
   ScryptHasher,
   defaultPasswordHasher,
   type PasswordHasher,
+  type Pbkdf2Options,
   type ScryptOptions,
 } from './password';
 

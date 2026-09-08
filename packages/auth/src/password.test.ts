@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_PASSWORD_LENGTH, ScryptHasher } from './password';
+import { MAX_PASSWORD_LENGTH, Pbkdf2Hasher, ScryptHasher } from './password';
 
 // Deliberately weak parameters: these tests exercise behaviour, not cost, and
 // production strength would make the suite unbearably slow.
@@ -112,5 +112,68 @@ describe('needsRehash', () => {
     // verify, then get rehashed on next successful login.
     const old = await new ScryptHasher({ cost: 512 }).hash('unchanged');
     expect(await new ScryptHasher({ cost: 1024 }).verify('unchanged', old)).toBe(true);
+  });
+});
+
+/**
+ * PBKDF2, for a secret a browser must also verify.
+ *
+ * Not a replacement for scrypt and not a general-purpose choice: it exists for
+ * the one situation where a device has to check a credential with no network,
+ * and the Web Crypto API implements PBKDF2 and does not implement scrypt.
+ */
+describe('Pbkdf2Hasher', () => {
+  const hasher = new Pbkdf2Hasher({ iterations: 1000 });
+
+  it('verifies what it hashed and nothing else', async () => {
+    const encoded = await hasher.hash('4821');
+
+    expect(await hasher.verify('4821', encoded)).toBe(true);
+    expect(await hasher.verify('4822', encoded)).toBe(false);
+  });
+
+  it('carries its parameters, so they can be raised later', async () => {
+    const encoded = await hasher.hash('4821');
+
+    expect(encoded.startsWith('pbkdf2$sha256$1000$')).toBe(true);
+
+    // An old hash verifies against its own parameters and is rehashed on the
+    // next successful use — the same contract scrypt's has.
+    expect(new Pbkdf2Hasher({ iterations: 600_000 }).needsRehash(encoded)).toBe(true);
+    expect(hasher.needsRehash(encoded)).toBe(false);
+  });
+
+  it('salts, so two hashes of one PIN do not match', async () => {
+    /*
+     * Four digits is ten thousand possibilities. Without a per-secret salt a
+     * single precomputed table covers every employee in every business at once
+     * — and a rota kiosk holds a whole team's worth.
+     */
+    expect(await hasher.hash('4821')).not.toBe(await hasher.hash('4821'));
+  });
+
+  it('refuses a truncated digest rather than matching one in 256', async () => {
+    /*
+     * PBKDF2 is prefix-stable: the first N bytes of a long derivation equal the
+     * whole of a short one. Verifying at the *stored* length would mean a
+     * digest cut to one byte matches roughly one attempt in 256 — so a stored
+     * length that is not plausible is refused outright.
+     */
+    const encoded = await hasher.hash('4821');
+    const [, , iterations, salt, hash] = encoded.split('$');
+    const truncated = Buffer.from(hash!, 'base64').subarray(0, 4).toString('base64');
+
+    expect(
+      await hasher.verify('4821', ['pbkdf2', 'sha256', iterations, salt, truncated].join('$')),
+    ).toBe(false);
+  });
+
+  it('refuses anything that is not one of its own', async () => {
+    const scrypted = await new ScryptHasher().hash('4821');
+
+    // A hash in the other format must not silently pass or silently fail as
+    // "wrong password": it is not a PBKDF2 hash and this says so.
+    expect(await hasher.verify('4821', scrypted)).toBe(false);
+    expect(hasher.needsRehash(scrypted)).toBe(true);
   });
 });
