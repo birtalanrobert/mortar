@@ -4,6 +4,21 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## comms 1.9.1
+
+### Changed
+
+- **`WebPushMessagePort` now takes a `DataSource` rather than a `keysFor`
+  callback.** The callback had to be `CommsService.pushKeysFor`, and that cannot
+  be built at the moment the module which *provides* `CommsService` is being
+  configured — every consumer would hit the same circle, and Nest's message for
+  it names neither the port nor the reason.
+
+  `mortar_push_subscription` is this package's own table, so the port reading it
+  is not a layer being crossed. It still learns nothing about *who* is
+  subscribed: an endpoint and the two keys for it is all a transport should
+  know, and all it gets.
+
 ## comms 1.9.0
 
 ### Added

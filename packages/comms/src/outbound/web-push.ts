@@ -1,4 +1,6 @@
 import webpush from 'web-push';
+import type { DataSource } from 'typeorm';
+import { PushSubscription } from '../push-subscription.entity';
 import type { Channel, MessagePort, OutboundMessage, SendResult } from './port';
 
 /**
@@ -36,12 +38,18 @@ export class PushSubscriptionGone extends Error {
 export interface WebPushOptions {
   readonly vapid: VapidKeys;
   /**
-   * Resolves the keys that encrypt to an endpoint.
+   * Where the subscriptions live, which is this package's own table.
    *
-   * Supplied by `CommsService`, which owns the subscription table — so this
-   * port stays a transport and knows nothing about who is subscribed.
+   * A `DataSource` rather than a resolver function, and the reason is wiring: a
+   * callback into `CommsService` cannot be built at the moment the module that
+   * *provides* `CommsService` is configured, and every consumer would hit that
+   * circle. The table belongs to this package, so reading it here is not a
+   * layer being crossed — it is the same layer.
+   *
+   * The port still learns nothing about *who* is subscribed. An endpoint and
+   * the two keys for it is all a transport should know, and all it gets.
    */
-  readonly keysFor: (endpoint: string) => Promise<{ p256dh: string; auth: string } | null>;
+  readonly dataSource: DataSource;
   /** Told when a subscription is gone, so the row can go with it. */
   readonly onGone?: (endpoint: string) => Promise<void> | void;
   /** Seconds a push service should hold the message for. Four hours. */
@@ -72,7 +80,11 @@ export class WebPushMessagePort implements MessagePort {
   }
 
   async send(message: OutboundMessage): Promise<SendResult> {
-    const keys = await this.options.keysFor(message.to);
+    const found = await this.options.dataSource
+      .getRepository(PushSubscription)
+      .findOne({ where: { endpoint: message.to } });
+
+    const keys = found ? { p256dh: found.p256dh, auth: found.auth } : null;
 
     if (!keys) {
       /*

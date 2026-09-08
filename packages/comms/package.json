@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/comms",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "description": "Outbound email and SMS behind provider ports, inbound email parsing",
   "license": "AGPL-3.0-only",
   "repository": {

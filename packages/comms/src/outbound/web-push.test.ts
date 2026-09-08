@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import webPushModule from 'web-push';
 import { PushSubscriptionGone, WebPushMessagePort } from './web-push';
 
 /**
@@ -16,7 +17,12 @@ vi.mock('web-push', () => ({
   },
 }));
 
-const webpush = (await import('web-push')).default as unknown as {
+/*
+ * Imported statically, because this file is CommonJS and a top-level `await`
+ * is not available to it. `vi.mock` is hoisted above the imports either way,
+ * so the mocked module is what arrives here.
+ */
+const webpush = webPushModule as unknown as {
   sendNotification: ReturnType<typeof vi.fn>;
   setVapidDetails: ReturnType<typeof vi.fn>;
 };
@@ -29,6 +35,18 @@ const VAPID = {
 
 const KEYS = { p256dh: 'a-p256dh-key', auth: 'an-auth-secret' };
 
+/**
+ * A `DataSource` reduced to the one lookup this port makes.
+ *
+ * The port reads `mortar_push_subscription` — this package's own table — so
+ * what a fake needs to answer is one `findOne`. Standing up a real database to
+ * assert which endpoint was encrypted to would be testing TypeORM.
+ */
+const dataSourceReturning = (row: typeof KEYS | null) =>
+  ({
+    getRepository: () => ({ findOne: async () => row }),
+  }) as never;
+
 describe('sending a web push', () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -37,7 +55,7 @@ describe('sending a web push', () => {
   const port = (overrides: Record<string, unknown> = {}) =>
     new WebPushMessagePort({
       vapid: VAPID,
-      keysFor: async () => KEYS,
+      dataSource: dataSourceReturning(KEYS),
       ...overrides,
     });
 
@@ -133,7 +151,7 @@ describe('sending a web push', () => {
     // answer as the push service's own, so there is one behaviour to reason
     // about rather than two.
     await expect(
-      port({ keysFor: async () => null }).send({
+      port({ dataSource: dataSourceReturning(null) }).send({
         channel: 'push',
         to: 'https://push.example.com/unknown',
         text: 'Anything.',
