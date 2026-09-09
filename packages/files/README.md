@@ -228,3 +228,58 @@ Four methods exist only for tests, and each earns its place:
 | `keys`, `has(key)`                | Assert on what a cleanup removed, without `get`'s `NotFoundError`                                                                                       |
 | `clear()`                         | Empty it between tests — one instance is normally shared across a file, and objects otherwise accumulate until an assertion passes for the wrong reason |
 | `failOn(key)`, `stopFailing(key)` | Make one object refuse every operation. Real buckets fail one object at a time, and the behaviour worth testing is what the caller does about it        |
+
+## The image pipeline
+
+`@birtalanrobert/files/images` — a subpath, because it needs `sharp` and most
+consumers of this package do not. `sharp` is an **optional peer dependency**:
+install it in the service that renders images, and nothing else pays for a
+hundred megabytes of native binaries.
+
+```ts
+import { renderImage } from '@birtalanrobert/files/images';
+
+const rendered = await renderImage(uploaded, {
+  sizes: [
+    { name: 'thumb', width: 160 },
+    { name: 'card', width: 640 },
+    { name: 'full', width: 1600 },
+  ],
+  formats: ['avif', 'webp', 'jpeg'],
+  placeholder: 'blur',
+});
+```
+
+Sizes are named rather than numbered, and the names are the product's. A stored
+key of `card` survives the day somebody decides cards are 720 wide; a key of
+`640` does not.
+
+Four things happen, and each is a defect somewhere that skipped it:
+
+- **Orientation is applied**, and the returned `width` and `height` are the
+  _displayed_ ones. A phone stores a portrait photograph as a landscape one plus
+  an EXIF flag; reserving the stored shape produces exactly the layout shift the
+  placeholder was added to prevent.
+- **Metadata is dropped**, and the customer's coordinates with it. This is
+  sharp's default rather than a call made here — and there is a test asserting
+  it, because the day somebody adds `withMetadata()` to keep a colour profile,
+  the coordinates come back too.
+- **Nothing is enlarged.** A 400-pixel photograph asked for a 1600-pixel
+  derivative stays 400 wide.
+- **A dominant colour is measured** — `#rrggbb`, always — so the box is filled
+  before the picture lands. `placeholder: 'blur'` adds a `data:` URI of a few
+  hundred bytes as well.
+
+Input is identified by its bytes, not its name or its `Content-Type`, and
+anything that is not a raster photograph raises `UnsupportedImageError`. The
+refusal that matters is not a text file called `photo.jpg`: it is an SVG, which
+libvips will rasterise happily and which is a document format with a script
+engine and a URL loader in it.
+
+`maxPixels` guards decompression: a hundred-kilobyte PNG of one flat colour
+decodes to gigabytes, and a worker that meets one is killed by the kernel rather
+than raising anything anybody sees.
+
+Encoding runs one derivative at a time. sharp already threads each operation,
+so encoding six AVIFs at once finishes no sooner and holds six decoded images in
+memory while it does.

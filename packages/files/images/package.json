@@ -1,0 +1,5 @@
+{
+  "main": "../dist/images/index.js",
+  "types": "../dist/images/index.d.ts",
+  "sideEffects": false
+}

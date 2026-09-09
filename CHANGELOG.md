@@ -4,6 +4,40 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## files 1.3.0
+
+### Added
+
+- **`@birtalanrobert/files/images`** — the image pipeline eight of the seventeen
+  specifications call for, behind a subpath with `sharp` as an _optional_ peer
+  dependency. A repair shop, a wedding microsite, a menu and a made-to-order
+  workshop all receive photographs from people who are not thinking about the
+  web, and none of them will ever be asked to resize anything.
+
+  `renderImage(bytes, { sizes, formats, placeholder })` returns a responsive set
+  in modern formats, the displayed dimensions, a dominant colour and optionally
+  a blurred `data:` URI. Sizes are named in the product's own vocabulary —
+  `thumb`, `card`, `full` — because a stored key of `card` survives the day
+  somebody decides cards are 720 wide and a key of `640` does not.
+
+  Four corrections are the reason this is one function rather than four calls at
+  each consumer. **Orientation is applied and the returned dimensions are the
+  turned ones**: a phone stores a portrait photograph as a landscape one plus an
+  EXIF flag, and a page that reserves the stored shape produces exactly the
+  layout shift the placeholder was added to prevent. **Metadata is dropped**,
+  and the customer's front-door coordinates with it — sharp's default rather
+  than a call, which is why there is a test asserting it. **Nothing is
+  enlarged.** **A colour is measured** so the box is filled rather than white.
+
+  Input is identified by its bytes; anything that is not a raster photograph
+  raises `UnsupportedImageError`. The refusal that matters is the SVG, which
+  libvips will rasterise happily and which is a document format with a script
+  engine in it. `maxPixels` guards decompression, because the failure mode of a
+  bomb is a worker killed by the kernel rather than an error anybody sees.
+
+  Encoding is sequential on purpose: sharp threads each operation already, so
+  six at once finishes no sooner while holding six decoded images in memory.
+
 ## workflow 1.3.0
 
 ### Added
