@@ -4,6 +4,44 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## printing 1.0.0
+
+### Added
+
+- **`@birtalanrobert/printing`** — ESC/POS rendering, a raw port 9100 transport,
+  a retrying queue that escalates, and a printer that keeps what it was sent.
+  Three products need paper: project 11, where it is a **v1 requirement**
+  because a meaningful share of prospects will not buy without it; project 12's
+  intake receipt; and project 01's box-office stock. The layout stays in each
+  product — a kitchen ticket and a repair receipt share nothing but the wire.
+
+  `Ticket` makes four mistakes impossible, each of which has printed wrong in
+  somebody's kitchen. **The printer is initialised first**, because it holds
+  whatever the last ticket left it in — the classic symptom being every ticket
+  after a heading printing double height until somebody power-cycles it.
+  **Styles are turned off again.** **`cut()` feeds the paper past the blade
+  first**, since the blade sits above the print head and a cut without a feed
+  takes the last three items with it. And **accented text is encoded for the
+  printer's own character table**, defaulting to Windows-1250: the American
+  table most printers boot into turns "Ciorbă de burtă" into something a cook
+  misreads at a glance. Text wraps rather than truncating, because the end of a
+  line on a kitchen ticket is where the modifiers are.
+
+  `send` resolving means the bytes left this machine and nothing more — raw port
+  9100 has no acknowledgement, and a product reading "printed" as "on paper" is
+  reading something the protocol never says.
+
+  `PrintQueue` retries three times, prints serially (two jobs at once interleave
+  into one ticket with half of each on it), and **escalates**: `onFailure` is
+  not decoration, because a queue that swallows a failure is a kitchen with no
+  ticket that never learns it has none. A printer that does not exist fails
+  immediately — a configuration mistake answers the same way every time.
+
+  Deliberately **not** BullMQ. A print job is worthless a minute after it was
+  created, so it lives in memory beside the process that made it; after a
+  restart what a kitchen needs is the _current_ tickets, which the display and
+  the database already have.
+
 ## realtime 1.1.0
 
 ### Added
