@@ -55,6 +55,15 @@ export class MemoryStorage implements StoragePort {
     this.failing.add(key);
   }
 
+  /**
+   * What an object was stored with, so a test can assert the headers it will be
+   * served under. A derivative written without `cache-control` is a menu
+   * photograph every guest downloads twice.
+   */
+  optionsFor(key: string): PutOptions | undefined {
+    return this.objects.get(key)?.options;
+  }
+
   /** Lets a key work again, for a test asserting that a retry succeeds. */
   stopFailing(key: string): void {
     this.failing.delete(key);

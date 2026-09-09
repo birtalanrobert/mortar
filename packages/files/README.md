@@ -68,6 +68,14 @@ const { file, upload } = await files.beginUpload({
 await files.confirmUpload(tenantId, file.id, { accepted: ['application/pdf'] });
 ```
 
+**Send exactly the headers `presignUpload` returns, and no others.** A presigned
+PUT is refused if it carries a header the signature did not cover, so that map
+is the request rather than advice. Metadata is deliberately absent from it: the
+SDK encodes it into the URL, and sending it as `x-amz-meta-*` headers as well is
+what makes S3 answer "there were headers present in the request which were not
+signed" — on the one request the API is not part of, so the only symptom is a
+file that never appears.
+
 ## What `confirmUpload` does not trust
 
 Everything after a direct upload is verification, because the client has just
@@ -228,6 +236,14 @@ Four methods exist only for tests, and each earns its place:
 | `keys`, `has(key)`                | Assert on what a cleanup removed, without `get`'s `NotFoundError`                                                                                       |
 | `clear()`                         | Empty it between tests — one instance is normally shared across a file, and objects otherwise accumulate until an assertion passes for the wrong reason |
 | `failOn(key)`, `stopFailing(key)` | Make one object refuse every operation. Real buckets fail one object at a time, and the behaviour worth testing is what the caller does about it        |
+
+## Cache headers
+
+`put` and `presignUpload` take a `cacheControl`, and it goes on the object
+rather than on a response, because what serves these files is a CDN this
+application never speaks to. A rendered derivative is immutable — its key names
+its content — so `public, max-age=31536000, immutable` is the honest header for
+one. Do not set it on an original somebody uploaded: that key can be reused.
 
 ## The image pipeline
 

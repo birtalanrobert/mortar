@@ -69,7 +69,24 @@ export class S3Storage implements StoragePort {
   private readonly expiry: number;
 
   constructor(options: S3StorageOptions) {
-    const config: S3ClientConfig = { region: options.region };
+    const config: S3ClientConfig = {
+      region: options.region,
+      /**
+       * `WHEN_REQUIRED`, and this is not a performance tweak.
+       *
+       * Since v3.729 the SDK computes a CRC32 for every upload by default —
+       * including one it is only *signing*, where there is no body yet. The
+       * checksum of nothing is baked into the presigned URL as
+       * `x-amz-checksum-crc32=AAAAAA==`, and S3 then rejects the browser's PUT
+       * because the bytes that arrive do not hash to it. The failure is on the
+       * upload the API never sees, so the only symptom is a file that never
+       * appears.
+       *
+       * MinIO happens to ignore the mismatch, which is worse: the development
+       * stack works and the deployment does not.
+       */
+      requestChecksumCalculation: 'WHEN_REQUIRED',
+    };
     if (options.endpoint) config.endpoint = options.endpoint;
     if (options.forcePathStyle !== undefined) config.forcePathStyle = options.forcePathStyle;
     if (options.credentials) config.credentials = options.credentials;
@@ -87,6 +104,7 @@ export class S3Storage implements StoragePort {
         Body: body,
         ContentType: options.contentType,
         ContentDisposition: disposition(options.filename),
+        CacheControl: options.cacheControl,
         Metadata: options.metadata,
       }),
     );
@@ -162,18 +180,34 @@ export class S3Storage implements StoragePort {
       Key: key,
       ContentType: options.contentType,
       ContentDisposition: disposition(options.filename),
+      CacheControl: options.cacheControl,
       Metadata: options.metadata,
     });
 
     const url = await getSignedUrl(this.client, command, { expiresIn });
 
+    /**
+     * Exactly the headers the browser must send, and no others.
+     *
+     * A presigned PUT is refused outright if it carries a header the signature
+     * did not cover, so this list is not advice — it is the request. Two things
+     * decide what belongs on it, and neither is obvious:
+     *
+     * `ContentDisposition` is signed **as a header**, so omitting it breaks the
+     * signature. `ContentType` and `CacheControl` travel in the URL but are
+     * only applied to the stored object when the header is sent as well.
+     *
+     * **`Metadata` must not be here.** The SDK encodes it into the query string
+     * as `x-amz-meta-*` parameters; sending the same values as headers adds
+     * `x-amz-*` headers the signature does not cover, and every upload carrying
+     * metadata is refused with "there were headers present in the request which
+     * were not signed". The metadata still arrives — it is in the URL.
+     */
     const headers: Record<string, string> = {};
     if (options.contentType) headers['content-type'] = options.contentType;
+    if (options.cacheControl) headers['cache-control'] = options.cacheControl;
     const contentDisposition = disposition(options.filename);
     if (contentDisposition) headers['content-disposition'] = contentDisposition;
-    for (const [name, value] of Object.entries(options.metadata ?? {})) {
-      headers[`x-amz-meta-${name}`] = value;
-    }
 
     return { url, headers, expiresAt: new Date(Date.now() + expiresIn * 1000) };
   }

@@ -4,6 +4,50 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## files 1.4.0
+
+### Added
+
+- **`PutOptions.cacheControl`**, honoured by `S3Storage` on both `put` and
+  `presignUpload` and recorded by `MemoryStorage` (readable through a new
+  `optionsFor(key)`, so a test can assert what an object will be served under).
+
+  The header belongs on the object because the thing that serves it is a CDN the
+  application never speaks to. A rendered derivative's key names its content, so
+  it is immutable and deserves `public, max-age=31536000, immutable` — and
+  without it a guest's phone re-downloads every photograph on a menu on their
+  second visit, which is the whole budget the image pipeline was added to
+  protect. On a presigned upload it is signed in, so it appears in `headers` and
+  a browser that omits it gets a signature mismatch rather than an object
+  quietly missing the header.
+
+  Never set it on an original somebody uploaded: that key can be reused.
+
+### Fixed
+
+- **A presigned upload carrying metadata was refused by S3.** `presignUpload`
+  returned the metadata as `x-amz-meta-*` headers _as well as_ letting the SDK
+  encode it into the query string, and a presigned PUT is rejected outright if
+  it carries an `x-amz-*` header the signature does not cover: "there were
+  headers present in the request which were not signed". Every product's direct
+  upload sets metadata — the tenant and the scope, so an operator can read a
+  bucket during an incident without a database — so every one of them was
+  broken. The returned headers are now exactly the ones the browser must send:
+  `content-type`, `cache-control` (both applied only when sent) and
+  `content-disposition` (signed as a header, so omitting it breaks the
+  signature). The metadata still arrives; it is in the URL.
+
+  The failure had no witness. It happens on the one request the API is not part
+  of, so the only symptom is a file that never appears.
+
+- **The SDK signed a checksum of a body it had not seen.** Since v3.729 the AWS
+  SDK computes a CRC32 for every upload by default, including one it is only
+  presigning — so `x-amz-checksum-crc32` for an _empty_ body went into the URL
+  and S3 rejected the browser's bytes for not hashing to it. `S3Storage` now
+  sets `requestChecksumCalculation: 'WHEN_REQUIRED'`. MinIO ignores the
+  mismatch, which is the worst version of this: the development stack works and
+  the deployment does not.
+
 ## files 1.3.0
 
 ### Added

@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/files",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Pre-signed uploads, per-tenant key scoping, the image pipeline, virus scanning and retention",
   "license": "AGPL-3.0-only",
   "repository": {

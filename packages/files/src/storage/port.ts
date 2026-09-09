@@ -4,6 +4,19 @@ export interface PutOptions {
   filename?: string;
   /** Copied onto the object, for operators reading a bucket without a database. */
   metadata?: Record<string, string>;
+  /**
+   * The `Cache-Control` header the object is served with.
+   *
+   * It belongs on the object rather than on the request, because the thing that
+   * serves it is a CDN this application never speaks to. A rendered derivative
+   * — a menu photograph at 640 wide in AVIF — is immutable: its key names its
+   * content, so a change produces a different key. `public, max-age=31536000,
+   * immutable` is the honest header for one, and without it a guest's phone
+   * re-fetches every photograph on the menu on their second visit.
+   *
+   * Never set it on an original a person uploaded: that key *can* be reused.
+   */
+  cacheControl?: string;
 }
 
 export interface StoredObject {
