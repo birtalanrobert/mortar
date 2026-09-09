@@ -4,6 +4,53 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## realtime 1.1.0
+
+### Added
+
+- **`@birtalanrobert/realtime/nestjs`** — the server half: a WebSocket server, a
+  Redis-backed backlog, a Redis fan-out between gateway processes, a polling
+  handler and a Nest module.
+
+  `RedisBacklog` assigns the sequence number and stores the event **in one Lua
+  script**, because two round trips can come apart: a process that dies between
+  `INCR` and `ZADD` has handed out 413 and stored nothing, and no later care can
+  fill that hole — every client that reaches it is told the backlog starts at
+  414 and reloads, for ever, for an event that never existed.
+
+  `RedisBroadcast` is fire-and-forget, and that is acceptable _here and nowhere
+  else_: pub/sub does not deliver to a process that is not connected, but the
+  event is already durable, so a process that missed the broadcast serves it
+  from the resume the moment any client asks. The socket is the fast path; the
+  backlog is the truth.
+
+  `RealtimeSocketServer` sends a client's **replay before its welcome**. The
+  welcome says where a channel stands; sending it first would let a client with
+  no position adopt the latest sequence and then reject the replay it is about
+  to receive as already seen.
+
+  Authorisation is the product's, and returns a _subset_ rather than a boolean —
+  a display asking for two stations it may see and one it may not gets the two,
+  rather than a connection that fails for a reason nobody can see.
+
+  Nine integration tests against a real socket and a real Redis, including
+  twenty concurrent publishes asserting the numbers are 1 to 20 with nothing
+  repeated and nothing skipped.
+
+## redis 1.0.2
+
+### Fixed
+
+- **`flushTestRedis` deleted nothing.** `SCAN` returns keys with the client's
+  prefix already on them, and every write through that client _adds_ the prefix
+  — so passing the scanned keys straight to `DEL` removed `prefix:prefix:key`,
+  which exists nowhere. The prefix is now stripped before deleting.
+
+  Nothing failed, which is the point: suites using it shared state between
+  tests and passed anyway, until one counted something and found five events
+  where it had published four. There is now a test that sets a key, flushes, and
+  asserts it is gone.
+
 ## realtime 1.0.0
 
 ### Added

@@ -17,6 +17,22 @@ beforeEach(async () => {
   await flushTestRedis(client);
 });
 
+describe('the test helper itself', () => {
+  it('actually removes what it says it removes', async () => {
+    await client.set('left-behind', 'value');
+    await flushTestRedis(client);
+
+    /*
+     * It did not, for months. `SCAN` returns keys with the prefix already on
+     * and every write adds it, so passing them straight back deleted
+     * `prefix:prefix:key` — nothing failed, suites shared state between tests,
+     * and one of them eventually counted something and found four where it
+     * expected three.
+     */
+    expect(await client.get('left-behind')).toBeNull();
+  });
+});
+
 describe('health', () => {
   it('reports up with latency and memory', async () => {
     const health = await checkRedisHealth(client);

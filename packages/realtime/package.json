@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/realtime",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Channels with sequence numbers, gap detection, resume and a tested polling fallback",
   "license": "AGPL-3.0-only",
   "repository": {
@@ -18,12 +18,17 @@
     "README.md",
     "LICENSE",
     "NOTICE",
+    "nestjs",
     "CHANGELOG.md"
   ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./nestjs": {
+      "types": "./dist/nestjs/index.d.ts",
+      "default": "./dist/nestjs/index.js"
     },
     "./package.json": "./package.json"
   },
@@ -34,5 +39,29 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^11.0.0",
+    "ioredis": "^5.0.0",
+    "ws": "^8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@nestjs/common": {
+      "optional": true
+    },
+    "ioredis": {
+      "optional": true
+    },
+    "ws": {
+      "optional": true
+    }
+  },
+  "mortar": {
+    "entries": [
+      "nestjs"
+    ]
+  },
+  "devDependencies": {
+    "@birtalanrobert/redis": "workspace:^"
   }
 }

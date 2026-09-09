@@ -39,6 +39,7 @@
     "@swc/core": "^1.16.1",
     "@types/node": "^26.4.1",
     "@types/smtp-server": "^3.5.13",
+    "@types/ws": "^8.18.1",
     "bullmq": "^6.2.1",
     "eslint": "^10.9.1",
     "ioredis": "^5.4.1",
@@ -55,7 +56,8 @@
     "typescript-eslint": "^8.69.0",
     "unplugin-swc": "^1.5.11",
     "vite": "^8.2.2",
-    "vitest": "^5.0.0"
+    "vitest": "^5.0.0",
+    "ws": "^8.21.3"
   },
   "license": "AGPL-3.0-only"
 }

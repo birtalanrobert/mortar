@@ -38,6 +38,9 @@ importers:
       '@types/smtp-server':
         specifier: ^3.5.13
         version: 3.5.13
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
       bullmq:
         specifier: ^6.2.1
         version: 6.2.1(ioredis@5.11.1)(pg@8.23.0)
@@ -89,6 +92,9 @@ importers:
       vitest:
         specifier: ^5.0.0
         version: 5.0.0(@types/node@26.4.1)(vite@8.2.2(@types/node@26.4.1))
+      ws:
+        specifier: ^8.21.3
+        version: 8.21.3
 
   packages/audit:
     dependencies:
@@ -418,6 +424,12 @@ importers:
         version: 7.8.2
 
   packages/phone: {}
+
+  packages/realtime:
+    devDependencies:
+      '@birtalanrobert/redis':
+        specifier: workspace:^
+        version: link:../redis
 
   packages/redis:
     dependencies:
@@ -1326,6 +1338,9 @@ packages:
 
   '@types/web-push@3.6.4':
     resolution: {integrity: sha512-GnJmSr40H3RAnj0s34FNTcJi1hmWFV5KXugE0mYWnYhgTAHLJ/dJKAwDmvPJYMke0RplY2XE9LnM4hqSqKIjhQ==}
+
+  '@types/ws@8.18.1':
+    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
   '@typescript-eslint/eslint-plugin@8.69.0':
     resolution: {integrity: sha512-t5jQTKPIgVW1PE6dR6H6Qz5gm8zjMlX5/2gRaOGd9eO6V7J+tQc6iWKukEe7dY8u9HyYasQ0yfF0/FSSTEO2gA==}
@@ -2777,6 +2792,18 @@ packages:
     resolution: {integrity: sha512-MUnCnNtQrcZek832ZcU24uU0rSphFmKPD1DvIjXOlygVb93CV7Tme6H3jUTkxsMmjB2W7HIzERzjqTi5kui71A==}
     engines: {node: '>=18'}
 
+  ws@8.21.3:
+    resolution: {integrity: sha512-201TZ/kPWxoPr/OKWjquZR1SWKXcvxdH+e1xrx89b3YbmzLMFCLfnaG1HFIgWzJOEWZ7MvpK++odZufgYR50Rw==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
   xmlbuilder@13.0.2:
     resolution: {integrity: sha512-Eux0i2QdDYKbdbA6AM6xE4m6ZTZr4G4xF9kahI2ukSEMCzwce2eX9WlTI5J3s+NU7hpasFsr8hWIONae7LluAQ==}
     engines: {node: '>=6.0'}
@@ -3530,6 +3557,10 @@ snapshots:
   '@types/validator@13.15.10': {}
 
   '@types/web-push@3.6.4':
+    dependencies:
+      '@types/node': 26.4.1
+
+  '@types/ws@8.18.1':
     dependencies:
       '@types/node': 26.4.1
 
@@ -4942,6 +4973,8 @@ snapshots:
   write-excel-file@4.1.1:
     dependencies:
       fflate: 0.8.3
+
+  ws@8.21.3: {}
 
   xmlbuilder@13.0.2: {}
 

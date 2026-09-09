@@ -20,16 +20,32 @@ export function createTestRedis(namespace = 'test'): Redis {
   );
 }
 
-/** Removes every key this client's prefix owns. */
+/**
+ * Removes every key this client's prefix owns.
+ *
+ * **The prefix is stripped before deleting, and that is the whole of it.**
+ * `SCAN` returns keys as Redis stores them — with the prefix already on — while
+ * every write through this client has the prefix *added*. Passing the scanned
+ * keys straight back deleted `prefix:prefix:thing`, which exists nowhere, so
+ * this function quietly did nothing at all.
+ *
+ * Nothing failed. Suites that used it shared state between tests and passed
+ * anyway until one of them counted something, which is the shape of bug a test
+ * helper is worst at having.
+ */
 export async function flushTestRedis(client: Redis): Promise<void> {
-  const prefix = (client.options.keyPrefix ?? '') + '*';
+  const prefix = client.options.keyPrefix ?? '';
+
   // SCAN rather than KEYS: KEYS blocks the server, and even in tests that
   // habit escapes into production code by copy-paste.
-  const stream = client.scanStream({ match: prefix, count: 500 });
+  const stream = client.scanStream({ match: `${prefix}*`, count: 500 });
   const keys: string[] = [];
   for await (const batch of stream) keys.push(...(batch as string[]));
-  if (keys.length > 0) {
-    // These come back with the prefix already applied, so use a raw client.
-    await client.call('DEL', ...keys);
-  }
+
+  if (keys.length === 0) return;
+
+  // Stripped, so `del` can put it back. Every other command through this client
+  // works the same way, which is why it has to be done here rather than by
+  // reaching for a second connection.
+  await client.del(...keys.map((key) => key.slice(prefix.length)));
 }

@@ -88,6 +88,56 @@ second database nobody chose; a bounded one can fail to answer, and saying so
 out loud is what keeps a client honest. `MemoryBacklog` implements it for tests
 and single-process deployments.
 
+## The server half
+
+`@birtalanrobert/realtime/nestjs` — a WebSocket server, a Redis backlog, a
+fan-out between gateway processes, a polling handler and a Nest module. `ws`,
+`ioredis` and `@nestjs/common` are optional peers: a product that only holds a
+client pays for none of them.
+
+```ts
+import {
+  RealtimeModule,
+  RealtimeSocketServer,
+  RedisBacklog,
+  RedisBroadcast,
+} from '@birtalanrobert/realtime/nestjs';
+
+// In the module: the publisher, wired to a backlog the application built.
+RealtimeModule.forRootAsync({
+  inject: [ConfigModule.token(), RedisService],
+  useFactory: (config, redis) => ({
+    backlog: new RedisBacklog(redis.client, { prefix: config.QUEUE_PREFIX, keep: 500 }),
+    broadcast: broadcast.send,
+  }),
+});
+
+// In `main.ts`, where the HTTP server exists:
+const server = new RealtimeSocketServer({ publisher, backlog, authorise });
+server.attach(app.getHttpServer());
+```
+
+The socket server is **not** in the module on purpose: it needs the HTTP server
+the application creates at bootstrap, and a module that tried to own that would
+either guess at the ordering or hold a reference to something that does not
+exist yet.
+
+`RedisBacklog` assigns the number and stores the event in **one Lua script**.
+Two round trips can come apart: a process that dies between `INCR` and `ZADD`
+has handed out 413 and stored nothing, and no later care can fill that hole.
+
+`RedisBroadcast` is fire-and-forget, which is acceptable here and nowhere else:
+pub/sub does not deliver to a process that is not connected, but the event is
+already durable, so a process that missed it serves it from the resume the
+moment any client asks. The socket is the fast path; the backlog is the truth.
+
+`authorise` returns the **subset** a caller may have rather than a boolean, so a
+display asking for two stations it may see and one it may not gets the two —
+rather than a connection that fails for a reason nobody can see.
+
+For the polling route, `parsePollQuery` reads what the client sends and
+`pollSince` answers it through the same `resume`.
+
 ## What this package does not do
 
 Authorisation, acknowledgement, presence and moderation. Who may subscribe to
