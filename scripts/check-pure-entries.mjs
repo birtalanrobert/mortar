@@ -39,6 +39,12 @@ const BROWSER_IMPORTED = new Set([
   '@birtalanrobert/http',
   '@birtalanrobert/messaging',
   '@birtalanrobert/money',
+  /*
+   * Four browser bundles hold a realtime connection — a kitchen display, a
+   * staff app, a guest's phone and a game client — so its root carries the wire
+   * format, the gap logic and the client, and nothing that needs a server.
+   */
+  '@birtalanrobert/realtime',
   '@birtalanrobert/vouchers',
   '@birtalanrobert/workflow',
 ]);

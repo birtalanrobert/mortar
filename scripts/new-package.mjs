@@ -27,6 +27,17 @@ writeFileSync(
       version: '0.1.0',
       description: description ?? '',
       license: 'AGPL-3.0-only',
+      /*
+       * Required by `check-publishable`, which refuses a package without it —
+       * npm shows this on the package page and a public package with no link
+       * back to its source is one nobody can audit. Scaffolded rather than
+       * remembered: it was missing from the first package created this way.
+       */
+      repository: {
+        type: 'git',
+        url: 'git+https://github.com/birtalanrobert/mortar.git',
+        directory: `packages/${name}`,
+      },
       main: './dist/index.js',
       types: './dist/index.d.ts',
       files: [

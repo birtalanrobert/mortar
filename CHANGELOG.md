@@ -4,6 +4,46 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## realtime 1.0.0
+
+### Added
+
+- **`@birtalanrobert/realtime`** — channels with sequence numbers, gap
+  detection, resume, bidirectional heartbeats and a polling fallback that is
+  built and tested rather than described. Five specifications call for a live
+  connection — project 11's kitchen displays and staff app, and the four game
+  clients in 14 to 17 — so it is designed from those five rather than from the
+  one in hand.
+
+  **What makes it a package is gap detection, not socket handling.** A client
+  that can say "I last saw 412" and be told what it missed is the difference
+  between _probably fine_ and _provably complete_; a display quietly one ticket
+  behind looks exactly like a kitchen with no orders.
+
+  Three decisions carry the guarantees. **Sequence numbers are per channel**: a
+  global counter would make every subscriber's gap detection depend on traffic
+  it cannot see, so a kitchen display would think it had missed the messages a
+  guest's phone received. **Publishing is append then fan out**, in that order —
+  a subscriber told before the event was durable learns about something a
+  reconnecting client could not be given. And **the backlog is bounded**, so it
+  can fail to answer: a client that was away too long is sent a `gap` frame and
+  reloads, rather than a partial replay that looks complete.
+
+  The **polling fallback starts immediately** when a socket will not open, with
+  the socket retried behind it — a venue whose network eats WebSockets gets a
+  working display rather than a spinner and an exponential backoff. It speaks
+  the same protocol and is answered by the same `resume`, which is what keeps it
+  a fallback rather than a second implementation that differs on the day it is
+  needed.
+
+  The root entry is pure — wire format, gap logic, client — because four browser
+  bundles import it.
+
+  Authorisation, acknowledgement, presence and moderation are deliberately
+  absent: who may subscribe to a channel is the product's decision, and whether
+  a ticket was _acted on_ is a row in its database rather than a frame on a
+  socket.
+
 ## files 1.4.0
 
 ### Added
