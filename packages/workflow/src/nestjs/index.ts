@@ -13,6 +13,7 @@ export { workflowEntities, workflowMigrations } from './registry';
  * writes a move inside the caller's transaction.
  */
 export { TransitionLogEntity, appendOnlySql, dropAppendOnlySql } from '../machine/log.entity';
+export type { AppendOnlyOptions } from '../machine/log.entity';
 export {
   TransitionLog,
   TransitionRefused,

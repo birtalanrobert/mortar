@@ -380,3 +380,106 @@ describe('reversing a move', () => {
     expect(entered).toBeInstanceOf(Date);
   });
 });
+
+/**
+ * A retention schedule inside an append-only table.
+ *
+ * The two obligations are both real and pull opposite ways: the row is
+ * evidence of when somebody clocked in and must not be rewritten, while the
+ * distance from the site recorded beside it is personal data with a published
+ * expiry. Erasing that column is what `redactable` narrows the trigger to
+ * permit — and the tests worth having are the ones showing it stayed narrow.
+ */
+describe('a table with a redactable column', () => {
+  const TABLE = 'test_clock_events';
+  const EVENT = '44444444-4444-4444-8444-444444444444';
+
+  beforeEach(async () => {
+    // Dropped rather than emptied: the trigger goes with the table, so each
+    // test gets the SQL the package generates today rather than whatever a
+    // previous run left behind.
+    await dataSource.query(`DROP TABLE IF EXISTS "${TABLE}"`);
+    await dataSource.query(`
+      CREATE TABLE "${TABLE}" (
+        "id" uuid NOT NULL,
+        "employee" varchar(60) NOT NULL,
+        "at" timestamptz NOT NULL,
+        "metres_from_site" integer,
+        CONSTRAINT "pk_${TABLE}" PRIMARY KEY ("id")
+      )
+    `);
+    for (const statement of appendOnlySql(TABLE, { redactable: ['metres_from_site'] })) {
+      await dataSource.query(statement);
+    }
+    await dataSource.query(
+      `INSERT INTO "${TABLE}" ("id", "employee", "at", "metres_from_site")
+       VALUES ($1, 'ana', now(), 40)`,
+      [EVENT],
+    );
+  });
+
+  const row = async () =>
+    (
+      await dataSource.query<Array<{ employee: string; metres_from_site: number | null }>>(
+        `SELECT "employee", "metres_from_site" FROM "${TABLE}" WHERE "id" = $1`,
+        [EVENT],
+      )
+    )[0];
+
+  it('lets a sweep erase the column it names', async () => {
+    await dataSource.query(`UPDATE "${TABLE}" SET "metres_from_site" = NULL WHERE "id" = $1`, [
+      EVENT,
+    ]);
+
+    // The event survives the erasure. That is the whole point: the hours are
+    // still evidence, and only the location trace has expired.
+    expect(await row()).toEqual({ employee: 'ana', metres_from_site: null });
+  });
+
+  it('does not mind the sweep running twice', async () => {
+    // An hourly sweep re-reaches rows it has already cleared, and an error
+    // there is a worker restarting rather than a promise being kept.
+    for (let pass = 0; pass < 2; pass += 1) {
+      await expect(
+        dataSource.query(`UPDATE "${TABLE}" SET "metres_from_site" = NULL WHERE "id" = $1`, [
+          EVENT,
+        ]),
+      ).resolves.toBeDefined();
+    }
+  });
+
+  it('refuses a value written into the redactable column', async () => {
+    // Erasure only. A column that could be *rewritten* would let somebody move
+    // an out-of-area clock-in inside the geofence after the fact.
+    await expect(
+      dataSource.query(`UPDATE "${TABLE}" SET "metres_from_site" = 5 WHERE "id" = $1`, [EVENT]),
+    ).rejects.toThrow(/may be erased but not written/);
+  });
+
+  it('refuses an erasure smuggling a rewrite alongside it', async () => {
+    await expect(
+      dataSource.query(
+        `UPDATE "${TABLE}" SET "metres_from_site" = NULL, "employee" = 'somebody else'
+         WHERE "id" = $1`,
+        [EVENT],
+      ),
+    ).rejects.toThrow(/append-only/);
+  });
+
+  it('still refuses an ordinary rewrite', async () => {
+    await expect(
+      dataSource.query(`UPDATE "${TABLE}" SET "employee" = 'somebody else' WHERE "id" = $1`, [
+        EVENT,
+      ]),
+    ).rejects.toThrow(/append-only/);
+  });
+
+  it('refuses to generate SQL for something that is not a column name', () => {
+    // Left to Postgres this becomes a trigger that refuses every update
+    // including the redaction it was added for, blaming append-only rather than
+    // the typo — a release away from the mistake.
+    expect(() => appendOnlySql(TABLE, { redactable: ['metres_from_site; DROP TABLE x'] })).toThrow(
+      /Not a column name/,
+    );
+  });
+});

@@ -4,18 +4,47 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## workflow 1.3.0
+
+### Added
+
+- **`appendOnlySql(table, { redactable })`** — columns a retention sweep may set
+  to `NULL`, and nothing else. Append-only and a published retention schedule
+  pull against each other: the row is evidence of when somebody clocked in and
+  must never be rewritten, while one column of it — a location trace, a
+  photograph, an IP address — is personal data with an expiry date printed in a
+  document a regulator can read.
+
+  Without this the only way to keep that promise is to drop the trigger, sweep,
+  and put it back: an operation performed under time pressure, on production,
+  and sometimes forgotten halfway. So the erasure is narrowed instead of the
+  protection being removed. An update passes only when every named column ends
+  up `NULL` and every other column is exactly what it was; nulling an
+  already-null column is fine, because an hourly sweep re-reaches rows it has
+  already cleared and an error there is a worker restarting rather than a
+  promise being kept.
+
+  Tables that name no redactable column keep the function they had, character
+  for character.
+
+  **The order of the two checks inside the trigger is the error message rather
+  than the outcome.** Checked the other way round, an ordinary rewrite of an
+  unrelated column is still refused — but refused for leaving the _location_
+  untouched, which sends whoever reads the log looking at the wrong column
+  entirely. The rest of the row is compared first.
+
 ## comms 1.9.1
 
 ### Changed
 
 - **`WebPushMessagePort` now takes a `DataSource` rather than a `keysFor`
   callback.** The callback had to be `CommsService.pushKeysFor`, and that cannot
-  be built at the moment the module which *provides* `CommsService` is being
+  be built at the moment the module which _provides_ `CommsService` is being
   configured — every consumer would hit the same circle, and Nest's message for
   it names neither the port nor the reason.
 
   `mortar_push_subscription` is this package's own table, so the port reading it
-  is not a layer being crossed. It still learns nothing about *who* is
+  is not a layer being crossed. It still learns nothing about _who_ is
   subscribed: an endpoint and the two keys for it is all a transport should
   know, and all it gets.
 
@@ -57,7 +86,7 @@ rest.
 ### Changed
 
 - **`toXlsx` now writes with `write-excel-file` rather than ExcelJS**, and the
-  reason is a licence rather than a feature. ExcelJS reaches an *unlicensed*
+  reason is a licence rather than a feature. ExcelJS reaches an _unlicensed_
   transitive dependency through its **reading** path — `unzipper` → `binary` →
   `buffers`, and `buffers@0.1.1` declares no licence anywhere, which under
   copyright means no rights granted. A product that ships cannot rely on code
@@ -76,7 +105,7 @@ rest.
 ### Added
 
 - **`@birtalanrobert/csv/xlsx`** — writing the `.xlsx` a bookkeeper opens. Four
-  of the seventeen specifications ask for Excel *beside* CSV (03, 04, 05, 07)
+  of the seventeen specifications ask for Excel _beside_ CSV (03, 04, 05, 07)
   and the reason is always the same: a CSV opened in Excel is reinterpreted on
   the way in. An employee reference of `0042` becomes the number 42, and `7,50`
   becomes either seven and a half or the text "7,50" depending on a setting
@@ -93,7 +122,7 @@ rest.
 
 ### Changed
 
-- The package description now says *tabular files* rather than *CSV files*. The
+- The package description now says _tabular files_ rather than _CSV files_. The
   name stays `csv`, because renaming a published package costs every consumer a
   change for no gain.
 
@@ -106,7 +135,7 @@ rest.
   not — but the Web Crypto API implements PBKDF2 and does not implement scrypt.
   A surface that has to authenticate with no network therefore either verifies a
   PBKDF2 hash with the platform's own primitive, ships a JavaScript scrypt into
-  every bundle, or holds a *second* hash of the same secret in a second format.
+  every bundle, or holds a _second_ hash of the same secret in a second format.
   The third is the worst of the three: two representations of one secret is two
   things to keep in step, and the day they disagree is the day somebody cannot
   clock in.
