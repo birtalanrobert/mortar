@@ -33,6 +33,20 @@ rest.
   untouched, which sends whoever reads the log looking at the wrong column
   entirely. The rest of the row is compared first.
 
+## context 1.2.0
+
+### Added
+
+- **`device` as an actor type.** Hardware that acts on its own credential —
+  a kitchen display acknowledging a ticket, a tablet by a door recording a
+  clock-in — was previously recorded as `client`, alongside the guest whose
+  phone is in the same room. That is the one distinction the audit trail cannot
+  afford to lose: "which display acknowledged this order?" is the first question
+  asked when a table waits forty minutes, and an answer of "a client" does not
+  separate the screen at the pass from the guest's own handset.
+
+  Additive: `client` still means what it meant, and nothing has to move.
+
 ## comms 1.9.1
 
 ### Changed

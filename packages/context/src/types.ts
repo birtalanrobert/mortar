@@ -38,16 +38,25 @@ export interface Actor {
   readonly id: string;
   /**
    * `user` is a human with an account; `client` is a link-authenticated party
-   * with no account (a guest, a candidate, a tenant of a landlord); `system`
-   * is scheduled or internal work; `service` is a machine credential;
-   * `operator` is one of *us* working inside a customer's account.
+   * with no account (a guest, a candidate, a tenant of a landlord); `device` is
+   * a registered piece of hardware acting on its own credential; `system` is
+   * scheduled or internal work; `service` is a machine credential; `operator`
+   * is one of *us* working inside a customer's account.
    *
    * `operator` is separate from `user` because the audit trail has to be able
    * to say which it was. Support access recorded as the customer's own action
    * is worse than no record at all — it is a confident answer to "who opened
    * this?" that names the wrong person, and the customer has no way to tell.
+   *
+   * `device` is separate from `client` for the same reason, and the products
+   * that need it are the ones where hardware acts unattended: a kitchen screen
+   * acknowledging a ticket, a tablet by a door recording a clock-in, a scanner
+   * on a production line. "Which display acknowledged this?" is the first
+   * question asked when an order is missed, and an audit trail that answers
+   * "a client" cannot distinguish the screen at the pass from the guest's own
+   * phone.
    */
-  readonly type: 'user' | 'client' | 'system' | 'service' | 'operator';
+  readonly type: 'user' | 'client' | 'device' | 'system' | 'service' | 'operator';
   readonly displayName?: string;
   readonly roles?: readonly string[];
   /**
