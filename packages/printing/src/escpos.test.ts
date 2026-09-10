@@ -120,6 +120,29 @@ describe('wrapping to the paper', () => {
     expect(wrap('first\nsecond', 20)).toEqual(['first', 'second']);
   });
 
+  it('keeps an indent, and keeps it on what wraps', () => {
+    /*
+     * Leading spaces are structure. A kitchen ticket indents a modifier under
+     * its dish, and flush left it reads as belonging to the *next* dish — which
+     * is how somebody's allergy ends up on the wrong plate.
+     *
+     * The continuation line matters as much as the first: a modifier long
+     * enough to wrap that slides back to the margin has the same problem one
+     * line later.
+     */
+    expect(wrap('   no onions at all please', 14)).toEqual([
+      '   no onions',
+      '   at all',
+      '   please',
+    ]);
+  });
+
+  it('prefers the text to the indent when the paper is too narrow', () => {
+    // An indent as wide as the paper leaves nowhere to print. The words win:
+    // they are the part somebody has to read.
+    expect(wrap('        hello', 6)).toEqual(['hello']);
+  });
+
   it('never truncates', () => {
     /*
      * The end of a line on a kitchen ticket is where the modifiers are, and

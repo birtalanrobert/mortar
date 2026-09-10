@@ -231,27 +231,49 @@ export function wrap(text: string, width: number): string[] {
   const lines: string[] = [];
 
   for (const paragraph of text.split('\n')) {
+    /*
+     * Leading spaces are structure, and they used to be eaten.
+     *
+     * Splitting on `' '` turns `'   Extra sauce'` into three empty words
+     * followed by the real ones, and every empty one is discarded — so an
+     * indented block came out flush left. On a kitchen ticket that indentation
+     * is what separates a modifier from the *next* dish's name, and losing it
+     * is how a cook reads "no onions" as belonging to the wrong plate.
+     *
+     * Kept, and re-applied to continuation lines: a modifier long enough to
+     * wrap must stay under its dish, not slide back out to the margin.
+     */
+    const indent = paragraph.slice(0, paragraph.length - paragraph.trimStart().length);
+    const room = width - indent.length;
+
+    // An indent as wide as the paper leaves nowhere to print. The text wins;
+    // it is the part somebody has to read.
+    if (room < 1) {
+      lines.push(...wrap(paragraph.trimStart(), width));
+      continue;
+    }
+
     let current = '';
 
-    for (const word of paragraph.split(' ')) {
+    for (const word of paragraph.trimStart().split(' ')) {
       if (current === '') {
         current = word;
-      } else if (`${current} ${word}`.length <= width) {
+      } else if (`${current} ${word}`.length <= room) {
         current = `${current} ${word}`;
       } else {
-        lines.push(current);
+        lines.push(indent + current);
         current = word;
       }
 
       // A single word longer than the paper — a URL, a long dish name — is
       // broken rather than left to run off the edge.
-      while (current.length > width) {
-        lines.push(current.slice(0, width));
-        current = current.slice(width);
+      while (current.length > room) {
+        lines.push(indent + current.slice(0, room));
+        current = current.slice(room);
       }
     }
 
-    lines.push(current);
+    lines.push(indent + current);
   }
 
   return lines;

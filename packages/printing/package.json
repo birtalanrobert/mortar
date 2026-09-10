@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/printing",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "ESC/POS rendering, a network transport, a retrying job queue and a virtual printer",
   "license": "AGPL-3.0-only",
   "repository": {

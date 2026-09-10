@@ -161,3 +161,53 @@ describe('a queue of jobs', () => {
     expect(states).toEqual(['failed', 'printed']);
   });
 });
+
+describe('queueing several jobs at once', () => {
+  it('tells each job’s own caller what happened to it', async () => {
+    const printer = new MemoryPrinter();
+    const queue = new PrintQueue({ transportFor: () => printer });
+
+    const told: Array<{ id: string; state: string }> = [];
+    const enqueue = (id: string) =>
+      queue.enqueue({ ...job(), id }, (outcome) => told.push({ id, state: outcome.state }));
+
+    /*
+     * Three tickets from one order, which is what a routed order is. The
+     * callbacks used to belong to whichever enqueue started the drain loop, so
+     * the second and third outcomes were handed to the first job's caller — a
+     * product then records "printed" against the wrong ticket, and the one that
+     * actually failed is marked as fine.
+     */
+    enqueue('grill');
+    enqueue('bar');
+    enqueue('larder');
+
+    await vi.waitFor(() => expect(told).toHaveLength(3));
+
+    expect(told).toEqual([
+      { id: 'grill', state: 'printed' },
+      { id: 'bar', state: 'printed' },
+      { id: 'larder', state: 'printed' },
+    ]);
+  });
+
+  it('keeps draining when one caller’s callback throws', async () => {
+    const printer = new MemoryPrinter();
+    const queue = new PrintQueue({ transportFor: () => printer });
+
+    const told: string[] = [];
+
+    queue.enqueue({ ...job(), id: 'first' }, () => {
+      throw new Error('the product’s own recording failed');
+    });
+    queue.enqueue({ ...job(), id: 'second' }, () => told.push('second'));
+
+    /*
+     * A kitchen's remaining tickets must not sit in a queue that stopped
+     * because one product callback threw — that is a queue swallowing work
+     * rather than a failure, which is the harder one to notice.
+     */
+    await vi.waitFor(() => expect(told).toEqual(['second']));
+    expect(printer.printed).toHaveLength(2);
+  });
+});

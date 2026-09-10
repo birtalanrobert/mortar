@@ -35,6 +35,32 @@ rest.
   two replicas can be given identically — which would make each drop the other's
   events, the one failure the fan-out exists to prevent.
 
+## printing 1.0.1
+
+### Fixed
+
+- **A queued job's callback now belongs to that job.** `enqueue`'s `onDone` was
+  held by the drain loop rather than by the job, so anything queued while the
+  printer was busy had its outcome handed to the _previous_ job's caller. One
+  routed order is three tickets queued in a row, which made this the normal case
+  rather than a race: a product recording "printed" then recorded it against the
+  wrong ticket, and the one that actually failed was marked as fine — worse than
+  recording nothing, because the whole point of the callback is knowing which
+  ticket has no paper.
+
+- **One caller's callback throwing no longer stops the queue.** The remaining
+  tickets sat in a queue that had quietly stopped draining, which is the harder
+  failure to notice: nothing errored, and a kitchen simply received less than it
+  was sent.
+
+- **`wrap` no longer eats a leading indent.** Splitting on spaces turned
+  `'   Extra sauce'` into three empty words that were discarded, so an indented
+  block printed flush left. That indent is not decoration: it is what separates
+  a modifier from the _next_ dish's name on a kitchen ticket, and without it a
+  cook reads "no onions" as belonging to the wrong plate. The indent is now kept
+  and re-applied to continuation lines, so a modifier long enough to wrap stays
+  under its dish instead of sliding back to the margin.
+
 ## printing 1.0.0
 
 ### Added

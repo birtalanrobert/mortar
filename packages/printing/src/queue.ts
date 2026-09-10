@@ -54,9 +54,15 @@ export interface QueueOptions {
  * promise: on a restart, what a kitchen needs is the *current* tickets, which
  * the display and the database already have.
  */
+/** A job and the callback that belongs to *it*, kept together on purpose. */
+interface Queued {
+  readonly job: PrintJob;
+  readonly onDone?: (outcome: JobOutcome) => void;
+}
+
 export class PrintQueue {
   private running = false;
-  private readonly waiting: PrintJob[] = [];
+  private readonly waiting: Queued[] = [];
 
   constructor(private readonly options: QueueOptions) {}
 
@@ -111,19 +117,38 @@ export class PrintQueue {
    * which is worse than either arriving late.
    */
   enqueue(job: PrintJob, onDone?: (outcome: JobOutcome) => void): void {
-    this.waiting.push(job);
-    void this.drain(onDone);
+    /*
+     * The callback travels **with the job**, and that is the whole of it.
+     *
+     * Held by the drain loop instead, it belonged to whichever enqueue happened
+     * to start the loop: a second job added while the first was printing had
+     * its outcome handed to the first job's callback. A product recording
+     * "printed" against a ticket is then recording it against the wrong one —
+     * and the ticket that actually failed is marked as fine, which is worse
+     * than not recording anything.
+     */
+    this.waiting.push({ job, onDone });
+    void this.drain();
   }
 
-  private async drain(onDone?: (outcome: JobOutcome) => void): Promise<void> {
+  private async drain(): Promise<void> {
     if (this.running) return;
     this.running = true;
 
     try {
       while (this.waiting.length > 0) {
-        const job = this.waiting.shift()!;
-        const outcome = await this.print(job);
-        onDone?.(outcome);
+        const next = this.waiting.shift()!;
+        const outcome = await this.print(next.job);
+
+        try {
+          next.onDone?.(outcome);
+        } catch {
+          /*
+           * One job's callback is not another's. A product whose recording
+           * threw must not leave the rest of a kitchen's tickets sitting in a
+           * queue that stopped draining.
+           */
+        }
       }
     } finally {
       this.running = false;
