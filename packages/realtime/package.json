@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/realtime",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "description": "Channels with sequence numbers, gap detection, resume and a tested polling fallback",
   "license": "AGPL-3.0-only",
   "repository": {
@@ -30,7 +30,11 @@
       "types": "./dist/nestjs/index.d.ts",
       "default": "./dist/nestjs/index.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./nestjs/socket": {
+      "types": "./dist/nestjs/socket/index.d.ts",
+      "default": "./dist/nestjs/socket/index.js"
+    }
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -58,7 +62,8 @@
   },
   "mortar": {
     "entries": [
-      "nestjs"
+      "nestjs",
+      "nestjs/socket"
     ]
   },
   "devDependencies": {

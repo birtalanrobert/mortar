@@ -4,6 +4,37 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## realtime 2.0.0
+
+### Changed
+
+- **`RealtimeSocketServer` moved to `@birtalanrobert/realtime/nestjs/socket`.**
+  It is the only thing in the package that needs `ws`, and importing a barrel
+  loads everything in it — so a process that publishes and holds no sockets was
+  made to install a WebSocket library to reach a Redis backlog, which is exactly
+  what declaring `ws` an optional peer was meant to avoid. Found the moment a
+  second publisher appeared: project 11's worker releases a held course when its
+  timer runs out, publishes it into the same backlog the API serves, and could
+  not boot.
+
+  One import to change per gateway process; nothing else moves.
+
+### Fixed
+
+- **A process no longer receives its own broadcast.** Redis pub/sub delivers to
+  every subscriber on the channel, the sender included, so a gateway that both
+  sends and listens — which is every replica — handed each of its own events to
+  its sockets twice: once locally, once on the way back. Clients survived it,
+  because a repeated sequence number is `skip`; what nobody would have noticed
+  is that every screen in the building was being sent twice what it needed, over
+  venue wifi, on a tablet. Each message now carries the id of the process that
+  sent it and is dropped on arrival at that same process.
+
+  The id is generated rather than configured, deliberately: it exists only to
+  recognise a message coming back, and a value an operator could set is a value
+  two replicas can be given identically — which would make each drop the other's
+  events, the one failure the fan-out exists to prevent.
+
 ## printing 1.0.0
 
 ### Added

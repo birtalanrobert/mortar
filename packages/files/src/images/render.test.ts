@@ -86,16 +86,28 @@ describe('rendering an upload', () => {
     const withLocation = await sharp({
       create: { width: 400, height: 300, channels: 3, background: { r: 200, g: 30, b: 30 } },
     })
+      /*
+       * `IFD3` is where sharp puts GPS. It was written here as `GPSIFD` — the
+       * name libexif uses — which sharp accepts and silently ignores, so the
+       * fixture carried a copyright notice and no coordinates at all while the
+       * test claimed to be about coordinates.
+       */
       .withExifMerge({
         IFD0: { Copyright: 'A photographer' },
-        GPSIFD: { GPSLatitudeRef: 'N', GPSLatitude: '46/1 46/1 0/1' },
+        IFD3: { GPSLatitudeRef: 'N', GPSLatitude: '46/1 46/1 0/1' },
       })
       .jpeg()
       .toBuffer();
 
-    // Proving the fixture first: a test that strips nothing passes just as
-    // happily as one that strips everything.
-    expect((await sharp(withLocation).metadata()).exif).toBeInstanceOf(Buffer);
+    /*
+     * Proving the fixture first, and proving that the merge actually landed
+     * rather than that some EXIF block exists: a test that strips nothing
+     * passes just as happily as one that strips everything, and one whose
+     * fixture never carried the metadata passes most happily of all.
+     */
+    const original = (await sharp(withLocation).metadata()).exif;
+    expect(original).toBeInstanceOf(Buffer);
+    expect(original!.toString('latin1')).toContain('A photographer');
 
     const rendered = await renderImage(withLocation, {
       sizes: [{ name: 'card', width: 200 }],

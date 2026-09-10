@@ -1,9 +1,9 @@
 import type { IncomingMessage, Server as HttpServer } from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
-import type { RealtimePublisher } from '../server/publisher';
-import type { BacklogPort } from '../server/backlog';
-import { resume } from '../server/resume';
-import { parseFrame, type ClientFrame, type RealtimeEvent, type ServerFrame } from '../wire';
+import type { RealtimePublisher } from '../../server/publisher';
+import type { BacklogPort } from '../../server/backlog';
+import { resume } from '../../server/resume';
+import { parseFrame, type ClientFrame, type RealtimeEvent, type ServerFrame } from '../../wire';
 
 /**
  * Who is asking, and what they may listen to.

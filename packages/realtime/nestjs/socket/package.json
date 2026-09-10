@@ -1,0 +1,5 @@
+{
+  "main": "../dist/nestjs/socket/index.js",
+  "types": "../dist/nestjs/socket/index.d.ts",
+  "sideEffects": false
+}

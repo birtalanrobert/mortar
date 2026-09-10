@@ -21,7 +21,14 @@ describe('a network printer', () => {
   beforeAll(async () => {
     server = createServer((socket) => {
       const chunks: Buffer[] = [];
-      socket.on('data', (chunk) => chunks.push(chunk));
+      /*
+       * A socket with no encoding set hands over buffers, but the type says
+       * `string | Buffer` — so the narrowing is here rather than a cast, which
+       * would be the same claim with nothing checking it.
+       */
+      socket.on('data', (chunk: Buffer | string) => {
+        chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+      });
       socket.on('end', () => received.push(Buffer.concat(chunks)));
     });
 
@@ -72,7 +79,9 @@ describe('a network printer', () => {
       transportFor: () => new NetworkPrinter({ host: '127.0.0.1', port: 9, timeoutMs: 200 }),
       attempts: 2,
       backoffMs: () => 10,
-      onFailure: (_job, reason) => told.push(reason),
+      onFailure: (_job, reason) => {
+        told.push(reason);
+      },
     });
 
     const outcome = await queue.print({

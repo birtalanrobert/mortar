@@ -90,18 +90,19 @@ and single-process deployments.
 
 ## The server half
 
-`@birtalanrobert/realtime/nestjs` — a WebSocket server, a Redis backlog, a
-fan-out between gateway processes, a polling handler and a Nest module. `ws`,
-`ioredis` and `@nestjs/common` are optional peers: a product that only holds a
-client pays for none of them.
+`@birtalanrobert/realtime/nestjs` — a Redis backlog, a fan-out between gateway
+processes, a polling handler and a Nest module. `ioredis` and `@nestjs/common`
+are optional peers: a product that only holds a client pays for neither.
+
+`@birtalanrobert/realtime/nestjs/socket` — the WebSocket server, and the only
+thing here that needs `ws`. It is a separate entry point because importing a
+barrel loads everything in it: a process that publishes and holds no sockets — a
+worker releasing a timed event, say — would otherwise have to install a
+WebSocket library to reach a Redis backlog.
 
 ```ts
-import {
-  RealtimeModule,
-  RealtimeSocketServer,
-  RedisBacklog,
-  RedisBroadcast,
-} from '@birtalanrobert/realtime/nestjs';
+import { RealtimeModule, RedisBacklog, RedisBroadcast } from '@birtalanrobert/realtime/nestjs';
+import { RealtimeSocketServer } from '@birtalanrobert/realtime/nestjs/socket';
 
 // In the module: the publisher, wired to a backlog the application built.
 RealtimeModule.forRootAsync({

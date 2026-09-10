@@ -9,7 +9,7 @@ import { RealtimeClient } from '../client';
 import type { RealtimeEvent } from '../wire';
 import { RedisBacklog } from './redis-backlog';
 import { RedisBroadcast } from './redis-broadcast';
-import { RealtimeSocketServer } from './socket-server';
+import { RealtimeSocketServer } from './socket';
 import { pollSince } from './polling';
 
 /**
@@ -193,20 +193,72 @@ describe('a realtime gateway', () => {
      * other process reaches a third of the kitchen — and the rest are not told
      * they are missing it.
      */
-    const broadcast = new RedisBroadcast(redis, subscriber, 'test-realtime');
-    await broadcast.listen(publisher);
+    const here = new RedisBroadcast(redis, subscriber, 'test-realtime');
+    await here.listen(publisher);
 
     const { client, received } = connect(['station:bar']);
     client.start();
     await settle();
 
-    // A second process: its own publisher, the same backlog and the same Redis.
-    const elsewhere = new RealtimePublisher({ backlog, broadcast: broadcast.send });
+    /*
+     * A second process: **its own `RedisBroadcast`**, its own publisher, the
+     * same backlog and the same Redis. Two instances rather than one, because
+     * each process now recognises its own messages coming back — sharing an
+     * instance between the two halves of this test would be modelling one
+     * process pretending to be two, which is the thing that stopped being true.
+     */
+    const there = new RedisBroadcast(redis, subscriber, 'test-realtime');
+    const elsewhere = new RealtimePublisher({ backlog, broadcast: there.send });
     await elsewhere.publish({ channel: 'station:bar', type: 'ticket.created', data: {} });
     await settle(300);
 
     expect(received.map((event) => event.type)).toEqual(['ticket.created']);
     client.stop();
+  });
+
+  it('does not hand a process its own broadcast a second time', async () => {
+    /*
+     * Redis pub/sub delivers to every subscriber on the channel, the sender
+     * included. A process that both sends and listens — which is every gateway
+     * replica — would otherwise write each of its own events to its sockets
+     * twice: once locally, once on the way back.
+     *
+     * Clients survive it, because a repeated sequence number is `skip`. What
+     * nobody survives is not noticing that every screen in the building is
+     * being sent twice what it needs, over venue wifi, on a tablet.
+     *
+     * Its own connections and its own fan-out channel, because the assertion is
+     * about how many times something arrives — and every other test in this
+     * file has left a listener on the shared subscriber.
+     */
+    const mine = createTestRedis();
+    const theirs = createTestRedis();
+    const listening = createTestRedis();
+    const alsoListening = createTestRedis();
+
+    const here = new RedisBroadcast(mine, listening, 'test-realtime-echo');
+    const there = new RedisBroadcast(theirs, alsoListening, 'test-realtime-echo');
+
+    const local = new RealtimePublisher({ backlog, broadcast: here.send });
+    const other = new RealtimePublisher({ backlog });
+
+    await here.listen(local);
+    await there.listen(other);
+
+    const seen: RealtimeEvent[] = [];
+    const elsewhere: RealtimeEvent[] = [];
+    local.onEvent((event) => seen.push(event));
+    other.onEvent((event) => elsewhere.push(event));
+
+    await local.publish({ channel: 'station:echo', type: 'ticket.created', data: {} });
+    await settle(300);
+
+    // Once at home — delivered locally, not again on the way back.
+    expect(seen.map((event) => event.seq)).toEqual([1]);
+    // And once at the other process, which is the entire point of sending it.
+    expect(elsewhere.map((event) => event.seq)).toEqual([1]);
+
+    for (const client of [mine, theirs, listening, alsoListening]) client.disconnect();
   });
 
   it('answers the polling fallback with the same events as the socket', async () => {

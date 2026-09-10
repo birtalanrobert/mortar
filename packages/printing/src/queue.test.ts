@@ -73,7 +73,9 @@ describe('printing a job', () => {
     const told: string[] = [];
     const queue = new PrintQueue({
       transportFor: () => undefined,
-      onFailure: (_job, reason) => told.push(reason),
+      onFailure: (_job, reason) => {
+        told.push(reason);
+      },
     });
 
     const outcome = await queue.print(job('a printer nobody configured'));
