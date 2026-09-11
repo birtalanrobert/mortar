@@ -1,5 +1,36 @@
 import { describe, expect, it } from 'vitest';
-import { QUIET_ZONE, qrMatrix, qrRuns } from './qr';
+import jsQR from 'jsqr';
+import { QUIET_ZONE, qrMatrix, qrRuns, type QrMatrix } from './qr';
+
+/**
+ * The matrix as pixels, so a real decoder can read it back.
+ *
+ * Drawn from `qrRuns` rather than from `dark` directly — the runs are what the
+ * PDF draws, so decoding them is the round trip that matters rather than a
+ * restatement of the matrix. The quiet zone is included because a scanner
+ * needs it and a test that omitted it would be testing a code no phone reads.
+ */
+function pixels(matrix: QrMatrix, scale = 4): { data: Uint8ClampedArray; size: number } {
+  const span = (matrix.size + QUIET_ZONE * 2) * scale;
+  const data = new Uint8ClampedArray(span * span * 4).fill(255);
+
+  const paint = (x: number, y: number): void => {
+    const at = (y * span + x) * 4;
+    data[at] = 0;
+    data[at + 1] = 0;
+    data[at + 2] = 0;
+  };
+
+  for (const run of qrRuns(matrix)) {
+    for (let x = 0; x < run.length * scale; x += 1) {
+      for (let y = 0; y < scale; y += 1) {
+        paint((QUIET_ZONE + run.x) * scale + x, (QUIET_ZONE + run.y) * scale + y);
+      }
+    }
+  }
+
+  return { data, size: span };
+}
 
 describe('qrMatrix', () => {
   /**
@@ -56,6 +87,28 @@ describe('qrMatrix', () => {
 
     expect(matrix.dark(-1, 0)).toBe(false);
     expect(matrix.dark(0, matrix.size)).toBe(false);
+  });
+
+  /**
+   * The round trip, with a real decoder.
+   *
+   * Every other check here restates what the matrix says; this one reads it
+   * back the way a phone does. It is the property the whole artefact rests on —
+   * a code that renders beautifully and decodes to the wrong thing is worse
+   * than one that does not scan at all, because nothing about it looks wrong.
+   */
+  it('decodes back to what went in', () => {
+    const url = 'https://order.example/t/K3M9AB';
+    const { data, size } = pixels(qrMatrix(url));
+
+    expect(jsQR(data, size, size)?.data).toBe(url);
+  });
+
+  it('survives a payload long enough to need a bigger grid', () => {
+    const url = `https://order.example/c/${'a-long-venue-slug-'.repeat(6)}`;
+    const { data, size } = pixels(qrMatrix(url));
+
+    expect(jsQR(data, size, size)?.data).toBe(url);
   });
 
   /** Four modules, the specification's minimum, and not a design decision. */
