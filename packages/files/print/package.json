@@ -1,0 +1,5 @@
+{
+  "main": "../dist/print/index.js",
+  "types": "../dist/print/index.d.ts",
+  "sideEffects": false
+}

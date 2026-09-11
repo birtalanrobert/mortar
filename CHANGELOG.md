@@ -4,6 +4,46 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## files 1.5.0
+
+### Added
+
+- **`@birtalanrobert/files/print` — print-ready cards with a QR code on each.**
+  The artefact that makes a product exist in a shop: a venue that has signed up
+  and not printed its table tents has not started, and "design twenty cards with
+  a different code on each" is the step where they stop. Three of the seventeen
+  specifications ask for exactly this — project 11's table tents and counter
+  posters, project 06's enrolment posters in A4, A5 and tent, project 01's
+  ticket with a code on it — so it is designed from all three rather than from
+  the one in hand: a code, a heading, a caption and a footnote laid out on paper
+  that folds and cuts where the marks say. **What any of them say is the
+  product's**, on the same line the conventions already draw around notification
+  templates: the machinery is shared, the content is not.
+
+  Three things in it are decisions rather than details:
+
+  - **The code is drawn as vectors, not as an image.** Merged into horizontal
+    runs it is a couple of hundred rectangles rather than a thousand, and it
+    stays sharp at whatever resolution the printer has. A rasterised code scaled
+    to a 60 mm square on a 1200 dpi printer is a blurred one, and a blurred code
+    at the third attempt is a guest who gives up and asks for a menu.
+  - **A tent is one sheet with the card on it twice, the upper half turned
+    through half a turn.** Folded, the two faces read from both sides of the
+    table. Printed the obvious way one of them is upside down, and the venue
+    finds out after printing twenty.
+  - **The typeface is a required argument.** PDF's built-in fonts are
+    WinAnsi-encoded, which has no `ș`, no `ț` and no `ő` — a default would work
+    in development and throw on the first Romanian venue name.
+
+  The font is embedded **whole**: `@pdf-lib/fontkit`'s subsetter drops glyphs
+  from ordinary static TrueType fonts, so `Masa 12` prints as `M   2` while the
+  text layer still reads `Masa 12` — it copies, searches and extracts correctly
+  and is wrong only on paper. Nothing that counts pages sees it. The cost is the
+  typeface once per document rather than once per card.
+
+  Adds `qrcode` and `@pdf-lib/fontkit`, both behind the `./print` subpath so a
+  consumer that only uploads files never loads either.
+
 ## realtime 2.0.0
 
 ### Changed

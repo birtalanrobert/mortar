@@ -299,3 +299,68 @@ than raising anything anybody sees.
 Encoding runs one derivative at a time. sharp already threads each operation,
 so encoding six AVIFs at once finishes no sooner and holds six decoded images in
 memory while it does.
+
+## Printing cards with a code on them
+
+`@birtalanrobert/files/print` lays out table tents, counter posters and anything
+else that is a QR code with words around it. It is the artefact that makes a
+product exist in a shop: a venue that has signed up and not printed its tents
+has not started, and "design twenty cards with a different code on each" is the
+step where they stop.
+
+```ts
+import { printableCards } from '@birtalanrobert/files/print';
+
+const pdf = await printableCards(
+  tables.map((table) => ({
+    url: `https://order.example/t/${table.code}`,
+    heading: table.label,
+    caption: 'Scanați pentru a comanda',
+    footnote: venue.name,
+  })),
+  { font, boldFont, format: 'tent', brandColour: venue.colour },
+);
+```
+
+Three formats, and each is a physical object rather than a page size:
+
+- **`a4`** — one card to a sheet. A poster for a counter or a window.
+- **`a5`** — two to a sheet, cut once along the marked line. Twenty tables is
+  ten sheets and ten cuts rather than twenty half-empty pages.
+- **`tent`** — one sheet with the card on it twice, the upper half turned
+  through half a turn, folded along the dashed line. Both faces then read from
+  opposite sides of the table. Printed the obvious way one of them is upside
+  down, and the venue finds out after printing twenty.
+
+**The words are yours.** This decides where a code, a heading, a caption and a
+footnote go and where the paper folds; what any of them say is the product's, on
+the same line this codebase already draws around notification templates.
+
+### The parts that are decisions
+
+- **The code is vector, not an image.** Merged into horizontal runs it is a
+  couple of hundred rectangles rather than a thousand, and it stays sharp at
+  whatever resolution the printer actually has. A rasterised code scaled to a
+  60 mm square on a 1200 dpi printer is a blurred one, and a blurred code at the
+  third attempt is a guest who gives up and asks for a menu.
+- **Error correction defaults to `M`.** `L` is tempting because it makes the
+  code smaller, and wrong for anything printed: a tent picks up a thumbprint and
+  a ring of coffee within a week.
+- **The code is black on white whatever `brandColour` is.** A tinted code reads
+  on a phone in a showroom and fails on the one with a cracked lens in a dim
+  dining room — and it fails silently, because the guest simply gives up. The
+  heading is where a brand belongs.
+- **`font` is required.** PDF's built-in fonts are WinAnsi-encoded, which has no
+  `ș`, no `ț` and no `ő`; a default would work in development and throw on the
+  first Romanian venue name — or, worse, print `Serban` for `Șerban`. TrueType,
+  OpenType and WOFF bytes are all accepted.
+- **The typeface is embedded whole.** `@pdf-lib/fontkit`'s subsetter drops
+  glyphs from ordinary static TrueType fonts: `Masa 12` prints as `M   2` while
+  the text layer still reads `Masa 12`, so it copies, searches and extracts
+  correctly and is wrong only on paper. The cost is the font once per _document_
+  — a sheet of twenty tables is one typeface and twenty codes.
+- **The layout runs outside in.** The heading, caption and footnote claim their
+  space from the top and the bottom and the code takes the largest square left
+  over. The other way round — a fixed code size with text fitted around it — is
+  what puts a heading through the quiet zone the first time a table is called
+  "Terasa 12" instead of "12".

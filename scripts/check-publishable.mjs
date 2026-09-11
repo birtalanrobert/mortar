@@ -43,6 +43,19 @@ const RULES = [
           '127\\.0\\.0\\.1',
           '0\\.0\\.0\\.0',
           '(?:[a-z0-9-]+\\.)*example\\.(?:com|org|net)',
+          /*
+           * And the reserved TLD from the same RFC. `order.example` is a
+           * documentation hostname exactly as `example.com` is, and a README
+           * showing a URL scheme is the natural place for one — this rule
+           * exists to catch a customer's real domain, not a reserved one.
+           *
+           * The trailing lookahead refuses a *dot* as well as a letter, so
+           * this consumes the whole hostname: without it
+           * `order.example.attacker.net` reads as beginning with a permitted
+           * domain and is waved through, which is a lookalike anybody can
+           * register. The same trap the personal-contact rule below documents.
+           */
+          '(?:[a-z0-9-]+\\.)*example(?![a-z0-9.-])',
           '(?:[a-z0-9-]+\\.)*mortar\\.dev',
           'registry\\.npmjs\\.org',
           'www\\.npmjs\\.com',

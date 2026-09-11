@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/files",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Pre-signed uploads, per-tenant key scoping, the image pipeline, virus scanning and retention",
   "license": "AGPL-3.0-only",
   "repository": {
@@ -26,6 +26,10 @@
       "types": "./dist/images/index.d.ts",
       "default": "./dist/images/index.js"
     },
+    "./print": {
+      "types": "./dist/print/index.d.ts",
+      "default": "./dist/print/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -38,6 +42,7 @@
     "NOTICE",
     "nestjs",
     "images",
+    "print",
     "CHANGELOG.md"
   ],
   "scripts": {
@@ -51,7 +56,9 @@
     "@birtalanrobert/context": "workspace:^",
     "@birtalanrobert/database": "workspace:^",
     "@birtalanrobert/http": "workspace:^",
-    "pdf-lib": "^1.17.1"
+    "@pdf-lib/fontkit": "^1.1.1",
+    "pdf-lib": "^1.17.1",
+    "qrcode": "^1.5.4"
   },
   "peerDependencies": {
     "@nestjs/common": "^11.0.0",
@@ -72,10 +79,13 @@
   "mortar": {
     "entries": [
       "nestjs",
-      "images"
+      "images",
+      "print"
     ]
   },
   "devDependencies": {
+    "@expo-google-fonts/noto-sans": "^0.4.2",
+    "@types/qrcode": "^1.5.5",
     "sharp": "^0.35.4"
   }
 }
