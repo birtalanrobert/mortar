@@ -4,6 +4,75 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## quantity 1.0.0
+
+### Added
+
+- **`@birtalanrobert/quantity` — a decimal quantity with a unit, and an explicit
+  factor table.** The extraction project 03's deferred register has been holding
+  for project 04, and designed from both rather than from the one in hand. 03
+  converts _between_ dimensions using per-ingredient physics — a litre of oil is
+  not a kilogram of oil, and one onion is 150 grams because somebody typed that
+  in. 04 needs a factor chain _within_ one dimension: a case is four trays and a
+  tray is six bottles. Read side by side the shared part is small and exact — a
+  quantity that carries its unit, a factor table, conversion to and from a base,
+  and a refusal that is a sentence rather than a stack trace.
+- **The table resolves at definition time**, which is the design rather than an
+  optimisation: every factor is absolute before anybody can read one, so a cycle
+  is impossible by construction and a pallet converts to a bottle in one
+  multiplication rather than by walking the chain and rounding at each step. A
+  cycle is refused where it is defined, naming the loop —
+  `"case" is defined in terms of itself: case → tray → case.`
+- **A unit worth nothing is refused**, because dividing by it surfaces as
+  `Infinity` inside a total rather than as an error anybody can trace back.
+- **The decimal configuration every consumer shares** — 34 significant digits,
+  half-up, no exponential notation — with `decimal.js` as a _peer_ dependency,
+  because the configuration is global to the module instance a bundler resolved
+  and a second copy silently gets its own defaults. That is the trap that once
+  registered the forint in the wrong copy and rendered every HUF price a
+  hundredth of its value.
+- `isMoreThanZero`, because **`Decimal.isPositive()` is true for zero** and
+  every caller in this programme that wrote it meant "is there any of it".
+
+**Deliberately not in it:** densities and piece weights (03's, and meaningless
+to a wholesaler), minimum order quantities and increments (04's, and meaningless
+to a kitchen), and anything that knows what a product is.
+
+## csv 1.2.0
+
+### Added
+
+- **`@birtalanrobert/csv/mapping` — turning the columns somebody else's system
+  wrote into the fields a product understands.** Four specifications ask for the
+  same thing in four different words: a price-list wizard (03), a payroll export
+  profile saved per bookkeeper (07), a spreadsheet import of years of candidates
+  (08), and an ERP feed whose layout is configured rather than coded (04). The
+  first consumer was not a specification but 764 lines of working code in
+  project 03, which is the strongest position this library has extracted from.
+- **A field specification that explains itself**, because the sentence beside a
+  dropdown is shown to a support person who has never seen this file before —
+  and the same sentence is quoted back by a refusal:
+  `Say which column holds the price per pack.`
+- **Conventions are configuration and never guessed.** `1.234,56` and
+  `1,234.56` are the same number under two conventions, both arrive from the
+  same country, and read under the wrong one a price is wrong by a factor of a
+  thousand **while passing every validation a sensible person writes**. The
+  thousands separator is stripped before the decimal one, which is the order
+  that does not turn `1.234,56` into `1.234.56`.
+- **A decimal comes back as a string**, never a number. A float here is the bug
+  the module exists to avoid.
+- **A problem carries the line it was on**, counting the header as line 1, so a
+  report says "row 1 842" and somebody can go and look at row 1 842. Products
+  add their own through `row.reject`, so "no product has that code" and "that is
+  not a number" arrive in one list.
+- Booleans in the conventions these markets actually write — `da/nu`,
+  `igen/nem`, `Y/N`, `1/0` — and per-file overrides where a system has its own.
+  Dates in ISO, `DD.MM.YYYY`, `DD/MM/YYYY`, `MM/DD/YYYY` and `YYYYMMDD`, each
+  round-tripped so that `31.02.2026` is refused rather than accepted for
+  matching the shape.
+- A trailing minus and a parenthesised negative, both unambiguous, both written
+  by older systems, and both otherwise rejected as "not a number".
+
 ## files 1.5.0
 
 ### Added
