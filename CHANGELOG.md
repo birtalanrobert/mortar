@@ -4,6 +4,29 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## csv 1.3.0
+
+### Added
+
+- **`readXlsx` and `sheetsIn` on `@birtalanrobert/csv/xlsx`** — the reading half
+  of a subpath that could previously only write. Project 04 takes a
+  distributor's catalogue in whatever shape their system exports, and a workbook
+  is one of the five shapes its format layer has to cover; projects 03, 05, 07,
+  08, 09, 10 and 12 all import a spreadsheet the customer already has, because
+  re-keying it by hand at signup is where a trial dies.
+- **Every cell comes back a string, and that is the contract.** A workbook
+  stores a guess about what each cell _is_, made by whichever program wrote it
+  under whichever locale — so a price arriving as the number `1234.56` has
+  already been read under a convention nobody declared, and a reference of
+  `0042` has already become forty-two. Handing over what is written lets that
+  decision be made once, explicitly, by a mapping that can be previewed. The one
+  exception is a date cell, which holds a serial number and has no text to hand
+  over; it comes back as `YYYY-MM-DD`, the format no locale reinterprets.
+- `read-excel-file`, by the same author as the writer, both MIT and five MIT
+  packages between them. The note in this file's own source about ExcelJS still
+  stands: its reading path reaches `unzipper` → `binary` → `buffers`, which
+  declares no licence at all.
+
 ## quantity 1.0.0
 
 ### Added

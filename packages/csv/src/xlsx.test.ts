@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { unzipSync, strFromU8 } from 'fflate';
-import { toXlsx } from './xlsx';
+import { readXlsx, sheetsIn, toXlsx } from './xlsx';
 
 /**
  * Writing the `.xlsx` a bookkeeper opens.
@@ -112,5 +112,59 @@ describe('writing a workbook', () => {
     const { sheet } = await open(await toXlsx([]));
 
     expect(sheet).toContain('<sheetData');
+  });
+});
+
+/**
+ * Reading one back.
+ *
+ * Round-tripped through this package's own writer, which is the right test for
+ * the thing that matters: the contract is that **what was written as text comes
+ * back as text**, and a reference of `0042` that returns as the number 42 is the
+ * exact trip the workbook exists to survive.
+ */
+describe('reading a workbook', () => {
+  it('hands back every cell as a string', async () => {
+    const file = await toXlsx([
+      ['Cod', 'Denumire', 'Pret'],
+      ['0042', 'Ursus 0.5 l', 47.99],
+    ]);
+
+    const rows = await readXlsx(file);
+
+    expect(rows).toEqual([
+      ['Cod', 'Denumire', 'Pret'],
+      /* Still `0042`, and the price is text for the mapping to read (§5.13). */
+      ['0042', 'Ursus 0.5 l', '47.99'],
+    ]);
+  });
+
+  it('keeps a boolean a boolean’s word rather than a blank', async () => {
+    const file = await toXlsx([
+      ['code', 'catchWeight'],
+      ['TEL-WHEEL', true],
+    ]);
+
+    expect(await readXlsx(file)).toEqual([
+      ['code', 'catchWeight'],
+      ['TEL-WHEEL', 'true'],
+    ]);
+  });
+
+  it('empties a blank cell rather than writing the word null', async () => {
+    const file = await toXlsx([
+      ['code', 'brand'],
+      ['BER-05', null],
+    ]);
+
+    expect((await readXlsx(file))[1]).toEqual(['BER-05', '']);
+  });
+
+  it('reads the tab somebody names, not always the first', async () => {
+    const file = await toXlsx([['only']], { sheetName: 'Preturi' });
+
+    expect(await sheetsIn(file)).toEqual(['Preturi']);
+    expect(await readXlsx(file, { sheet: 'Preturi' })).toEqual([['only']]);
+    expect(await readXlsx(file, { sheet: 1 })).toEqual([['only']]);
   });
 });

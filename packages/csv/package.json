@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/csv",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Reading and writing the tabular files a spreadsheet actually produces, and mapping their columns onto fields",
   "license": "AGPL-3.0-only",
   "repository": {
@@ -46,6 +46,7 @@
   },
   "dependencies": {
     "papaparse": "^5.7.0",
+    "read-excel-file": "^9.3.10",
     "write-excel-file": "^4.1.1"
   },
   "devDependencies": {
