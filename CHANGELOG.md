@@ -4,6 +4,32 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## workflow 1.3.1
+
+### Documented
+
+- **`occurred_at` must default to `clock_timestamp()`, not `now()`** — and the
+  base entity now says so where somebody writing a `CREATE TABLE` will read it.
+  In PostgreSQL `now()` is the *transaction's* start time, identical for every
+  row written inside it, and products record two moves in one transaction on
+  ordinary paths: an order taken across a counter is opened and confirmed in one
+  breath. Both rows then carry the same microsecond, and `reverse` — which finds
+  the last move with `ORDER BY occurred_at DESC, id DESC` — is left choosing
+  between two random UUIDs. It undoes one of them, and says nothing.
+
+  Found in project 10, where an order's history displayed out of order one run
+  in two. Every product that wrote its own transition table used `now()`;
+  `dossier` and `workbench` still do.
+
+- **No guard was added, and that is deliberate.** One was written and removed.
+  TypeORM hands `occurredAt` back as a JavaScript `Date`, which is
+  millisecond-precision, so comparing two of them reports a tie for rows that
+  are genuinely microseconds apart — it refused reversals that were perfectly
+  well-defined and broke two of this package's own passing tests. Turning a rare
+  silent fault into a frequent loud one is not an improvement. Detecting it
+  honestly needs the comparison done in SQL, or an insertion-order column on the
+  table, and the second is a schema change for every consumer.
+
 ## csv 1.3.0
 
 ### Added

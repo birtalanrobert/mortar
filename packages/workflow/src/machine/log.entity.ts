@@ -77,6 +77,30 @@ export abstract class TransitionLogEntity {
   @Column({ type: 'jsonb', nullable: true })
   detail!: Record<string, unknown> | null;
 
+  /**
+   * When it happened — and the column definition matters as much as the type.
+   *
+   * **Default it to `clock_timestamp()`, never `now()`.** In PostgreSQL `now()`
+   * is the *transaction's* start time, identical for every row written inside
+   * it, and products write two moves in one transaction on ordinary paths: an
+   * order opened and confirmed in one breath, a request created and immediately
+   * submitted. Both rows then carry the same microsecond, and the only
+   * remaining tie-break is a random UUID.
+   *
+   * ```sql
+   * "occurred_at" timestamptz NOT NULL DEFAULT clock_timestamp()
+   * ```
+   *
+   * Nothing in this package can detect the mistake for you, and that is worth
+   * knowing rather than assuming otherwise. `reverse` finds the last move with
+   * `ORDER BY occurred_at DESC, id DESC`, and with a tie the id is a random
+   * UUID rather than a tie-break — so the wrong move is undone, silently. A
+   * guard was attempted here and removed: TypeORM hands this column back as a
+   * JavaScript `Date`, which is millisecond-precision, so comparing two of them
+   * reports a tie for rows that are genuinely microseconds apart and refuses
+   * reversals that are perfectly well-defined. Detecting it properly needs the
+   * comparison done in SQL, or an insertion-order column on this table.
+   */
   @CreateDateColumn({ type: 'timestamptz' })
   occurredAt!: Date;
 }
