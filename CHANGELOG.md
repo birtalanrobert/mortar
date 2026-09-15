@@ -10,7 +10,7 @@ rest.
 
 - **`occurred_at` must default to `clock_timestamp()`, not `now()`** — and the
   base entity now says so where somebody writing a `CREATE TABLE` will read it.
-  In PostgreSQL `now()` is the *transaction's* start time, identical for every
+  In PostgreSQL `now()` is the _transaction's_ start time, identical for every
   row written inside it, and products record two moves in one transaction on
   ordinary paths: an order taken across a counter is opened and confirmed in one
   breath. Both rows then carry the same microsecond, and `reverse` — which finds

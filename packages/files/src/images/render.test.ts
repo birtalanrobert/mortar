@@ -163,6 +163,31 @@ describe('rendering an upload', () => {
     expect(rendered.placeholder).toBeUndefined();
   });
 
+  /**
+   * Its own output, fed back in.
+   *
+   * The pipeline writes AVIF and used to refuse to read one, which meant a
+   * product could store a derivative it could never re-render — and, more
+   * ordinarily, that a picture somebody saved from a web page was rejected as
+   * "not an image".
+   */
+  it('reads a format it writes', async () => {
+    const source = await sharp({
+      create: { width: 600, height: 400, channels: 3, background: { r: 200, g: 60, b: 60 } },
+    })
+      .avif({ effort: 0 })
+      .toBuffer();
+
+    const rendered = await renderImage(source, {
+      sizes: [{ name: 'thumb', width: 120 }],
+      formats: ['jpeg'],
+    });
+
+    expect(rendered.contentType).toBe('image/avif');
+    expect(rendered.derivatives).toHaveLength(1);
+    expect(rendered.derivatives[0]?.width).toBe(120);
+  }, 30_000);
+
   it('refuses a file that is not an image, whatever it is called', async () => {
     // An SVG is the one that matters: libvips will rasterise it happily, and it
     // is a document format with a script engine and a URL loader in it.

@@ -27,8 +27,22 @@ const DEFAULT_QUALITY: Record<ImageFormat, number> = {
   png: 100,
 };
 
-/** What the products actually upload. Anything else is refused by name. */
-const RASTER = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/tiff']);
+/**
+ * What the products actually upload. Anything else is refused by name.
+ *
+ * AVIF is in the list because this pipeline **writes** AVIF: a package that
+ * encodes a format it refuses to read is one whose own output cannot be fed
+ * back through it, and the file a person saves from a web page is increasingly
+ * this one.
+ */
+const RASTER = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/avif',
+  'image/heic',
+  'image/tiff',
+]);
 
 export interface DerivativeSpec {
   /**

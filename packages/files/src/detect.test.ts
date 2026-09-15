@@ -12,6 +12,11 @@ const heic = Buffer.concat([
   Buffer.from('ftypheic', 'ascii'),
   Buffer.alloc(64),
 ]);
+const avif = Buffer.concat([
+  Buffer.from([0, 0, 0, 0x18]),
+  Buffer.from('ftypavif', 'ascii'),
+  Buffer.alloc(64),
+]);
 const webp = Buffer.concat([
   Buffer.from('RIFF', 'ascii'),
   Buffer.from([0, 0, 0, 0]),
@@ -27,8 +32,25 @@ describe('detectType', () => {
     ['a PNG', png, 'image/png', 'png'],
     ['a photo from an iPhone', heic, 'image/heic', 'heic'],
     ['a WebP', webp, 'image/webp', 'webp'],
+    ['a picture saved from a web page', avif, 'image/avif', 'avif'],
   ])('recognises %s', (_, content, contentType, extension) => {
     expect(detectType(content)).toEqual({ contentType, extension });
+  });
+
+  /*
+   * AVIF and HEIC share a container and differ only in the brand at offset 8.
+   * Getting this wrong means an AVIF reported as a HEIC, which every caller
+   * then hands to something expecting a HEIC.
+   */
+  it('tells AVIF and HEIC apart by brand rather than by container', () => {
+    const sequence = Buffer.concat([
+      Buffer.from([0, 0, 0, 0x18]),
+      Buffer.from('ftypavis', 'ascii'),
+      Buffer.alloc(64),
+    ]);
+
+    expect(detectType(sequence)?.contentType).toBe('image/avif');
+    expect(detectType(heic)?.contentType).toBe('image/heic');
   });
 
   it('recognises a TIFF in both byte orders', () => {

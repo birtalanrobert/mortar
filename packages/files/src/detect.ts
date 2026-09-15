@@ -41,6 +41,25 @@ const SIGNATURES: Array<{
       HEIC.has(b.subarray(8, 12).toString('ascii')),
   },
   {
+    contentType: 'image/avif',
+    extension: 'avif',
+    /*
+     * Same container as HEIC — an ISO base media file with `ftyp` at offset 4 —
+     * and told apart only by the brand, so it needs an entry of its own rather
+     * than another member of the HEIC set.
+     *
+     * Worth detecting even though no phone camera writes one: this is what a
+     * browser saves when somebody right-clicks a picture on a web page, and
+     * "save the picture the customer sent me a link to" is an ordinary thing
+     * for a person to do. Without it the file is unrecognised, which every
+     * caller correctly treats as refused.
+     */
+    matches: (b) =>
+      b.length > 12 &&
+      b.subarray(4, 8).toString('ascii') === 'ftyp' &&
+      AVIF.has(b.subarray(8, 12).toString('ascii')),
+  },
+  {
     contentType: 'image/webp',
     extension: 'webp',
     matches: (b) =>
@@ -57,6 +76,9 @@ const SIGNATURES: Array<{
 
 /** HEIC and its relatives, all of which a phone camera may produce. */
 const HEIC = new Set(['heic', 'heix', 'hevc', 'heim', 'heis', 'hevm', 'mif1', 'msf1']);
+
+/** AVIF: `avif` for a still, `avis` for a sequence. */
+const AVIF = new Set(['avif', 'avis']);
 
 /**
  * Office documents, which are ZIP archives and cannot be told apart from a
