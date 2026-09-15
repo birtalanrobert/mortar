@@ -220,6 +220,65 @@ erasure could not be honoured without dropping the trigger on production, under
 pressure, sometimes without putting it back. What must not happen is history
 being _rewritten_.
 
+## Links that have to be short
+
+`signLink` below carries its claims inside the token, and pays for it in length:
+a subject, a tenant, an expiry and a token id, as JSON, in base64, with a
+signature, is **over three hundred characters**. Inside an SMS that is several
+segments spent on the URL before a single word of the message, and as a QR code
+on a shop window it is a dense square a phone reads badly across a counter.
+
+Where a link is **printed, scanned or texted**, use the other format:
+
+```ts
+import { PublicLinkService } from '@birtalanrobert/workflow/nestjs';
+
+const { token } = await links.issue({ tenantId, subject: `order:${id}` });
+// '1aB3kF9xQ7tL2mN8pR4sV6wXk2mP9vR4tQ7nZ' — 37 characters
+
+const result = await links.resolve(token);
+if (!result.ok) return notFound(result.reason);
+```
+
+```
+  1  aB3kF9xQ7tL2mN8pR4sV6w  Xk2mP9vR4tQ7nZ
+  ▲  ▲                       ▲
+  │  │                       └─ 80-bit tag: rejects a guess without a query
+  │  └───────────────────────── 128 random bits: what makes it unguessable
+  └──────────────────────────── format version, so this can ever change
+```
+
+The handle is the security — 128 random bits is not going to be guessed. The tag
+is the doorman: a crawler walking `/s/<rubbish>` costs an HMAC rather than a
+database query each time. `mintHandle`, `signHandle` and `verifyHandle` are on
+the pure entry point, so a Next.js server component can reject a bad token
+before it opens a connection.
+
+The cost is one indexed lookup, which the page was making anyway — it has to
+read the subject to render it, and revocation is a row whichever format is used.
+Neither format supersedes the other; they trade length against a round trip, in
+opposite directions.
+
+**`mortar_public_link` carries no row-level security policy, and that is the
+point of it.** A handle arrives from a stranger with a URL and nothing else — no
+session, no tenant, nothing a policy could bind to — so the lookup that turns it
+into a tenant cannot itself require one. A policy here would make every public
+link return "not found", successfully and silently, for ever. The row holds no
+secrets; the caller binds the tenant it returns and reads the subject under its
+policy as usual.
+
+`resolve` distinguishes `malformed`, `invalid`, `unknown`, `expired` and
+`revoked` for the caller's benefit, not the visitor's: "this link was replaced,
+ask for a new one" and "this link has run out" deserve different words on a page,
+while a page should never tell a stranger that their forged token was merely
+unknown rather than badly signed.
+
+An expiry of `null` means "as long as the subject exists", which is a real answer
+rather than a missing one — a status link printed on a receipt should not stop
+working because somebody invented a lifetime for it. `sweepExpired` deletes only
+what expired; a revoked link is kept, because "this link was revoked" is a better
+page than "no such link" for the person holding it.
+
 ## Signed public links
 
 How someone outside the system enters a workflow without an account: a client

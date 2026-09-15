@@ -26,6 +26,20 @@ const GSM = new Set(
  */
 const GSM_EXTENDED = new Set('^{}\\[~]|€'.split(''));
 
+/**
+ * Whether one character survives in the cheap alphabet.
+ *
+ * Exported because transliteration has to ask exactly the question the counter
+ * asks — two definitions of the alphabet would mean a firm shown one number and
+ * billed against another, which is the thing `countSegments` exists to prevent.
+ *
+ * Extended characters count as `true`: they fit, at two places each, and a
+ * transliteration that replaced `{` would be changing text to save nothing.
+ */
+export function isGsmCharacter(character: string): boolean {
+  return GSM.has(character) || GSM_EXTENDED.has(character);
+}
+
 export interface SegmentCount {
   characters: number;
   /** What a provider actually charges for. */

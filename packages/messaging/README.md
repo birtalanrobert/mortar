@@ -33,6 +33,29 @@ costs to send, which is why `offenders` names the characters responsible rather
 than only reporting the encoding. "Your ș and ț are doubling the cost" is
 something a person can act on; "this message is unicode" is not.
 
+### Saying it in the cheap alphabet
+
+```ts
+import { transliterateToGsm } from '@birtalanrobert/messaging';
+
+transliterateToGsm('Cofetăria Mierla');
+// { text: 'Cofetaria Mierla', changed: true, untranslatable: [] }
+```
+
+Naming the offenders is not much use when they are in the shop's own name. One
+`ă` in `Cofetăria Mierla` moves every message that shop ever sends into UCS-2,
+and the shop cannot rename itself.
+
+Two rules, and both matter. **Marks already in the GSM alphabet are left alone**
+— `é`, `ü`, `à`, `ñ` and `Ö` cost one place each, so "strip every accent" damages
+a French or German name to save nothing. **Nothing is silently dropped**: Greek,
+Cyrillic and ideographs have no faithful Latin equivalent, so they are kept and
+reported in `untranslatable`, and the product can say "this still costs double"
+rather than claim a saving it did not make.
+
+It is not applied on anyone's behalf. A business's name is theirs — offer the
+transliteration, show what it saves, and let them choose.
+
 ### Quiet hours
 
 ```ts

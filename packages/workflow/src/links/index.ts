@@ -7,3 +7,14 @@ export {
   type LinkResult,
   type VerifyOptions,
 } from './token';
+
+export {
+  LINK_HANDLE_LENGTH,
+  LINK_TOKEN_LENGTH,
+  isHandle,
+  mintHandle,
+  signHandle,
+  verifyHandle,
+  type HandleFailure,
+  type HandleResult,
+} from './handle';

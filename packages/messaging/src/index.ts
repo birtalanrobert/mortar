@@ -11,7 +11,9 @@
  * a console counts segments on every keystroke, and that has to work in a
  * browser. The credit ledger, which needs both, is behind `/nestjs`.
  */
-export { countSegments, type SegmentCount } from './segments';
+export { countSegments, isGsmCharacter, type SegmentCount } from './segments';
+
+export { transliterateToGsm, type GsmTransliteration } from './gsm';
 
 export { placeholdersIn, renderTemplate, unknownPlaceholders, type RenderResult } from './template';
 

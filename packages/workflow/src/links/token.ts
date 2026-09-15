@@ -1,3 +1,5 @@
+import { decodeText, encodeText, hmac, timingSafeEqual, toBase64Url } from './encoding';
+
 /**
  * Signed public links.
  *
@@ -73,9 +75,6 @@ export interface VerifyOptions {
   /** Overridable for tests. Seconds since the epoch. */
   readonly now?: () => number;
 }
-
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
 
 export async function signLink(
   claims: Omit<LinkClaims, 'issuedAt' | 'jti'> & Partial<Pick<LinkClaims, 'issuedAt' | 'jti'>>,
@@ -167,57 +166,7 @@ function isWellFormed(claims: LinkClaims): boolean {
   );
 }
 
+/** The signature over the encoded claims, as a base64url string. */
 async function sign(encoded: string, secret: string): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(encoded));
-  return toBase64Url(new Uint8Array(signature));
-}
-
-function timingSafeEqual(a: string, b: string): boolean {
-  // A fixed number of comparisons regardless of length, so that a length
-  // mismatch does not itself return faster than a content mismatch.
-  const length = Math.max(a.length, b.length);
-  let differences = a.length === b.length ? 0 : 1;
-  for (let index = 0; index < length; index += 1) {
-    differences |= a.charCodeAt(index) ^ b.charCodeAt(index);
-  }
-  return differences === 0;
-}
-
-/**
- * Base64url over bytes, never over a string.
- *
- * `btoa` accepts only code points up to U+00FF, so encoding text through it
- * throws on the first `ő` or `ș` — which is to say, on ordinary Hungarian and
- * Romanian. Going through UTF-8 bytes also matches what the HMAC is computed
- * over; an encoder that disagreed with the signer about bytes would produce
- * signatures that verify inconsistently.
- */
-function toBase64Url(bytes: Uint8Array): string {
-  let binary = '';
-  const CHUNK = 0x8000;
-  for (let index = 0; index < bytes.length; index += CHUNK) {
-    binary += String.fromCharCode(...bytes.subarray(index, index + CHUNK));
-  }
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-function fromBase64Url(value: string): Uint8Array {
-  const padded = value.replace(/-/g, '+').replace(/_/g, '/');
-  const binary = atob(padded.padEnd(padded.length + ((4 - (padded.length % 4)) % 4), '='));
-  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
-}
-
-function encodeText(value: string): string {
-  return toBase64Url(encoder.encode(value));
-}
-
-function decodeText(value: string): string {
-  return decoder.decode(fromBase64Url(value));
+  return toBase64Url(await hmac(encoded, secret));
 }

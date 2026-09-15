@@ -1,6 +1,14 @@
 export { WorkflowModule, type WorkflowModuleOptions } from './workflow.module';
 export { LinkService, type IssueOptions, type LinkServiceOptions } from '../links/link.service';
 export { LinkRevocation } from '../links/revocation.entity';
+export { PublicLink } from '../links/public-link.entity';
+export {
+  PublicLinkService,
+  type IssueLinkOptions,
+  type PublicLinkOptions,
+  type ResolveFailure,
+  type ResolveResult,
+} from '../links/public-link.service';
 export { workflowEntities, workflowMigrations } from './registry';
 
 /*

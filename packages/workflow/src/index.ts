@@ -33,3 +33,13 @@ export {
   type LinkResult,
   type VerifyOptions,
 } from './links';
+export {
+  LINK_HANDLE_LENGTH,
+  LINK_TOKEN_LENGTH,
+  isHandle,
+  mintHandle,
+  signHandle,
+  verifyHandle,
+  type HandleFailure,
+  type HandleResult,
+} from './links';

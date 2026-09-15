@@ -4,6 +4,78 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## workflow 1.4.0
+
+### Added
+
+- **`PublicLinkService` and a 37-character signed link**, for links that are
+  printed, scanned or sent in a text message.
+
+  `signLink` carries its claims inside the token, which is the right trade for
+  an email: a forgery is rejected with no database involved. It costs length —
+  a subject, a tenant, an expiry and a token id, as JSON, in base64, with a
+  SHA-256 signature, comes to **over three hundred characters**. Project 10
+  measured what that does to the thing the product is bought for: its "ready for
+  collection" SMS came to **seven segments**, of which the URL was five, against
+  a specification that says one. As a QR code on a shop window the same token is
+  a dense square a phone reads badly across a counter.
+
+  So where a link has to be short, the claims move to a row and the token
+  becomes a handle plus a truncated signature: `1` + 22 base64url characters of
+  random handle + 14 of tag. The 128-bit handle is what makes it unguessable;
+  the tag is what lets a crawler walking `/s/<rubbish>` be refused by an HMAC
+  instead of a query. The cost is one indexed lookup, which the page was making
+  anyway — it has to read the subject to render it, and revocation is a row
+  whichever format is used.
+
+  Neither format supersedes the other. They trade length against a round trip,
+  in opposite directions, and both say so in their own docblocks.
+
+- **`mortar_public_link` carries no row-level security policy, deliberately.** A
+  handle arrives from a stranger with a URL and nothing else — no session, no
+  tenant, nothing a policy could bind to — so the lookup that turns it into a
+  tenant cannot itself require one. This is the fourth time in this programme
+  that a public handle has had to live in an unpolicied table, after `tenants`
+  and project 10's `intake_slug`; the row holds no secrets, and the caller binds
+  the tenant it returns before reading anything.
+
+- `mintHandle`, `signHandle`, `verifyHandle`, `isHandle`, `LINK_TOKEN_LENGTH`
+  and `LINK_HANDLE_LENGTH` on the pure entry point, so a Next.js server
+  component can reject a bad token before opening a connection.
+
+### Changed
+
+- The base64url, HMAC and constant-time comparison helpers moved to
+  `links/encoding.ts` and are shared by both token formats. A second
+  `toBase64Url` is a second opinion about what bytes a signature covers, and two
+  such opinions produce signatures that verify inconsistently — months later,
+  for one customer, on one link.
+
+## messaging 1.2.0
+
+### Added
+
+- **`transliterateToGsm`**, the other half of `countSegments`.
+
+  `countSegments` names the characters that forced the expensive encoding.
+  Naming them is not much use when they are in the shop's own name: one `ă` in
+  `Cofetăria Mierla` moves every message that shop ever sends into UCS-2 and
+  cuts capacity from 160 characters to 70, and the shop cannot rename itself.
+
+  Two rules, and both matter. **Marks that are already in the GSM alphabet are
+  left alone** — `é`, `ü`, `à`, `ñ` and `Ö` cost one place each, and "strip every
+  accent" damages a French or German name to save nothing. **Nothing is ever
+  silently dropped**: Greek, Cyrillic and ideographs have no faithful Latin
+  equivalent, so they are kept and _reported_, and the product can say "this
+  still costs double" rather than claim a saving it did not make.
+
+  It is deliberately not applied on anyone's behalf. A business's name is
+  theirs; the product offers the transliteration and shows what it saves.
+
+- `isGsmCharacter`, exported so transliteration asks exactly the question the
+  counter asks. Two definitions of the alphabet would mean a firm shown one
+  number and billed against another.
+
 ## workflow 1.3.1
 
 ### Documented
