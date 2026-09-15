@@ -4,6 +4,43 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## billing 3.0.0
+
+### Fixed
+
+- **`reportUsage` reported nothing, every night, and said so.** It read
+  `mortar_usage_records` unbound, with a docblock explaining that a sweep is
+  about every tenant and the row itself says whose it is. The table carries
+  `FORCE ROW LEVEL SECURITY`, which applies to the table owner too — so the
+  `SELECT` returned no rows and reported success, and a night with unreported
+  usage was indistinguishable from a night with none.
+
+  Nothing anywhere would have said so. The method returns a count, the count was
+  zero, and zero is what a quiet night looks like. Found in project 10 while
+  building the metering that calls it.
+
+### Changed
+
+- **`reportUsage(tenants, before?)` now takes the tenants to sweep**, and this is
+  a breaking change rather than an optional parameter on purpose: an optional one
+  would leave the silent version reachable, and the silent version is the whole
+  defect.
+
+  There is no way for this package to enumerate tenants for itself — the only
+  table it could read them from is the one behind the policy. Which is the right
+  answer anyway: the product owns the register of who exists, and this owns what
+  they used. It is the same shape every sweep in this programme has ended up
+  with.
+
+- The `UPDATE` marking a row reported is bound too, for the same reason: without
+  it, it matches nothing and the same day is reported again on the next sweep.
+
+### Added
+
+- `usage.integration.test.ts`, against a real PostgreSQL with the real
+  migration. Every unit test passed throughout the defect's life, because a
+  policy needs a database to bite — and `synchronize` does not create one.
+
 ## workflow 1.4.0
 
 ### Added

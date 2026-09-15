@@ -284,21 +284,51 @@ export class BillingService {
   /**
    * Tells the provider about everything counted and not yet reported.
    *
-   * Run on a schedule. Reads unbound — a sweep is about every tenant, and the
-   * row itself says whose it is — and reports each day as one event, which the
-   * provider de-duplicates on the reference we send.
+   * **Driven from the caller's registry, and bound inside each tenant.** This
+   * read used to be unbound, with a docblock saying a sweep is about every
+   * tenant and the row itself says whose it is. That reasoning is wrong here
+   * and the failure it caused is the quiet kind: `mortar_usage_records` carries
+   * `FORCE ROW LEVEL SECURITY`, which applies to the table owner too, so an
+   * unbound `SELECT` returns **no rows and reports success** — the nightly
+   * sweep reported nothing, every night, and said it had reported nothing,
+   * which is exactly what a night with no usage looks like.
+   *
+   * There is no way for this package to enumerate tenants for itself: the only
+   * table it could read them from is the one behind the policy. So the caller
+   * passes them, which is correct in any case — the product owns the register
+   * of who exists, and this owns what they used.
+   *
+   * Each day is reported as one event, which the provider de-duplicates on the
+   * reference we send.
    */
-  async reportUsage(before = new Date()): Promise<number> {
-    const owed = await this.dataSource.query<
-      Array<{ id: string; tenant_id: string; meter: string; day: string; quantity: number }>
-    >(
-      `SELECT "id", "tenant_id", "meter", "day", "quantity"
-         FROM "mortar_usage_records"
-        WHERE "reported_at" IS NULL AND "day" <= $1::date
-        ORDER BY "day"
-        LIMIT 1000`,
-      [before.toISOString().slice(0, 10)],
-    );
+  async reportUsage(tenants: readonly string[], before = new Date()): Promise<number> {
+    const owed: Array<{
+      id: string;
+      tenant_id: string;
+      meter: string;
+      day: string;
+      quantity: number;
+    }> = [];
+
+    for (const tenantId of tenants) {
+      const rows = await runInTenantTransaction(
+        this.dataSource,
+        (scoped) =>
+          scoped.query<
+            Array<{ id: string; tenant_id: string; meter: string; day: string; quantity: number }>
+          >(
+            `SELECT "id", "tenant_id", "meter", "day", "quantity"
+               FROM "mortar_usage_records"
+              WHERE "tenant_id" = $1 AND "reported_at" IS NULL AND "day" <= $2::date
+              ORDER BY "day"
+              LIMIT 1000`,
+            [tenantId, before.toISOString().slice(0, 10)],
+          ),
+        { tenantId },
+      );
+
+      owed.push(...rows);
+    }
 
     let reported = 0;
 
@@ -320,9 +350,14 @@ export class BillingService {
         reference: `${row.tenant_id}-${row.meter}-${row.day}`,
       });
 
-      await this.dataSource.query(
-        `UPDATE "mortar_usage_records" SET "reported_at" = now() WHERE "id" = $1`,
-        [row.id],
+      /* Bound as well, for the same reason: the `UPDATE` sees no rows without it. */
+      await runInTenantTransaction(
+        this.dataSource,
+        (scoped) =>
+          scoped.query(`UPDATE "mortar_usage_records" SET "reported_at" = now() WHERE "id" = $1`, [
+            row.id,
+          ]),
+        { tenantId: row.tenant_id },
       );
 
       reported += 1;
