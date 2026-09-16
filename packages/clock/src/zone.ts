@@ -179,6 +179,80 @@ export function addDays(date: LocalDate, days: number): LocalDate {
   return shifted.toISOString().slice(0, 10);
 }
 
+/**
+ * `YYYY-MM-DD` plus a whole number of months, **clamped to the target month's
+ * last day**.
+ *
+ * The clamping is the entire reason this is here rather than at each call site.
+ * 31 January plus one month is 28 February, or the 29th in a leap year — not
+ * the 2nd or 3rd of March, which is what naive month arithmetic produces and
+ * what `new Date(2026, 0, 31); d.setMonth(1)` actually does. A product that
+ * rolls over is a product where a lease with a payment day of the 31st is due
+ * on the 3rd of March, and where two products disagree about when the rent was
+ * due.
+ *
+ * Both markets this programme serves expect the last day of the month, and so
+ * does every subscription and tariff cycle it will ever run. Deciding it once,
+ * here, is the point.
+ *
+ * Note that it is **not reversible**: 31 January plus one month is 28 February,
+ * and 28 February minus one month is 28 January. That is a property of calendar
+ * months rather than a defect, and anything generating a series should step
+ * from a fixed anchor rather than from the previous result.
+ */
+export function addMonths(date: LocalDate, months: number): LocalDate {
+  const [year, month, day] = splitDate(date);
+
+  /* Zero-based months, so the arithmetic carries across years on its own. */
+  const target = (year * 12 + (month - 1) + months) as number;
+  const targetYear = Math.floor(target / 12);
+  const targetMonth = target - targetYear * 12 + 1;
+
+  const clamped = Math.min(day, daysInMonthOf(targetYear, targetMonth));
+
+  return `${pad(targetYear, 4)}-${pad(targetMonth, 2)}-${pad(clamped, 2)}`;
+}
+
+/** How many days the month containing `date` has. Leap years included. */
+export function daysInMonth(date: LocalDate): number {
+  const [year, month] = splitDate(date);
+  return daysInMonthOf(year, month);
+}
+
+/** The first day of the month containing `date`. */
+export function startOfMonth(date: LocalDate): LocalDate {
+  const [year, month] = splitDate(date);
+  return `${pad(year, 4)}-${pad(month, 2)}-01`;
+}
+
+/** The last day of the month containing `date`. */
+export function endOfMonth(date: LocalDate): LocalDate {
+  const [year, month] = splitDate(date);
+  return `${pad(year, 4)}-${pad(month, 2)}-${pad(daysInMonthOf(year, month), 2)}`;
+}
+
+/**
+ * Day zero of the following month, which `Date` normalises to the last day of
+ * this one. The leap-year rule comes free rather than being restated.
+ */
+function daysInMonthOf(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+function splitDate(date: LocalDate): [number, number, number] {
+  const parts = date.split('-');
+  if (parts.length !== 3) throw new RangeError(`Not a calendar date: ${date}`);
+
+  const [year, month, day] = parts.map(Number) as [number, number, number];
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    throw new RangeError(`Not a calendar date: ${date}`);
+  }
+
+  return [year, month, day];
+}
+
+const pad = (value: number, width: number): string => String(value).padStart(width, '0');
+
 /** 0 is Sunday, matching `Date.prototype.getUTCDay`. */
 export const weekdayOf = (date: LocalDate): number => new Date(parseDate(date)).getUTCDay();
 

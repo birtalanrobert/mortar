@@ -55,3 +55,18 @@ wall clock.
 What stays in each project is the engine built _on_ this: the slot engine, the
 scheduling rules engine, the costing engine. They share this substrate and no
 logic.
+
+## Calendar months
+
+`addDays` has siblings: `addMonths`, `daysInMonth`, `startOfMonth`, `endOfMonth`.
+
+`addMonths` **clamps to the target month's last day** rather than rolling over.
+31 January plus one month is 28 February — the 29th in a leap year — and not the
+3rd of March, which is what `Date.prototype.setMonth` produces. That is the rule
+both of this programme's markets expect for a rent payment day, and it is the
+rule every subscription and tariff cycle needs too; deciding it once is the
+reason it lives here rather than at each call site.
+
+It is not reversible — 31 January forward a month and back again is 28 January —
+so anything generating a series must step from a fixed anchor rather than from
+its own previous result, or every February permanently shortens the payment day.

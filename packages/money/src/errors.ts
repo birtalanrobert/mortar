@@ -44,3 +44,45 @@ export class ParseError extends MoneyError {
     super(`Cannot parse "${input}" as a monetary amount`);
   }
 }
+
+/**
+ * A rate that is not a rate: unparseable, zero, negative, or carrying more
+ * precision than `RATE_SCALE` can hold.
+ *
+ * Precision is refused rather than rounded away, deliberately. A rate arriving
+ * with twelve decimal places is a rate from somewhere that disagrees with us
+ * about what a rate is, and quietly dropping the last two digits is how the
+ * disagreement becomes a discrepancy nobody can trace.
+ */
+export class InvalidRateError extends MoneyError {
+  constructor(
+    readonly value: unknown,
+    reason: string,
+  ) {
+    super(`Invalid exchange rate ${String(value)}: ${reason}`);
+    this.name = 'InvalidRateError';
+  }
+}
+
+/**
+ * A rate applied in the direction it does not go.
+ *
+ * The single commonest bug in currency code, and the reason `convert` refuses
+ * rather than inverting: a rate published as "1 EUR buys 4.9772 RON" applied to
+ * RON gives an answer that is wrong by a factor of twenty-five and looks
+ * entirely plausible on a screen. Inverting is available, spelled `invert`, and
+ * says in its own documentation what it costs.
+ */
+export class RateDirectionError extends MoneyError {
+  constructor(
+    readonly from: string,
+    readonly base: string,
+    readonly quote: string,
+  ) {
+    super(
+      `Cannot convert ${from} with a ${base}/${quote} rate: ` +
+        `the rate prices one ${base} in ${quote}. Use invert() if that is what you mean.`,
+    );
+    this.name = 'RateDirectionError';
+  }
+}

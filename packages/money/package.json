@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/money",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Integer minor-unit money, arithmetic, allocation and formatting",
   "license": "AGPL-3.0-only",
   "type": "commonjs",
@@ -21,6 +21,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./rates": {
+      "types": "./dist/rates.d.ts",
+      "default": "./dist/rates.js"
     },
     "./package.json": "./package.json"
   },

@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   addDays,
+  addMonths,
   daysBetween,
+  daysInMonth,
+  endOfMonth,
+  startOfMonth,
   instantAt,
   localDateOf,
   localMinuteOfDay,
@@ -248,5 +252,61 @@ describe('localDateOf', () => {
     const instant = Date.parse('2026-01-15T23:30:00Z');
     expect(localDateOf(BUCHAREST, instant)).toBe('2026-01-16');
     expect(localDateOf('Europe/London', instant)).toBe('2026-01-15');
+  });
+});
+
+describe('calendar months', () => {
+  /**
+   * The case month arithmetic exists for, and the one every naive
+   * implementation gets wrong.
+   *
+   * `new Date(2026, 0, 31).setMonth(1)` gives the 3rd of March, because
+   * February has no 31st and `Date` rolls over rather than clamping. A rent
+   * schedule built that way has a payment day that drifts forward by three days
+   * every February and never comes back.
+   */
+  it('clamps to the last day rather than rolling into the next month', () => {
+    expect(addMonths('2026-01-31', 1)).toBe('2026-02-28');
+    expect(addMonths('2026-03-31', 1)).toBe('2026-04-30');
+    expect(addMonths('2026-08-31', 6)).toBe('2027-02-28');
+  });
+
+  it('knows which Februaries have twenty-nine days', () => {
+    expect(addMonths('2028-01-31', 1)).toBe('2028-02-29');
+    expect(daysInMonth('2028-02-01')).toBe(29);
+    /* 1900 was not a leap year; 2000 was. The rule has two exceptions. */
+    expect(daysInMonth('1900-02-10')).toBe(28);
+    expect(daysInMonth('2000-02-10')).toBe(29);
+  });
+
+  it('carries across a year boundary in both directions', () => {
+    expect(addMonths('2026-11-15', 3)).toBe('2027-02-15');
+    expect(addMonths('2026-02-15', -3)).toBe('2025-11-15');
+    expect(addMonths('2026-01-15', -1)).toBe('2025-12-15');
+  });
+
+  it('leaves an ordinary day alone', () => {
+    expect(addMonths('2026-09-15', 0)).toBe('2026-09-15');
+    expect(addMonths('2026-09-15', 12)).toBe('2027-09-15');
+  });
+
+  /**
+   * Stated as a test because it is a trap rather than a bug: anything stepping
+   * through a series must step from a fixed anchor, not from its own last
+   * result, or every February permanently shortens the payment day.
+   */
+  it('is not reversible, which is a property of calendar months', () => {
+    expect(addMonths(addMonths('2026-01-31', 1), -1)).toBe('2026-01-28');
+  });
+
+  it('finds the ends of a month', () => {
+    expect(startOfMonth('2026-02-17')).toBe('2026-02-01');
+    expect(endOfMonth('2026-02-17')).toBe('2026-02-28');
+    expect(endOfMonth('2028-02-17')).toBe('2028-02-29');
+    expect(endOfMonth('2026-12-01')).toBe('2026-12-31');
+  });
+
+  it('refuses something that is not a calendar date', () => {
+    expect(() => addMonths('2026-09', 1)).toThrow(RangeError);
   });
 });
