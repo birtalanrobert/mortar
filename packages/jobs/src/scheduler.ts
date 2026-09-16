@@ -44,13 +44,34 @@ export class TaskScheduler {
     }
 
     const tick = async (): Promise<void> => {
-      const ran = await this.locks.withLock(`task:${task.name}`, async () => this.execute(task), {
-        ttlMs: task.lockTtlMs ?? task.intervalMs * 3,
-      });
-      if (ran === undefined) {
-        this.logger.debug('scheduled task skipped; another replica holds it', {
-          task: task.name,
+      /*
+       * The **lock** is guarded as well as the task.
+       *
+       * `execute` swallows what `task.run` throws, for the reason below it —
+       * but taking the lock happens out here, and a rejection from that escapes
+       * an interval callback and takes the process down. Redis restarting, a
+       * connection closing during shutdown, a network blip: all of them are
+       * reasons to skip one tick and try again on the next interval, and none
+       * of them is a reason to stop a worker that has other jobs to run.
+       *
+       * Found when a seed script — an application context that boots the
+       * modules and immediately closes — exited non-zero about one run in
+       * three, because a task with `runOnStart` was reaching for a lock while
+       * the connection was being torn down. A deploy step that fails
+       * intermittently is one somebody makes non-blocking, which is worse.
+       */
+      try {
+        const ran = await this.locks.withLock(`task:${task.name}`, async () => this.execute(task), {
+          ttlMs: task.lockTtlMs ?? task.intervalMs * 3,
         });
+
+        if (ran === undefined) {
+          this.logger.debug('scheduled task skipped; another replica holds it', {
+            task: task.name,
+          });
+        }
+      } catch (error) {
+        this.logger.error('scheduled task could not take its lock', error, { task: task.name });
       }
     };
 
