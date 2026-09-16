@@ -241,6 +241,30 @@ export class UserService {
     return this.manager(manager).find(this.entities.membership, { where: { userId } });
   }
 
+  /**
+   * Everybody in one tenant.
+   *
+   * The mirror of `membershipsFor`, and it exists because a product with more
+   * than one person in an account always needs both: "which workspaces am I in"
+   * for the switcher, and "who is in this workspace" for the members screen.
+   * Without it a product writes the query itself, against mortar's own table,
+   * and the schema stops being mortar's to change.
+   *
+   * Ordered by creation, oldest first — which is very nearly always the owner,
+   * and is at least a stable order rather than whatever the planner returns.
+   *
+   * **Not filtered by status.** A suspended member is still a member and has to
+   * appear on the screen that would un-suspend them; a caller wanting only the
+   * active ones says so, and cannot be surprised by an invited member silently
+   * missing from a list they are about to reason about.
+   */
+  async membershipsForTenant(tenantId: string, manager?: EntityManager): Promise<BaseMembership[]> {
+    return this.manager(manager).find(this.entities.membership, {
+      where: { tenantId },
+      order: { createdAt: 'ASC' },
+    });
+  }
+
   async membership(
     userId: string,
     tenantId: string,

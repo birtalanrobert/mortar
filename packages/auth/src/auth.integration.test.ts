@@ -388,6 +388,27 @@ describe('memberships and role grants', () => {
     userId = (await users.create({ email: 'ana@example.com' })).id;
   });
 
+  it('lists everybody in a tenant, oldest first', async () => {
+    const second = (await users.create({ email: 'bogdan@example.com' })).id;
+    await users.addMembership(userId, TENANT, ['owner']);
+    await users.addMembership(second, TENANT, ['staff']);
+    // In another tenant, and it must not appear below.
+    await users.addMembership(second, '00000000-0000-4000-8000-0000000000ff', ['staff']);
+
+    const members = await users.membershipsForTenant(TENANT);
+
+    expect(members.map((one) => one.userId)).toEqual([userId, second]);
+  });
+
+  it('lists a suspended member too, because un-suspending needs them on screen', async () => {
+    await users.addMembership(userId, TENANT, ['staff'], { status: 'suspended' });
+
+    const members = await users.membershipsForTenant(TENANT);
+
+    expect(members).toHaveLength(1);
+    expect(members[0]?.status).toBe('suspended');
+  });
+
   it('grants roles by key', async () => {
     await users.addMembership(userId, TENANT, ['manager']);
     const granted = await users.rolesFor(userId, TENANT);
