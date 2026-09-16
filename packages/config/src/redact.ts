@@ -24,9 +24,25 @@ const SECRET_PATTERNS = [
   'connection_string',
 ];
 
+/**
+ * Anything whose name *ends* in "key", which a substring list keeps missing.
+ *
+ * `MASTER_KEY` printed in full in a boot banner in two products before this
+ * existed — the list had `privatekey` and `apikey` and neither matched. The
+ * same hole swallows `SIGNING_KEY`, `ENCRYPTION_KEY` and `STORAGE_ACCESS_KEY`,
+ * and the next one nobody thought of.
+ *
+ * Deliberately over-broad: a `SORT_KEY` or a `PARTITION_KEY` redacted in a boot
+ * banner costs a developer one lookup, and a master key printed in a log costs
+ * an incident. Redaction keeps a prefix and the length, so two different keys
+ * are still distinguishable.
+ */
+const KEY_SUFFIX = /(^|_)key$/;
+
 /** Whether a configuration key should be treated as a secret. */
 export function isSecretKey(key: string): boolean {
   const normalized = key.toLowerCase().replace(/[-\s]/g, '_');
+  if (KEY_SUFFIX.test(normalized)) return true;
   return SECRET_PATTERNS.some((pattern) => normalized.includes(pattern));
 }
 

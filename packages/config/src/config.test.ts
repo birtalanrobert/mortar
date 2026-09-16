@@ -228,3 +228,36 @@ describe('describeConfig', () => {
     expect(out).not.toContain('longsecretvalue');
   });
 });
+
+/**
+ * The hole a substring list kept leaving, found by reading a boot banner.
+ *
+ * `MASTER_KEY` was printed in full by two products in this programme. The list
+ * had `privatekey` and `apikey`, and neither is a substring of `master_key`.
+ */
+describe('keys that are not called secrets', () => {
+  it('redacts anything whose name ends in key', () => {
+    for (const key of [
+      'MASTER_KEY',
+      'SIGNING_KEY',
+      'ENCRYPTION_KEY',
+      'STORAGE_ACCESS_KEY',
+      'key',
+    ]) {
+      expect(redactConfig({ [key]: 'aaaaaaaaaaaaaaaa' })[key]).not.toBe('aaaaaaaaaaaaaaaa');
+    }
+  });
+
+  /* Over-broad on purpose: a redacted sort key costs a lookup, a printed
+   * master key costs an incident. */
+  it('over-redacts rather than guessing which keys are harmless', () => {
+    expect(redactConfig({ PARTITION_KEY: 'orders-2026' }).PARTITION_KEY).not.toBe('orders-2026');
+  });
+
+  it('leaves a name that merely contains the word alone', () => {
+    expect(redactConfig({ KEY_PREFIX: 'rentbook' }).KEY_PREFIX).toBe('rentbook');
+    expect(redactConfig({ KEYCLOAK_URL: 'https://id.example' }).KEYCLOAK_URL).toBe(
+      'https://id.example',
+    );
+  });
+});
