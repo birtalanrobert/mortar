@@ -1,0 +1,66 @@
+{
+  "name": "@birtalanrobert/rates",
+  "version": "1.0.0",
+  "description": "Published exchange rates, from the central banks that publish them",
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/birtalanrobert/mortar.git",
+    "directory": "packages/rates"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./nestjs": {
+      "types": "./dist/nestjs/index.d.ts",
+      "default": "./dist/nestjs/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src",
+    "!src/**/*.test.ts",
+    "!src/**/*.spec.ts",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "nestjs",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@birtalanrobert/money": "workspace:^",
+    "@birtalanrobert/database": "workspace:^",
+    "@birtalanrobert/observability": "workspace:^",
+    "fast-xml-parser": "^5.11.1"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^11.0.0",
+    "typeorm": "^1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@nestjs/common": {
+      "optional": true
+    },
+    "typeorm": {
+      "optional": true
+    }
+  },
+  "mortar": {
+    "entries": [
+      "nestjs"
+    ]
+  }
+}

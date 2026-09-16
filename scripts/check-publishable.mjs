@@ -37,7 +37,7 @@ const RULES = [
      * list already allowed `aka.ms` for the same reason.
      */
     pattern: new RegExp(
-      'https?://(?!' +
+      'https?://(?!(?:' +
         [
           'localhost',
           '127\\.0\\.0\\.1',
@@ -65,8 +65,28 @@ const RULES = [
           '(?:[a-z0-9-]+\\.)*googleapis\\.com',
           'login\\.microsoftonline\\.com',
           'graph\\.microsoft\\.com',
+          /*
+           * The central banks whose published rate feeds `@birtalanrobert/rates`
+           * reads, by exactly the argument the comment above makes for Google:
+           * these are where the data lives, they are the addresses the
+           * institutions themselves document, and a package that reads them has
+           * to name them. They are also, unlike a staging box, things anybody
+           * can open in a browser.
+           */
+          '(?:[a-z0-9-]+\\.)*bnr\\.ro',
+          '(?:[a-z0-9-]+\\.)*ecb\\.europa\\.eu',
+          '(?:[a-z0-9-]+\\.)*mnb\\.hu',
         ].join('|') +
-        ')[a-z0-9.-]+\\.[a-z]{2,}',
+        /*
+         * Applied to the whole allowlist rather than to one entry of it.
+         *
+         * The `example` entry already carried this guard and the others did
+         * not, which meant `github.com.attacker.net` was waved through while
+         * `example.com.attacker.net` was caught — two rules meant to express
+         * the same policy disagreeing. Hoisting it fixes every entry at once
+         * and stops the next one being added without it.
+         */
+        ')(?![a-z0-9.-]))[a-z0-9.-]+\\.[a-z]{2,}',
       'i',
     ),
   },
