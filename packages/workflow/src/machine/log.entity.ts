@@ -148,6 +148,18 @@ export interface AppendOnlyOptions {
  *
  * `redactable` is the same argument applied to one column rather than one row;
  * see {@link AppendOnlyOptions}.
+ *
+ * **A DELETE is permitted, and that is the whole of what "append-only" means
+ * here.** It has to be: these tables carry a foreign key to their subject with
+ * `ON DELETE CASCADE` in every product that uses them, so refusing deletes
+ * would mean a customer's right to erasure could not be honoured without
+ * dropping this trigger first — done under time pressure, on production, and
+ * sometimes not put back. Removing a subject and everything recorded about it
+ * leaves no misleading record behind; a silently edited actor does.
+ *
+ * Stated here rather than only in the integration test, because somebody
+ * reading the name will otherwise assume the stronger promise and write a
+ * migration, or a test, against a guarantee this deliberately does not make.
  */
 export function appendOnlySql(table: string, options: AppendOnlyOptions = {}): string[] {
   const guard = `${table}_immutable`;
