@@ -1,14 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { InvalidRateError, RateDirectionError, money, fromMajor, toMajor } from './index';
-import {
-  RATE_SCALE,
-  conversionFactor,
-  convert,
-  invert,
-  rate,
-  rateOn,
-  rateToString,
-} from './rates';
+import { RATE_SCALE, conversionFactor, convert, invert, rate, rateOn, rateToString } from './rates';
 import { RoundingMode } from './rounding';
 
 /**

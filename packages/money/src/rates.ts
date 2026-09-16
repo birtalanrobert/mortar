@@ -285,7 +285,10 @@ function decimalStringOf(value: number): string {
 function toSafeInteger(value: bigint): number {
   const asNumber = Number(value);
   if (!Number.isSafeInteger(asNumber)) {
-    throw new InvalidRateError(value.toString(), 'out of the range this library represents exactly');
+    throw new InvalidRateError(
+      value.toString(),
+      'out of the range this library represents exactly',
+    );
   }
   return asNumber;
 }

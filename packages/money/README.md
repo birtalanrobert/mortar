@@ -132,7 +132,7 @@ Four decisions, each of which is a bug this prevents:
   the report was run.
 
 `conversionFactor` returns the same arithmetic as an exact rational, for callers
-carrying a value `Money` cannot hold — a price *per gram*, a fractional count of
+carrying a value `Money` cannot hold — a price _per gram_, a fractional count of
 minor units. Multiply first, divide second.
 
 `invert` exists and is lossy by nature: 4.9772 inverts to 0.2009161778 and back

@@ -408,3 +408,95 @@ describe('sweeps', () => {
     expect(await files.sweepAbandoned(new Date(Date.now() + 1000))).toBe(0);
   });
 });
+
+/**
+ * The path for bytes that never came from a browser.
+ *
+ * An emailed document, a generated letter, an assembled multi-page PDF. What
+ * these tests are actually about is that **nothing is special-cased for having
+ * been made here** — the scan above all, because a PDF this process assembled
+ * out of a client's photographs is exactly as untrusted as the photographs.
+ */
+describe('store', () => {
+  it('records, stores and confirms in one go', async () => {
+    const files = service();
+
+    const file = await files.store(
+      { tenantId: TENANT, scope: 'letter/abc', filename: 'reminder.pdf' },
+      PDF,
+    );
+
+    expect(file.state).toBe('ready');
+    expect(file.contentType).toBe('application/pdf');
+    expect(file.checksum).toHaveLength(64);
+    // Where a presigned PUT would have put it, so everything downstream — the
+    // ownership assertion, the sweep, the erase — works unchanged.
+    expect(file.objectKey).toContain(`tenants/${TENANT}/letter/abc/`);
+    expect(await storage.get(file.objectKey)).toEqual(PDF);
+  });
+
+  it('scans what it made, and refuses it like anything else', async () => {
+    const files = service({ scanner: new RefusingScanner() });
+
+    const file = await files.store(
+      { tenantId: TENANT, scope: 'letter/abc', filename: 'reminder.pdf' },
+      PDF,
+    );
+
+    expect(file.state).toBe('infected');
+    // The bytes are gone; the row stays, because "what happened to the
+    // document I was told about" deserves an answer.
+    await expect(storage.get(file.objectKey)).rejects.toThrow();
+  });
+
+  it('refuses a type the caller did not ask for, from the bytes', async () => {
+    const files = service();
+
+    const file = await files.store(
+      { tenantId: TENANT, scope: 'letter/abc', filename: 'reminder.pdf' },
+      Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'),
+      { accepted: ['application/pdf'] },
+    );
+
+    expect(file.state).toBe('rejected');
+  });
+
+  it('refuses an oversized document before writing anything', async () => {
+    const files = service({ maxBytes: 16 });
+
+    await expect(
+      files.store({ tenantId: TENANT, scope: 'letter/abc', filename: 'big.pdf' }, PDF),
+    ).rejects.toThrow(/larger than/);
+
+    // Not merely refused: no row and no object, because this path can see the
+    // size in advance and a presigned PUT cannot.
+    expect(await dataSource.getRepository(StoredFile).count()).toBe(0);
+  });
+
+  it('refuses nothing at all', async () => {
+    const files = service();
+
+    await expect(
+      files.store(
+        { tenantId: TENANT, scope: 'letter/abc', filename: 'empty.pdf' },
+        Buffer.alloc(0),
+      ),
+    ).rejects.toThrow(/nothing to store/);
+  });
+
+  it('encrypts it when a data key is given, like any other upload', async () => {
+    const crypto = new EnvelopeCrypto(new LocalMasterKey(generateMasterKey()));
+    const { dataKey } = await crypto.createDataKey();
+    const files = service({ crypto });
+
+    const file = await files.store(
+      { tenantId: TENANT, scope: 'identity/abc', filename: 'id.pdf' },
+      PDF,
+      { dataKey: async () => dataKey },
+    );
+
+    expect(file.encrypted).toBe(true);
+    expect(await storage.get(file.objectKey)).not.toEqual(PDF);
+    expect(await files.read(TENANT, file.id, { dataKey: async () => dataKey })).toEqual(PDF);
+  });
+});

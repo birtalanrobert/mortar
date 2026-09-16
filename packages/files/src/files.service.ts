@@ -91,6 +91,27 @@ export class FilesService {
     input: BeginUploadInput,
     manager?: EntityManager,
   ): Promise<{ file: StoredFile; upload: PresignedUpload }> {
+    const file = await this.record(input, manager);
+
+    const upload = await this.storage.presignUpload(file.objectKey, {
+      contentType: input.contentType,
+      expiresInSeconds: input.expiresInSeconds,
+      // Readable in the bucket without a database, which is what an operator
+      // has during an incident.
+      metadata: { tenant: input.tenantId, scope: input.scope },
+    });
+
+    return { file, upload };
+  }
+
+  /**
+   * Writes the row that a presigned upload would have been signed against.
+   *
+   * Separated from `beginUpload` because `store` needs the same row and no
+   * URL: signing one nothing will ever PUT to is a signature handed out for no
+   * reason, and a reader would fairly wonder who holds it.
+   */
+  private async record(input: BeginUploadInput, manager?: EntityManager): Promise<StoredFile> {
     const repository = this.manager(manager).getRepository(StoredFile);
 
     const fileId = randomUUID();
@@ -106,7 +127,7 @@ export class FilesService {
       extension: extensionFor(input.contentType),
     });
 
-    const file = await repository.save(
+    return repository.save(
       repository.create({
         id: fileId,
         tenantId: input.tenantId,
@@ -119,16 +140,50 @@ export class FilesService {
         metadata: input.metadata ?? {},
       }),
     );
+  }
 
-    const upload = await this.storage.presignUpload(key, {
+  /**
+   * Stores bytes the application already holds, and puts them through exactly
+   * the checks an uploaded file gets.
+   *
+   * There is always a second way in. A document arrives in an email rather than
+   * from a browser; a reminder letter, an inspection report or a year-end
+   * statement is produced by the service itself and has to be filed; several
+   * photographed pages are assembled into one PDF and the PDF is the document.
+   * None of those has a browser to hand a URL to.
+   *
+   * **The type detection, the size limit, the scan and the encryption are not
+   * properties of how the bytes arrived**, so this deliberately writes the row,
+   * puts the object where a presigned PUT would have put it, and then goes
+   * through `confirmUpload` unchanged. Nothing is special-cased for having been
+   * made here — which matters most for the scan: a PDF this process assembled
+   * out of a client's photographs is exactly as untrusted as the photographs.
+   */
+  async store(
+    input: BeginUploadInput,
+    content: Buffer,
+    options: { accepted?: readonly string[]; dataKey?: () => Promise<Buffer> } = {},
+    manager?: EntityManager,
+  ): Promise<StoredFile> {
+    if (content.length === 0) {
+      throw new BadRequestError('There is nothing to store.');
+    }
+    if (content.length > this.maxBytes) {
+      // Refused before it is written rather than after, because unlike a
+      // presigned PUT this path can see the size in advance.
+      throw new BadRequestError(
+        `That file is larger than ${Math.floor(this.maxBytes / 1024 / 1024)} MB.`,
+      );
+    }
+
+    const file = await this.record(input, manager);
+
+    await this.storage.put(file.objectKey, content, {
       contentType: input.contentType,
-      expiresInSeconds: input.expiresInSeconds,
-      // Readable in the bucket without a database, which is what an operator
-      // has during an incident.
       metadata: { tenant: input.tenantId, scope: input.scope },
     });
 
-    return { file, upload };
+    return this.confirmUpload(input.tenantId, file.id, options, manager);
   }
 
   /**
