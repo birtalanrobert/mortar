@@ -51,8 +51,9 @@ describe('rendering an upload', () => {
 
     const card = rendered.derivatives.find((one) => one.name === 'card' && one.format === 'webp');
     expect(card).toMatchObject({ width: 640, contentType: 'image/webp' });
-    // The height follows the aspect ratio rather than being asked for: a
-    // product that specifies both eventually specifies two that disagree.
+    // Asked for a width alone, the height follows the picture's own
+    // proportions — which is what a photograph wants. A fixed frame is a
+    // different request and says so, below.
     expect(card?.height).toBe(427);
   });
 
@@ -214,6 +215,96 @@ describe('rendering an upload', () => {
         maxPixels: 1_000_000,
       }),
     ).rejects.toThrow(/pixel limit/i);
+  });
+
+  /**
+   * The fixed frame.
+   *
+   * A photograph keeps its shape; an *asset* does not have one. A square
+   * avatar, a wallet pass's icon — both platforms reject that at any size but
+   * 29 by 29 — and a strip image whose canvas is the layout. The distinction is
+   * the reason this is opt-in rather than always available.
+   */
+  describe('a derivative with a frame to fill', () => {
+    it('comes out at exactly the size asked for, whatever shape went in', async () => {
+      const rendered = await renderImage(await photograph(1200, 400), {
+        sizes: [{ name: 'icon', width: 58, height: 58 }],
+        formats: ['png'],
+      });
+
+      expect(rendered.derivatives[0]).toMatchObject({ width: 58, height: 58 });
+    });
+
+    it('pads a small picture rather than enlarging it', async () => {
+      const rendered = await renderImage(await photograph(40, 40, { r: 200, g: 30, b: 30 }), {
+        sizes: [{ name: 'strip', width: 375, height: 123, background: '#ffffff' }],
+        formats: ['png'],
+      });
+
+      const strip = rendered.derivatives[0]!;
+      expect(strip).toMatchObject({ width: 375, height: 123 });
+
+      /*
+       * The corner is the padding and the centre is the picture. A `fill` or a
+       * `cover` would put the picture in both, and the forty-pixel logo an
+       * owner uploaded would arrive on their customers' cards as a blurred
+       * smear — which is the defect this fit exists to prevent.
+       */
+      const { data } = await sharp(strip.bytes)
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+
+      const at = (x: number, y: number) => [...data.subarray((y * 375 + x) * 4, (y * 375 + x) * 4 + 3)];
+
+      expect(at(2, 2)).toEqual([255, 255, 255]);
+      expect(at(187, 61)[0]).toBeGreaterThan(150);
+    });
+
+    it('pads with nothing at all unless told what to pad with', async () => {
+      const rendered = await renderImage(await photograph(40, 40), {
+        sizes: [{ name: 'logo', width: 160, height: 50 }],
+        formats: ['png'],
+      });
+
+      const { data, info } = await sharp(rendered.derivatives[0]!.bytes)
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+
+      /* Transparent, so a logo laid over a colour this code does not know does
+         not arrive inside a white rectangle. */
+      expect(info.channels).toBe(4);
+      expect(data[3]).toBe(0);
+    });
+
+    it('crops to the frame when asked to cover it', async () => {
+      const rendered = await renderImage(await photograph(1200, 400), {
+        sizes: [{ name: 'square', width: 100, height: 100, fit: 'cover' }],
+        formats: ['png'],
+      });
+
+      expect(rendered.derivatives[0]).toMatchObject({ width: 100, height: 100 });
+    });
+
+    it('fills the frame even from a picture smaller than it', async () => {
+      const rendered = await renderImage(await photograph(40, 40), {
+        sizes: [
+          { name: 'strip', width: 375, height: 123, fit: 'cover' },
+          { name: 'logo', width: 375, height: 123, fit: 'contain' },
+        ],
+        formats: ['png'],
+      });
+
+      /*
+       * The one asymmetry in this pipeline, and it is deliberate. A `cover`
+       * that declined to enlarge would come back at 40 by 40 — the size of the
+       * upload rather than the size of the frame — and a wallet pass built from
+       * that is refused by the device, in front of a customer. A `contain`
+       * still refuses, and pads instead.
+       */
+      expect(rendered.derivatives[0]).toMatchObject({ width: 375, height: 123 });
+      expect(rendered.derivatives[1]).toMatchObject({ width: 375, height: 123 });
+    });
   });
 
   it('lets one size ask for a format the others do not', async () => {

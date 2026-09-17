@@ -4,6 +4,31 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## files 1.9.0
+
+### Added
+
+- **A fixed frame for a derivative.** `DerivativeSpec` takes an optional
+  `height`, with `fit` (`contain` or `cover`) and `background`. Given both
+  dimensions the derivative comes out at exactly that size.
+
+  The pipeline was written for photographs, where asking for a width and letting
+  the height follow is right. An *asset* has no shape of its own to keep: a
+  square avatar, and a wallet pass's icon, which Apple and Google both reject at
+  any size but the one they name. There is no way to produce either by naming a
+  width.
+
+  `contain` never enlarges: a small upload is centred and padded rather than
+  blown up, because a stretched logo on a customer's card is worse than a small
+  one. Padding is transparent unless told otherwise, which is what a logo laid
+  over an unknown colour needs; a format without an alpha channel renders that
+  as black, so a JPEG derivative of a padded image should name a background.
+
+  `cover` does enlarge, and has to. A frame that is not filled is not a cover,
+  and refusing would hand back a derivative the size of the *upload* rather than
+  the size asked for — a 40-pixel strip image where a pass wanted 375 by 123,
+  which is a file the device refuses at a counter rather than an error here.
+
 ## wallet 1.1.0
 
 ### Added

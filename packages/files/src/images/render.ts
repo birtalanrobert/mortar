@@ -20,6 +20,9 @@ const CONTENT_TYPES: Record<ImageFormat, string> = {
  * a worker that encodes once and serves thousands of times, and the wrong one
  * anywhere on a request path.
  */
+/** What a `contain` fit pads with unless the caller says otherwise. */
+const TRANSPARENT = { r: 0, g: 0, b: 0, alpha: 0 } as const;
+
 const DEFAULT_QUALITY: Record<ImageFormat, number> = {
   avif: 50,
   webp: 75,
@@ -44,6 +47,27 @@ const RASTER = new Set([
   'image/tiff',
 ]);
 
+/**
+ * How a picture is fitted when a derivative asks for both dimensions.
+ *
+ * `contain` keeps all of it and pads; `cover` fills the frame and crops the
+ * overflow. Two rather than sharp's five, because the other three produce an
+ * output whose size is not the size that was asked for — which defeats the
+ * reason for asking.
+ */
+export type ImageFit = 'contain' | 'cover';
+
+/**
+ * Whether a fit will enlarge the picture to fill its frame.
+ *
+ * `contain` will not: a logo uploaded at forty pixels is centred and padded
+ * rather than blown up, because a blurred logo on a customer's card is worse
+ * than a small one. `cover` will, and has to — a frame that is not filled is
+ * not a cover, and the alternative is a derivative that silently comes out at
+ * the size of the upload instead of the size that was asked for.
+ */
+const ENLARGES: Record<ImageFit, boolean> = { contain: false, cover: true };
+
 export interface DerivativeSpec {
   /**
    * The product's own name for this size — `thumb`, `card`, `full`.
@@ -55,6 +79,36 @@ export interface DerivativeSpec {
   name: string;
   /** Target width in pixels. Never enlarged beyond the original. */
   width: number;
+  /**
+   * Target height, when the frame is fixed rather than the width alone.
+   *
+   * Absent — the usual case — the height follows the picture's own proportions
+   * and a photograph keeps its shape. Present, the derivative comes out at
+   * **exactly** `width × height`, which is what a fixed frame means: a square
+   * avatar, or a wallet pass's icon, which both platforms reject at any other
+   * shape. The picture inside is still never enlarged; a small upload is
+   * padded rather than blown up, because a stretched logo is worse than a small
+   * one centred.
+   */
+  height?: number;
+  /**
+   * How the picture sits in a fixed frame. Ignored without `height`.
+   *
+   * `contain` pads and never enlarges; `cover` crops and enlarges when it must.
+   * Either way the derivative comes out at exactly `width × height` — which is
+   * the whole reason for naming both.
+   */
+  fit?: ImageFit;
+  /**
+   * What fills the padding a `contain` fit leaves, as `#rgb`, `#rrggbb` or
+   * `#rrggbbaa`.
+   *
+   * Transparent by default, which is right for a logo laid over something whose
+   * colour this code does not know. A format with no alpha channel renders
+   * transparency as black, so a JPEG derivative of a padded image wants this
+   * set to whatever it will be shown against.
+   */
+  background?: string;
   /** Overrides the render's formats for this size alone. */
   formats?: readonly ImageFormat[];
 }
@@ -263,7 +317,26 @@ async function one(
      * pipeline has just promised to drop.
      */
     .toColourspace('srgb')
-    .resize({ width: spec.width, withoutEnlargement: true });
+    .resize(
+      spec.height === undefined
+        ? { width: spec.width, withoutEnlargement: true }
+        : {
+            width: spec.width,
+            height: spec.height,
+            fit: spec.fit ?? 'contain',
+            /*
+             * Only `contain` refuses to enlarge, and the asymmetry is the
+             * point. Padding a small upload leaves it sharp and centred, which
+             * is what a logo wants. Refusing to enlarge a `cover` would hand
+             * back a derivative the size of the upload rather than the size of
+             * the frame — a 40-pixel strip image where a pass wanted 375 by
+             * 123, which is discovered at a counter rather than here.
+             */
+            withoutEnlargement: !ENLARGES[spec.fit ?? 'contain'],
+            position: 'centre',
+            background: spec.background ?? TRANSPARENT,
+          },
+    );
 
   const encoded =
     format === 'avif'
