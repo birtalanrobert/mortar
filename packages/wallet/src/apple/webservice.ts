@@ -122,6 +122,15 @@ export interface ProtocolResult {
   /** Only the pass fetch sets these. */
   bytes?: Buffer;
   headers?: Record<string, string>;
+  /**
+   * Whether a registration row was actually added or removed.
+   *
+   * Not part of the HTTP answer — a device is told 200 either way — but the
+   * difference between a holder doing something and a device retrying, which
+   * is exactly what a product acting on either needs and cannot recover from
+   * the status alone.
+   */
+  changed?: boolean;
 }
 
 const UNAUTHORISED: ProtocolResult = { status: 401 };
@@ -165,7 +174,7 @@ export async function registerDevice(
     serialNumber: request.serialNumber,
   });
 
-  return { status: created ? 201 : 200 };
+  return { status: created ? 201 : 200, changed: created };
 }
 
 /**
@@ -189,15 +198,23 @@ export async function unregisterDevice(
   if (!pass) return NOT_FOUND;
   if (!options.authorise(pass, request.token)) return UNAUTHORISED;
 
-  await options.registrations.remove({
+  const removed = await options.registrations.remove({
     deviceLibraryIdentifier: request.deviceLibraryIdentifier,
     passTypeIdentifier: request.passTypeIdentifier,
     serialNumber: request.serialNumber,
   });
 
-  /* 200 whether or not a row went. A device that retries a deregistration has
-     not made a mistake, and telling it otherwise makes it retry harder. */
-  return { status: 200 };
+  /*
+   * 200 whether or not a row went. A device that retries a deregistration has
+   * not made a mistake, and telling it otherwise makes it retry harder.
+   *
+   * `changed` carries what the status deliberately hides. A product treating a
+   * removal as a withdrawal of consent — which §2.10 of a loyalty
+   * specification requires — must not record one for a device that had nothing
+   * registered in the first place: that is a retry, or somebody with a serial
+   * and no pass, and either way nobody withdrew anything.
+   */
+  return { status: 200, changed: removed };
 }
 
 /**

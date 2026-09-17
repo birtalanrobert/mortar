@@ -23,7 +23,7 @@
     "wallet:verify": "pnpm --filter @birtalanrobert/wallet run verify",
     "check:publishable": "node scripts/check-publishable.mjs",
     "check:pure": "node scripts/check-pure-entries.mjs",
-    "release:check": "pnpm build && pnpm check:publishable && pnpm check:pure && pnpm check:readmes && pnpm test && node scripts/publish-npm.mjs --dry-run",
+    "release:check": "pnpm build && pnpm -r --filter \"./packages/**\" run typecheck && pnpm check:publishable && pnpm check:pure && pnpm check:readmes && pnpm test && node scripts/publish-npm.mjs --dry-run",
     "release": "pnpm build && pnpm check:publishable && node scripts/publish-npm.mjs",
     "version:set": "node scripts/version.mjs",
     "version:bump": "node scripts/version.mjs",

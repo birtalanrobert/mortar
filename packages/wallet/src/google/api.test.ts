@@ -24,7 +24,11 @@ interface Call {
 function stubbed(answer: (call: Call) => { status: number; body?: unknown }) {
   const calls: Call[] = [];
 
-  const call = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+  /* `Parameters<typeof fetch>` rather than `RequestInfo`: the DOM lib is not on
+     here — this package runs in Node — and naming a global that only exists in
+     a browser's type set is a `pnpm typecheck` that fails while the build and
+     the tests both pass. */
+  const call = vi.fn(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const record: Call = {
       url: String(input),
       method: init?.method ?? 'GET',

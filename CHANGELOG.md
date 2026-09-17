@@ -4,6 +4,53 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## links 1.0.0
+
+New package: **signed, expiring links** — how somebody reaches a page without an
+account.
+
+It was written inside `stamped-enrol`, with a comment saying it was the
+extraction candidate and would move at its second consumer. Phase 4 of project
+06 is the API starting to *mint* them, which is that second consumer — and the
+two halves had to move together, because they must agree exactly on the payload
+encoding and two implementations that agree today will not agree in a year.
+
+`verifyLink` reports `malformed`, `invalid` or `expired` separately, because
+those have three different remedies. The signature is checked before the expiry,
+so an expired token nobody signed reads as invalid rather than as merely
+expired — which would otherwise invite somebody to keep trying with a fresher
+timestamp.
+
+Web Crypto rather than `node:crypto`, so the same code runs in an edge
+middleware, a browser and a Nest service. No dependencies.
+
+## wallet 1.2.0
+
+### Added
+
+- **`onRegistered`**, beside the `onDeregistered` that was already there. A
+  registration is the only signal either platform gives that a pass was actually
+  *installed*: issuing one is a file leaving a server, and nothing else
+  distinguishes the two. A product measuring an enrolment funnel, or holding a
+  welcome bonus back until there is a phone to show it on, has this and nothing
+  else to go on.
+
+  `created` says whether the device already had it, so a retry is not counted as
+  an installation. Whether a *re*-installation counts is left to the product,
+  because that is where the answer is known.
+
+### Fixed
+
+- **A removal that removed nothing no longer reports a withdrawal of consent.**
+  `unregisterDevice` answers 200 whether or not a row went — correctly, because
+  a device retrying has not made a mistake — and the Nest layer was reading that
+  status as "a holder removed their pass". A device that had nothing registered,
+  or somebody with a serial and no pass, would have suppressed a customer's
+  messages by asking twice.
+
+  `ProtocolResult` now carries `changed`, which is what the status deliberately
+  hides, and both hooks read it.
+
 ## files 1.9.0
 
 ### Added

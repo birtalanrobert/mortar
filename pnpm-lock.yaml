@@ -406,6 +406,8 @@ importers:
         specifier: ^5.0.0 || ^6.0.0
         version: 6.2.1(ioredis@5.11.1)(pg@8.23.0)
 
+  packages/links: {}
+
   packages/messaging:
     dependencies:
       '@birtalanrobert/database':

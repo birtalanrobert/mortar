@@ -32,6 +32,28 @@ export interface WalletModuleOptions {
     serialNumber: string;
     deviceLibraryIdentifier: string;
   }) => Promise<void>;
+
+  /**
+   * Told when a holder adds a pass.
+   *
+   * **The only signal either platform gives that a pass was actually
+   * installed.** Issuing one is a file leaving a server; a registration is a
+   * wallet on a device asking to be told when it changes, and nothing else
+   * distinguishes the two. A product measuring an enrolment funnel, or holding
+   * a welcome bonus back until there is a phone to show it on, has this and
+   * nothing else to go on.
+   *
+   * `created` is false when the device already had it: a retry, not an install.
+   * Whether a *re-*installation counts is the product's question — somebody who
+   * removes a pass and adds it again is one person installing twice — so that
+   * decision is left where the answer is known.
+   */
+  onRegistered?: (input: {
+    passTypeIdentifier: string;
+    serialNumber: string;
+    deviceLibraryIdentifier: string;
+    created: boolean;
+  }) => Promise<void>;
 }
 
 /**
@@ -71,17 +93,34 @@ export class WalletWebService {
     };
   }
 
-  register(request: {
+  async register(request: {
     deviceLibraryIdentifier: string;
     passTypeIdentifier: string;
     serialNumber: string;
     pushToken: string;
     authorization: string | undefined;
   }): Promise<ProtocolResult> {
-    return registerDevice(this.protocol, {
+    const result = await registerDevice(this.protocol, {
       ...request,
       token: readApplePassHeader(request.authorization),
     });
+
+    /*
+     * Only on a registration the device was allowed to make. A 401 is somebody
+     * else's failed guess and a 404 is a serial nobody issued; neither is an
+     * installation, and counting either would put a stranger's probe into a
+     * business's enrolment numbers.
+     */
+    if (result.status === 200 || result.status === 201) {
+      await this.options.onRegistered?.({
+        passTypeIdentifier: request.passTypeIdentifier,
+        serialNumber: request.serialNumber,
+        deviceLibraryIdentifier: request.deviceLibraryIdentifier,
+        created: result.changed === true,
+      });
+    }
+
+    return result;
   }
 
   async unregister(request: {
@@ -98,10 +137,14 @@ export class WalletWebService {
     /*
      * A pass removed from a wallet is a withdrawal of consent as well as a
      * deleted row — the specification is explicit about it — and the product is
-     * *told* rather than expected to notice. Only on a successful
-     * deregistration: a 401 is somebody else's failed guess, not a holder.
+     * *told* rather than expected to notice.
+     *
+     * Only when a row actually went. A 401 is somebody else's failed guess, and
+     * a 200 for a device that had nothing registered is a retry — neither is a
+     * holder withdrawing anything, and recording one either way would suppress
+     * a customer's messages because a device asked twice.
      */
-    if (result.status === 200) {
+    if (result.changed) {
       await this.options.onDeregistered?.({
         passTypeIdentifier: request.passTypeIdentifier,
         serialNumber: request.serialNumber,
