@@ -59,6 +59,7 @@ export {
   type PassJson,
 } from './apple/pass-json';
 export { readPngSize, type PngSize } from './apple/png';
+export { fingerprint, solidPng } from './images/placeholder';
 
 export {
   ASSET_SIZES,
@@ -99,6 +100,45 @@ export {
 } from './google/payload';
 
 export { buildSaveToken, saveLink, SAVE_URL, type SaveLinkInput } from './google/save-link';
+
+export {
+  passAuthenticationToken,
+  readApplePassHeader,
+  verifyPassAuthenticationToken,
+  type PassTokenSubject,
+} from './apple/token';
+
+export {
+  deviceLog,
+  fetchPass,
+  passesUpdatedSince,
+  registerDevice,
+  unregisterDevice,
+  type PassRecord,
+  type PassSource,
+  type ProtocolOptions,
+  type ProtocolResult,
+  type RegistrationStore,
+  type UpdatedSince,
+} from './apple/webservice';
+
+export {
+  RecordingApns,
+  coalesce,
+  type ApnsPort,
+  type ApnsPush,
+  type ApnsResult,
+} from './apple/apns/port';
+
+export { Http2Apns, type Http2ApnsOptions } from './apple/apns/http2.apns';
+
+export {
+  RecordingGoogleWallet,
+  type GoogleWalletPort,
+  type GoogleWriteResult,
+} from './google/port';
+
+export { GoogleWalletApi, type GoogleWalletApiOptions } from './google/api';
 
 /* --- shared --- */
 

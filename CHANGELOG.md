@@ -4,6 +4,69 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## wallet 1.1.0
+
+### Added
+
+- **Apple's update web service**, as a protocol rather than a controller. The
+  five handlers, the registration table and the push live here; the product
+  supplies a `PassSource` — three methods that say what a pass _is_ — and writes
+  its own controller, because where the routes sit, which guard marks them
+  public and what rate limit they carry are the product's decisions. Expressing
+  any of them here would mean this package depending on a product's
+  authentication.
+- **`/nestjs`**: `WalletModule`, `WalletWebService`, `WalletRegistrationsService`,
+  and the three tables — registrations, push deliveries and the device log.
+- **APNs** behind `ApnsPort`, with `RecordingApns` and an HTTP/2 client.
+- **Google** behind `GoogleWalletPort`, with `RecordingGoogleWallet` and a real
+  client.
+
+### Three decisions worth recording
+
+- **The per-pass authentication token is derived, not stored.** Every pass
+  carries a secret the device sends back, and the obvious implementation keeps a
+  column of them. `passAuthenticationToken(secret, subject)` computes it from one
+  deployment secret instead: nothing secret is in the database, a rebuilt pass
+  carries the same token — which a stored hash could not produce — and rotation
+  is incrementing a number on the row. The cost is that the secret is the whole
+  scheme: change it and every outstanding pass stops being able to update, which
+  is right after a leak and a catastrophe by accident.
+
+- **The updated-since tag comes from a monotonic sequence and never a clock.**
+  Two updates inside the same tick share a clock value; the device stores it,
+  asks again, is told nothing changed, and keeps a pass that has quietly stopped
+  matching the database. `webservice.test.ts` asserts both of two updates made in
+  the same instant are reported.
+
+- **Pushes are coalesced per device, not per pass.** The push carries nothing —
+  no serial, no payload — and the device answers it by asking which of _its_
+  passes changed. A holder whose two cards both changed needs one notification;
+  sending two makes a phone buzz twice for one question it will ask once. Five
+  stamps on five customers is still five pushes.
+
+### Smaller things that are easy to get wrong, and are handled
+
+- `Last-Modified` is compared **loosely**: HTTP dates carry one second, so an
+  equal timestamp serves the pass rather than answering 304. At worst one
+  redundant fetch, never a missed update.
+- Re-registering a device **takes the new push token**. A device that reinstalls
+  the pass calls with the same identifiers and a different token, and keeping the
+  old one means pushing into the void for ever while recording every one as
+  delivered.
+- `410 Unregistered` **removes the registration** rather than only being logged.
+  It is the only signal there is that somebody deleted their card without the
+  deregistration arriving.
+- Registration answers **201 the first time and 200 the next**, which Apple
+  documents and devices rely on.
+- The updated-since query answers **204**, not 200 with an empty array.
+- `POST /v1/log` is implemented. It is the only diagnostic Apple sends anywhere,
+  and a programme with no device of its own has more use for it than most.
+- The three tables **carry no row-level security policy**, deliberately and for
+  the same reason `platform_operators` does not: a device sends an opaque
+  identifier and a serial and nothing else, so every lookup happens before any
+  tenant is known — and a bound read of a `FORCE`-secured table returns nothing
+  while reporting success.
+
 ## wallet 1.0.0
 
 New package. Apple Wallet and Google Wallet passes — one content model, two

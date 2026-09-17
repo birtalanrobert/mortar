@@ -2,17 +2,19 @@ import { deflateSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 
 /**
- * A real PNG of exactly the dimensions asked for.
+ * A plain PNG of exactly the dimensions asked for.
  *
- * Every pass fixture needs images, and every image rule in this package is about
- * *size* — an `@2x` that is not exactly twice its base, a logo wider than the
- * layout allows. A one-pixel placeholder cannot exercise any of that, and a
- * checked-in binary of each size is a directory of files nobody can read in a
- * diff.
+ * Production code, not a fixture — though the fixtures use it too. **Every pass
+ * must carry an icon**, and a business that has just signed up has not uploaded
+ * one: without this the first pass they preview cannot be built at all, and the
+ * fifteen-minute path from signing up to a poster on the counter has a wall in
+ * the middle of it. A rectangle in their own colours is a poor logo and a
+ * perfectly good placeholder.
  *
- * So the fixtures are generated. Small enough to be free — a solid colour
- * deflates to almost nothing — and honest enough that `readPngSize`, and any
- * other decoder, agrees with the number that was asked for.
+ * Hand-written rather than reached for: `sharp` is libvips — a native binary and
+ * a hundred megabytes — and the alternative to that is a checked-in binary
+ * nobody can read in a diff. Writing a solid PNG is a header, one deflated
+ * scanline block and a checksum.
  */
 export function solidPng(width: number, height: number, colour = { r: 0, g: 0, b: 0 }): Buffer {
   const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);

@@ -17,9 +17,9 @@ import {
 } from '../apple/development-certificate';
 import type { SigningMaterial } from '../apple/sign';
 import type { PassAssets, PassContent } from '../content';
-import { solidPng } from './png';
+import { solidPng } from '../images/placeholder';
 
-export { solidPng, fingerprint } from './png';
+export { solidPng, fingerprint } from '../images/placeholder';
 
 /** Images at the sizes the layout expects, with correct densities. */
 export function sampleAssets(): PassAssets {

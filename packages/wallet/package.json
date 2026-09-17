@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/wallet",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Apple Wallet and Google Wallet passes: content model, signing, conformance checking and the update web service",
   "license": "AGPL-3.0-only",
   "repository": {
@@ -18,6 +18,7 @@
     "README.md",
     "LICENSE",
     "NOTICE",
+    "nestjs",
     "testing",
     "CHANGELOG.md"
   ],
@@ -25,6 +26,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./nestjs": {
+      "types": "./dist/nestjs/index.d.ts",
+      "default": "./dist/nestjs/index.js"
     },
     "./testing": {
       "types": "./dist/testing/index.d.ts",
@@ -42,9 +47,15 @@
     "access": "public"
   },
   "dependencies": {
+    "@birtalanrobert/context": "workspace:^",
+    "@birtalanrobert/database": "workspace:^",
     "@birtalanrobert/files": "workspace:^",
     "@birtalanrobert/http": "workspace:^",
     "asn1js": "^3.0.10",
     "pkijs": "^3.4.0"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^11.0.0",
+    "typeorm": "^1.0.0"
   }
 }

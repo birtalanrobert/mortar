@@ -70,6 +70,12 @@ const RULES = [
            * issues save links has to name it.
            */
           'pay\\.google\\.com',
+          /*
+           * And Apple's push endpoints, by the same argument again: APNs lives
+           * at exactly these two addresses, Apple documents them, and a package
+           * that sends a push has to name them.
+           */
+          '(?:[a-z0-9-]+\\.)*push\\.apple\\.com',
           'login\\.microsoftonline\\.com',
           'graph\\.microsoft\\.com',
           /*

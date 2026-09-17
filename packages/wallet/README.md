@@ -110,6 +110,73 @@ Three differences from Apple, all Google's: images are URIs rather than bytes,
 there is a class as well as an object, and updates are direct writes with no
 device registration.
 
+## Keeping a pass up to date
+
+Apple's update web service is five endpoints a device calls. This package
+carries the protocol, the registration table and the push; the product supplies
+a `PassSource` — three methods that say what a pass _is_ — and writes the
+controller, because where the routes live and which guard marks them public are
+its decisions.
+
+```ts
+import { WalletModule, WALLET_PASS_SOURCE } from '@birtalanrobert/wallet/nestjs';
+
+WalletModule.forRootAsync(
+  {
+    inject: [ConfigModule.token()],
+    useFactory: (config) => ({ tokenSecret: config.WALLET_PASS_TOKEN_SECRET }),
+  },
+  { provide: WALLET_PASS_SOURCE, useClass: CardPassSource },
+);
+```
+
+**The authentication token is derived, not stored.** Every pass carries a secret
+the device sends back, and the obvious implementation keeps a column of them.
+`passAuthenticationToken(secret, { passTypeIdentifier, serialNumber, version })`
+computes it instead: nothing secret is in the database, a rebuilt pass carries
+the same token, and rotation is incrementing `version`. The cost is that the
+deployment secret is the whole scheme — change it and every outstanding pass
+stops being able to update.
+
+**The updated-since tag must not come from a clock.** Two updates inside the
+same tick share a value, the device stores it, asks again, is told nothing
+changed, and keeps a pass that has silently stopped matching the database. A
+monotonic sequence assigned per update is the fix, and `PassSource.updatedSince`
+is where it lives.
+
+**`If-Modified-Since` is compared loosely**, for the same reason: HTTP dates
+carry one second, so an _equal_ timestamp serves the pass rather than answering 304. At worst one redundant fetch; never a missed update.
+
+## Push
+
+```ts
+import { RecordingApns, Http2Apns, coalesce } from '@birtalanrobert/wallet';
+```
+
+The push carries nothing — no serial, no payload — and the device answers it by
+asking which of _its_ passes changed. So pushes are **coalesced per device**: a
+holder whose two cards both changed gets one notification, and five stamps on
+five customers is five pushes.
+
+`RecordingApns` records instead of sending and can be made to answer
+`410 Unregistered`, which is the only signal there is that somebody deleted
+their card without the deregistration arriving. `WalletRegistrationsService`
+removes the registration when it sees one, and writes every outcome to
+`mortar_wallet_push_delivery` — which, with no device in this programme, is the
+only evidence an update reached anybody.
+
+`POST /v1/log` is implemented too. It is the only diagnostic Apple sends
+anywhere, and a product testing without a phone has more use for it than one
+that can look at a screen.
+
+## Google, in one call
+
+`GoogleWalletApi` exchanges a signed assertion for an access token — a save link
+is a JWT the _holder's browser_ hands to Google, and a write is not — and
+upserts by trying `PUT` and falling back to `POST`, because Google has no upsert
+and a record of what we have already created will eventually be wrong.
+`RecordingGoogleWallet` is its counterpart fake.
+
 ## The certificate
 
 ```ts
