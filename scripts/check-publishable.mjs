@@ -63,6 +63,13 @@ const RULES = [
           'aka\\.ms',
           'vite\\.dev',
           '(?:[a-z0-9-]+\\.)*googleapis\\.com',
+          /*
+           * Google's published "Add to Google Wallet" endpoint, by the same
+           * argument as `googleapis.com` above: it is where the feature lives,
+           * it is the address in Google's own documentation, and a package that
+           * issues save links has to name it.
+           */
+          'pay\\.google\\.com',
           'login\\.microsoftonline\\.com',
           'graph\\.microsoft\\.com',
           /*

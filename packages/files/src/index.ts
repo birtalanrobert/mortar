@@ -1,7 +1,7 @@
 export { detectType, isAccepted, type DetectedType } from './detect';
 
 export { assemblePdf, type AssembleOptions, type PdfPage } from './pdf';
-export { createZip, type ZipEntry, type ZipOptions } from './zip';
+export { createZip, readZip, type ZipEntry, type ZipOptions } from './zip';
 
 export {
   FilesService,

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inflateRawSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
-import { createZip } from './zip';
+import { createZip, readZip } from './zip';
 
 const bytes = (text: string) => new TextEncoder().encode(text);
 
@@ -179,5 +179,84 @@ describe('createZip', () => {
 
     expect(readFileSync(join(directory, 'folder/one.txt'), 'utf8')).toBe('one');
     expect(readFileSync(join(directory, 'folder/two.txt'), 'utf8')).toBe('two');
+  });
+});
+
+describe('readZip', () => {
+  it('reads back what createZip wrote, bytes intact', () => {
+    const binary = randomBytes(5000);
+    const archive = createZip([
+      { path: 'pass.json', content: bytes('{"formatVersion":1}') },
+      { path: 'strip@2x.png', content: binary },
+      { path: 'ro.lproj/pass.strings', content: bytes('"a" = "b";\n') },
+    ]);
+
+    const files = readZip(archive);
+
+    expect([...files.keys()].sort()).toEqual([
+      'pass.json',
+      'ro.lproj/pass.strings',
+      'strip@2x.png',
+    ]);
+    expect(files.get('pass.json')!.toString('utf8')).toBe('{"formatVersion":1}');
+    expect(files.get('strip@2x.png')!.equals(binary)).toBe(true);
+  });
+
+  /**
+   * The assertion that stops this marking its own homework.
+   *
+   * A reader tested only against the writer beside it proves the two agree.
+   * `zip` is a different implementation by different people, and it makes
+   * choices ours does not — it stores what will not compress, writes its own
+   * extra fields, and orders its central directory its own way.
+   */
+  it('reads an archive written by something else entirely', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'mortar-zip-read-'));
+    writeFileSync(join(directory, 'one.txt'), 'one');
+    writeFileSync(join(directory, 'two.bin'), randomBytes(3000));
+    execFileSync('zip', ['-q', '-r', 'made-elsewhere.zip', 'one.txt', 'two.bin'], {
+      cwd: directory,
+    });
+
+    const files = readZip(readFileSync(join(directory, 'made-elsewhere.zip')));
+
+    expect([...files.keys()].sort()).toEqual(['one.txt', 'two.bin']);
+    expect(files.get('one.txt')!.toString('utf8')).toBe('one');
+    expect(files.get('two.bin')!.equals(readFileSync(join(directory, 'two.bin')))).toBe(true);
+  });
+
+  it('reads a non-ASCII name the same way it wrote one', () => {
+    const files = readZip(createZip([{ path: 'Ștefănescu/Extras.txt', content: bytes('x') }]));
+
+    expect([...files.keys()]).toEqual(['Ștefănescu/Extras.txt']);
+  });
+
+  it('refuses something that is not an archive', () => {
+    expect(() => readZip(randomBytes(2000))).toThrow(/not a ZIP archive/);
+  });
+
+  it('refuses an entry whose bytes have been altered', () => {
+    const archive = createZip([{ path: 'manifest.json', content: bytes('a'.repeat(200)) }], {
+      store: true,
+    });
+
+    /*
+     * The whole reason a verifier reads the archive instead of asking the
+     * builder: a byte changed after the fact has to be found in the file, and
+     * the format already records enough to find it.
+     */
+    const tampered = Buffer.from(archive);
+    tampered[60] = tampered[60]! ^ 0xff;
+
+    expect(() => readZip(tampered)).toThrow(/checksum/);
+  });
+
+  it('refuses an encrypted entry rather than returning part of the archive', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'mortar-zip-enc-'));
+    writeFileSync(join(directory, 'secret.txt'), 'secret');
+    execFileSync('zip', ['-q', '-P', 'hunter2', 'locked.zip', 'secret.txt'], { cwd: directory });
+
+    // Skipping it would let a checker report on an archive it could not read.
+    expect(() => readZip(readFileSync(join(directory, 'locked.zip')))).toThrow(/encrypted/);
   });
 });

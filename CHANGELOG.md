@@ -4,6 +4,111 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## wallet 1.0.0
+
+New package. Apple Wallet and Google Wallet passes — one content model, two
+renderers, and a conformance suite.
+
+### Why it is here rather than inside a product
+
+Project 06's specification asks for "a module within the API, isolated behind a
+clean interface, so that it can be lifted into project 1 without modification".
+The extraction policy says the opposite and is right: two of the seventeen
+specifications need wallet passes — loyalty cards and tickets — which is the
+threshold, and an interface designed against one of them acquires a
+loyalty-shaped assumption in its first week. "Liftable later" is a promise
+nobody has ever kept.
+
+So the vocabulary is `PassContent` and `PassField` rather than `stamps` and
+`balance`, and both specifications were read before the first type was written.
+
+### What it does
+
+- **`buildPkPass`** — validate, render `pass.json`, hash every file, sign the
+  manifest, zip. Deterministic given `builtAt`, because the manifest hashes the
+  content and a build that varied would make every rebuild look to a device like
+  a change. Refuses rather than signing a pass that breaks a rule.
+- **`verifyPkPass`** — the conformance check. Reads the archive back **from its
+  bytes** rather than from whatever the builder thought it wrote, re-derives
+  every hash in both directions, verifies the detached PKCS#7 against a chain,
+  and applies the rules to the `pass.json` actually in the file.
+- **`apple/rules.ts`** — every rule in one file with a citation each, plus
+  `RULES_REVIEWED`.
+- **`readSigningCertificate`** — reads the pass type and team identifiers out of
+  the certificate rather than taking them from configuration beside it, because
+  a device refuses a pass whose two disagree with its signature and says nothing
+  useful about why. Reports `selfSigned`.
+- **`buildLoyaltyClass` / `buildLoyaltyObject` / `saveLink`** — Google's half,
+  from the same content.
+- **`/testing`** — `testSigner`, `sampleContent`, `sampleAssets`, `solidPng`.
+  No network, no keychain, no openssl binary.
+- **`wallet:verify`**, with a `--live` mode that uses real credentials and names
+  what it did not check instead of passing quietly.
+
+### The honest part
+
+There is no device in this programme and there will not be one, so this package
+cannot prove that a lock screen renders a pass, that APNs delivers, or that
+Apple accepts our certificate. Those are stated in the README as unprovable here
+rather than implied by a green run, and `--live` exists now so that one command
+answers them the day an Apple account does.
+
+The substitute for a canary is `RULES_REVIEWED` — a date a human moves by
+re-reading Apple's published requirements. It is weaker than a canary and is
+written down as weaker.
+
+### Decisions worth recording
+
+- **`pkijs` for CMS, `node:crypto` for JWTs.** ASN.1 is a solved problem with
+  decades behind it and shelling out to `openssl smime` would make the build
+  depend on a binary's version. A JWT with a fixed algorithm is not: everything
+  dangerous about JWT is on the verifying side, both tokens here are read by
+  somebody else, and `jose` is ESM-only in a CommonJS monorepo. `verifyJwt`
+  takes the algorithm as an **argument** rather than reading it from the header,
+  which is the decision that makes the difference.
+- **Assets are bytes, not keys or URLs.** A package that signs a file for
+  somebody else's operating system should not also need an S3 client to be
+  tested.
+- **`sharingProhibited` defaults on for store cards and coupons**, which is the
+  opposite of the platform default. A shareable stamp card is a screenshot in a
+  group chat — the same failure that makes a static counter QR code unusable.
+
+### Found while writing it
+
+- **A DER serial number with an unconditional leading zero parsed about half the
+  time.** DER permits the padding byte only where the next byte would set the
+  sign bit and forbids it otherwise, so `generateDevelopmentCertificate`
+  produced a certificate OpenSSL rejected as "illegal padding" whenever the
+  first random byte happened to be below 0x80. One run of one certificate would
+  have passed three times in five; there is now a test that generates
+  twenty-five.
+- **`pkijs` cannot emit a distinguished name with separate relative names.** It
+  parses them into a flat list and re-encodes them as one multi-valued name, so
+  a generated certificate reads as `CN=… + OU=… + O=…` while Apple's reads as
+  three lines. The shape used in production is therefore the shape no fixture
+  can build — which is why `parseDistinguishedName` is its own module with its
+  own tests covering both renderings, rather than a private helper exercised
+  only by the fixture.
+
+## files 1.8.0
+
+### Added
+
+- **A `./zip` subpath**, exporting `createZip` and its types on their own.
+
+  The writer was already here and already deterministic, which is what a
+  `.pkpass` needs — Apple's archive is checked by hash, so a second build of the
+  same content has to produce the same bytes. `@birtalanrobert/wallet` needs
+  exactly that and nothing else from this package: it takes pass assets as
+  bytes and never touches storage, because a package that signs a file for
+  somebody else's operating system should not also need an S3 client to be
+  tested.
+
+  Importing the root would have given it one. `index.ts` exports `S3Storage`
+  and the `StoredFile` entity, so `import { createZip } from
+'@birtalanrobert/files'` loads the AWS SDK and TypeORM to write a zip. The
+  subpath is the same code with none of that in its import graph.
+
 ## billing 3.0.0
 
 ### Fixed

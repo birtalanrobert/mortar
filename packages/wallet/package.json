@@ -1,0 +1,50 @@
+{
+  "name": "@birtalanrobert/wallet",
+  "version": "1.0.0",
+  "description": "Apple Wallet and Google Wallet passes: content model, signing, conformance checking and the update web service",
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/birtalanrobert/mortar.git",
+    "directory": "packages/wallet"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src",
+    "!src/**/*.test.ts",
+    "!src/**/*.spec.ts",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "testing",
+    "CHANGELOG.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "verify": "node dist/cli/verify.js"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@birtalanrobert/files": "workspace:^",
+    "@birtalanrobert/http": "workspace:^",
+    "asn1js": "^3.0.10",
+    "pkijs": "^3.4.0"
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "main": "../dist/zip.js",
+  "types": "../dist/zip.d.ts",
+  "sideEffects": false
+}

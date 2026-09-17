@@ -1,4 +1,4 @@
-import { deflateRawSync } from 'node:zlib';
+import { deflateRawSync, inflateRawSync } from 'node:zlib';
 import { ValidationError } from '@birtalanrobert/http';
 
 export interface ZipEntry {
@@ -183,6 +183,122 @@ export function createZip(entries: readonly ZipEntry[], options: ZipOptions = {}
 
   return Buffer.concat([...locals, directory, end]);
 }
+
+/**
+ * The archive read back, path to bytes.
+ *
+ * Written because a checker that trusts the writer checks nothing. The pass
+ * conformance suite in `@birtalanrobert/wallet` opens the `.pkpass` it has just
+ * produced and re-derives every hash from the bytes actually in the file — if it
+ * asked the builder what it had put there, it would agree with itself and prove
+ * nothing.
+ *
+ * Deliberately strict, because it is a checking tool rather than an extractor.
+ * Anything it does not understand is refused rather than skipped: a ZIP64
+ * archive, an encrypted entry, a streamed entry whose sizes live in a data
+ * descriptor. The writer beside it produces none of those, so an archive that
+ * needs them did not come from here, and quietly returning part of it is how a
+ * verifier passes a file it never fully read.
+ */
+export function readZip(archive: Uint8Array): Map<string, Buffer> {
+  const bytes = Buffer.from(archive.buffer, archive.byteOffset, archive.byteLength);
+  const end = findEndOfCentralDirectory(bytes);
+
+  const count = bytes.readUInt16LE(end + 10);
+  let position = bytes.readUInt32LE(end + 16);
+
+  const files = new Map<string, Buffer>();
+
+  for (let index = 0; index < count; index += 1) {
+    if (bytes.readUInt32LE(position) !== 0x02014b50) {
+      throw refuse('The central directory is malformed.', 'bad_central_directory');
+    }
+
+    const flags = bytes.readUInt16LE(position + 8);
+    const method = bytes.readUInt16LE(position + 10);
+    const crc = bytes.readUInt32LE(position + 16);
+    const compressedSize = bytes.readUInt32LE(position + 20);
+    const uncompressedSize = bytes.readUInt32LE(position + 24);
+    const nameLength = bytes.readUInt16LE(position + 28);
+    const extraLength = bytes.readUInt16LE(position + 30);
+    const commentLength = bytes.readUInt16LE(position + 32);
+    const localOffset = bytes.readUInt32LE(position + 42);
+    const path = bytes.subarray(position + 46, position + 46 + nameLength).toString('utf8');
+
+    /* Bit 0 is encryption; bit 3 puts the sizes after the data. */
+    if (flags & 0x0001) throw refuse(`“${path}” is encrypted.`, 'encrypted_entry');
+    if (flags & 0x0008) {
+      throw refuse(`“${path}” was written as a stream.`, 'streamed_entry');
+    }
+    if (compressedSize === 0xffffffff || uncompressedSize === 0xffffffff) {
+      throw refuse(`“${path}” needs ZIP64.`, 'zip64_entry');
+    }
+
+    if (bytes.readUInt32LE(localOffset) !== 0x04034b50) {
+      throw refuse(`The local header for “${path}” is malformed.`, 'bad_local_header');
+    }
+
+    const dataStart =
+      localOffset +
+      30 +
+      bytes.readUInt16LE(localOffset + 26) +
+      bytes.readUInt16LE(localOffset + 28);
+    const stored = bytes.subarray(dataStart, dataStart + compressedSize);
+
+    let content: Buffer;
+    if (method === 0) {
+      content = Buffer.from(stored);
+    } else if (method === 8) {
+      content = inflateRawSync(stored);
+    } else {
+      throw refuse(`“${path}” uses compression method ${method}.`, 'unsupported_compression');
+    }
+
+    if (content.length !== uncompressedSize) {
+      throw refuse(
+        `“${path}” is ${content.length} bytes, not ${uncompressedSize}.`,
+        'size_mismatch',
+      );
+    }
+    if (crc32(content) !== crc) {
+      throw refuse(`“${path}” fails its checksum.`, 'checksum_mismatch');
+    }
+    if (files.has(path)) {
+      throw refuse(`Two files share the path “${path}”.`, 'duplicate_path');
+    }
+
+    files.set(path, content);
+    position += 46 + nameLength + extraLength + commentLength;
+  }
+
+  return files;
+}
+
+/**
+ * The end-of-central-directory record, found by scanning backwards.
+ *
+ * It has no fixed position because it is followed by a variable-length comment,
+ * so the format is read from the end. The scan is bounded by the largest comment
+ * the format allows — without that bound, a file that is not an archive at all
+ * is read backwards to byte zero looking for a signature that is not there.
+ */
+function findEndOfCentralDirectory(bytes: Buffer): number {
+  const earliest = Math.max(0, bytes.length - 22 - 0xffff);
+
+  for (let at = bytes.length - 22; at >= earliest; at -= 1) {
+    if (bytes.readUInt32LE(at) === 0x06054b50) {
+      if (bytes.readUInt16LE(at + 4) !== 0 || bytes.readUInt16LE(at + 6) !== 0) {
+        throw refuse('This archive is split across disks.', 'split_archive');
+      }
+      return at;
+    }
+  }
+
+  throw refuse('This is not a ZIP archive.', 'not_an_archive');
+}
+
+const refuse = (message: string, code: string): ValidationError =>
+  new ValidationError([{ field: 'archive', message, code }], message);
 
 /**
  * The path, made safe to extract.
