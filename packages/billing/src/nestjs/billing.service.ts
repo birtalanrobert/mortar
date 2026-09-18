@@ -6,6 +6,7 @@ import { ConflictError, NotFoundError } from '@birtalanrobert/http';
 import {
   dunningStage,
   isEntitled,
+  nextPeriodEnd,
   type DunningStage,
   type SubscriptionStatus,
 } from '../subscriptions';
@@ -208,6 +209,81 @@ export class BillingService {
     });
 
     return session.url;
+  }
+
+  /**
+   * Puts a business on a plan without sending anybody to a payment page.
+   *
+   * **Every one of these products has an operator who needs this**, and it is
+   * not a way around paying: a chain is sold to rather than checked out, a
+   * pilot runs for three months on somebody's word, and a business migrating
+   * from a competitor is put on the plan it agreed to before a card is ever
+   * entered. Until this existed, a deployment with no provider configured could
+   * never have a subscription row at all — the only path went through a hosted
+   * checkout — so every screen that shows what a business pays had nothing to
+   * show, and the product could not be demonstrated at all before a Stripe
+   * account existed.
+   *
+   * **It refuses to touch a subscription the provider owns.** Once there is an
+   * `externalId`, the provider is charging a card on a schedule, and writing a
+   * different plan code beside it would make our screen and their invoice
+   * disagree — with the customer believing whichever they saw first. Changing a
+   * paid plan is a provider operation; changing *how many* is `setQuantity`,
+   * which tells the provider.
+   *
+   * The caller records who did it and why. This package knows nothing about
+   * operators, and an audit entry written here would be written without one.
+   */
+  async assign(
+    tenantId: string,
+    input: {
+      planCode: string;
+      quantity?: number;
+      /** `trialing` starts the plan's trial from now. Default `active`. */
+      status?: Extract<SubscriptionStatus, 'trialing' | 'active' | 'paused' | 'cancelled'>;
+      /** When the current period ends. Computed from the interval if omitted. */
+      currentPeriodEnd?: Date | null;
+      now?: Date;
+    },
+  ): Promise<Standing> {
+    const plan = await this.plan(input.planCode);
+    if (!plan) throw new NotFoundError('Plan', input.planCode);
+
+    const existing = await this.subscriptionOf(tenantId);
+
+    if (existing?.externalId) {
+      throw new ConflictError(
+        'This subscription is managed by the payment provider; change it there.',
+      );
+    }
+
+    const now = input.now ?? new Date();
+    const status = input.status ?? 'active';
+
+    await this.remember(tenantId, {
+      planCode: input.planCode,
+      status,
+      quantity: Math.max(0, Math.ceil(input.quantity ?? existing?.quantity ?? 0)),
+      /*
+       * A period end even though nobody is charging a card yet.
+       *
+       * It is what "your next charge" is measured to, and a plan assigned with
+       * no date on it produces a screen that cannot say when anything happens.
+       */
+      currentPeriodEnd:
+        input.currentPeriodEnd === undefined
+          ? nextPeriodEnd(now, plan.interval)
+          : input.currentPeriodEnd,
+      trialEndsAt:
+        status === 'trialing' && plan.trialDays > 0
+          ? new Date(now.getTime() + plan.trialDays * 86_400_000)
+          : null,
+      /* Not past due: nobody has been asked for money yet. */
+      pastDueSince: null,
+      cancelAt: null,
+    });
+
+    return this.standingOf(tenantId);
   }
 
   /** The provider's own account screen: cards, invoices, cancellation. */

@@ -26,6 +26,24 @@ cannot recover, over an amount it fully intended to pay. How long that is
 tolerated is `dunningStage`, and `suspend` withholds the service without
 deleting anything.
 
+## Putting a business on a plan without a payment page
+
+```ts
+await billing.assign(tenantId, { planCode: 'chain', quantity: 9 });
+```
+
+A chain is sold to rather than checked out, a pilot runs for three months on
+somebody's word, and a business migrating from a competitor is put on the plan
+it agreed to before a card is ever entered. It is also the only way a deployment
+with no provider configured can have a subscription at all — which is every
+deployment before the Stripe account exists.
+
+It refuses to touch a subscription the provider owns: once a card is being
+charged on a schedule, a plan code written beside it makes our screen and their
+invoice disagree. Changing _how many_ is `setQuantity`, which tells the
+provider. Who assigned it and why is the caller's to record — this package knows
+nothing about operators.
+
 ## Using it in a NestJS application
 
 ```ts

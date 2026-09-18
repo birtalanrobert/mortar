@@ -30,6 +30,7 @@ export {
   canCommit,
   dunningStage,
   isEntitled,
+  nextPeriodEnd,
   proratedFor,
   type DunningStage,
   type SubscriptionStatus,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canCommit, dunningStage, isEntitled, proratedFor } from './subscriptions';
+import { canCommit, dunningStage, isEntitled, nextPeriodEnd, proratedFor } from './subscriptions';
 
 describe('whether the product should work', () => {
   it('keeps working while a payment is merely late', () => {
@@ -56,5 +56,35 @@ describe('a period only partly used', () => {
     expect(proratedFor(14_900, -5, 30)).toBe(0);
     expect(proratedFor(14_900, 45, 30)).toBe(14_900);
     expect(proratedFor(14_900, 5, 0)).toBe(0);
+  });
+});
+
+describe('when the period being paid for ends', () => {
+  it('is a month later, on the same day', () => {
+    expect(nextPeriodEnd(new Date('2026-09-18T09:00:00.000Z'), 'month')).toEqual(
+      new Date('2026-10-18T09:00:00.000Z'),
+    );
+  });
+
+  it('clamps rather than rolling over the end of a short month', () => {
+    /*
+     * A month after the thirty-first of January is the twenty-eighth of
+     * February. Rolling over to the third of March would drift a business
+     * billed on the thirty-first forward through the calendar, and the two
+     * months with the drift in them would be charged twice.
+     */
+    expect(nextPeriodEnd(new Date('2026-01-31T00:00:00.000Z'), 'month')).toEqual(
+      new Date('2026-02-28T00:00:00.000Z'),
+    );
+
+    expect(nextPeriodEnd(new Date('2028-01-31T00:00:00.000Z'), 'month')).toEqual(
+      new Date('2028-02-29T00:00:00.000Z'),
+    );
+  });
+
+  it('is a year later for a yearly plan, leap day included', () => {
+    expect(nextPeriodEnd(new Date('2028-02-29T00:00:00.000Z'), 'year')).toEqual(
+      new Date('2029-02-28T00:00:00.000Z'),
+    );
   });
 });

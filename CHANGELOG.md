@@ -4,6 +4,34 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## billing 3.1.0
+
+### Added
+
+- **`assign`** — puts a business on a plan without sending anybody to a payment
+  page. A chain is sold to rather than checked out, a pilot runs on somebody's
+  word, and a business migrating from a competitor is put on the plan it agreed
+  to before a card is entered.
+
+  It is also what a deployment with **no provider configured** needs to have a
+  subscription at all: every path to a subscription row went through a hosted
+  checkout, so until a Stripe account existed there was nothing for a billing
+  screen to show and no way to demonstrate the product's own commercial
+  behaviour. Project 06's back office is the second consumer of that need; the
+  first was project 05's, worked around at the time.
+
+  It refuses to touch a subscription the provider owns — once a card is being
+  charged on a schedule, a plan code written beside it makes our screen and
+  their invoice disagree, and the customer believes whichever they saw first.
+  Changing _how many_ stays `setQuantity`, which tells the provider.
+
+- **`nextPeriodEnd`** — when the period being paid for ends, for a subscription
+  this deployment keeps itself. The day of the month is clamped rather than
+  rolled over: a month after the thirty-first of January is the twenty-eighth of
+  February, because otherwise a business billed on the thirty-first drifts
+  forward through the calendar and the two months with the drift in them are
+  charged twice.
+
 ## links 1.0.0
 
 New package: **signed, expiring links** — how somebody reaches a page without an
@@ -11,7 +39,7 @@ account.
 
 It was written inside `stamped-enrol`, with a comment saying it was the
 extraction candidate and would move at its second consumer. Phase 4 of project
-06 is the API starting to *mint* them, which is that second consumer — and the
+06 is the API starting to _mint_ them, which is that second consumer — and the
 two halves had to move together, because they must agree exactly on the payload
 encoding and two implementations that agree today will not agree in a year.
 
@@ -30,13 +58,13 @@ middleware, a browser and a Nest service. No dependencies.
 
 - **`onRegistered`**, beside the `onDeregistered` that was already there. A
   registration is the only signal either platform gives that a pass was actually
-  *installed*: issuing one is a file leaving a server, and nothing else
+  _installed_: issuing one is a file leaving a server, and nothing else
   distinguishes the two. A product measuring an enrolment funnel, or holding a
   welcome bonus back until there is a phone to show it on, has this and nothing
   else to go on.
 
   `created` says whether the device already had it, so a retry is not counted as
-  an installation. Whether a *re*-installation counts is left to the product,
+  an installation. Whether a _re_-installation counts is left to the product,
   because that is where the answer is known.
 
 ### Fixed
@@ -60,7 +88,7 @@ middleware, a browser and a Nest service. No dependencies.
   dimensions the derivative comes out at exactly that size.
 
   The pipeline was written for photographs, where asking for a width and letting
-  the height follow is right. An *asset* has no shape of its own to keep: a
+  the height follow is right. An _asset_ has no shape of its own to keep: a
   square avatar, and a wallet pass's icon, which Apple and Google both reject at
   any size but the one they name. There is no way to produce either by naming a
   width.
@@ -72,7 +100,7 @@ middleware, a browser and a Nest service. No dependencies.
   as black, so a JPEG derivative of a padded image should name a background.
 
   `cover` does enlarge, and has to. A frame that is not filled is not a cover,
-  and refusing would hand back a derivative the size of the *upload* rather than
+  and refusing would hand back a derivative the size of the _upload_ rather than
   the size asked for — a 40-pixel strip image where a pass wanted 375 by 123,
   which is a file the device refuses at a counter rather than an error here.
 

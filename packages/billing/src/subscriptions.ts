@@ -1,3 +1,5 @@
+import type { Interval } from './plans';
+
 /**
  * Where a subscription stands, and what the product should do about it.
  *
@@ -61,6 +63,40 @@ export function dunningStage(daysPastDue: number): DunningStage {
   if (daysPastDue < 8) return 'warn';
   if (daysPastDue < 15) return 'restrict';
   return 'suspend';
+}
+
+/**
+ * When the period a plan is being charged for ends.
+ *
+ * Needed for a subscription this deployment keeps itself — one an operator
+ * assigned rather than one a provider created — because a screen that says what
+ * a business pays has to say when, and "your next charge is on a date we cannot
+ * work out" is not a screen.
+ *
+ * **The day of the month is clamped rather than rolled over.** A month after
+ * the thirty-first of January is the twenty-eighth of February, not the third of
+ * March: a business billed on the thirty-first would otherwise drift forward
+ * through the calendar, and the two months with the drift in them would be
+ * charged twice.
+ */
+export function nextPeriodEnd(from: Date, interval: Interval): Date {
+  const year = from.getUTCFullYear() + (interval === 'year' ? 1 : 0);
+  const month = from.getUTCMonth() + (interval === 'month' ? 1 : 0);
+
+  /* Day 0 of the month after is the last day of the month wanted. */
+  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+
+  return new Date(
+    Date.UTC(
+      year,
+      month,
+      Math.min(from.getUTCDate(), lastDay),
+      from.getUTCHours(),
+      from.getUTCMinutes(),
+      from.getUTCSeconds(),
+      from.getUTCMilliseconds(),
+    ),
+  );
 }
 
 /**
