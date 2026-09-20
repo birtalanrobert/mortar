@@ -11,6 +11,7 @@ import {
   envPort,
   envSecret,
   envString,
+  envText,
   envUrl,
   isSecretKey,
   loadConfig,
@@ -103,6 +104,34 @@ describe('envList', () => {
       'b.com',
       'c.com',
     ]);
+  });
+});
+
+describe('envString and envText', () => {
+  it('refuses an empty default rather than building a schema that cannot pass', () => {
+    /*
+     * `z.string().min(1).default('')` substitutes the default and then fails
+     * its own rule — so nothing complained until a deployment left the variable
+     * unset, and then every request 500'd on a configuration that had been
+     * described as optional all along.
+     */
+    expect(() => envString('')).toThrow(/envText/);
+  });
+
+  it('lets envText be empty, which is how a feature is switched off', () => {
+    const schema = z.object({ LIVE_URL: envText() });
+
+    expect(loadConfig({ schema, source: {} }).LIVE_URL).toBe('');
+    expect(loadConfig({ schema, source: { LIVE_URL: 'wss://live.test' } }).LIVE_URL).toBe(
+      'wss://live.test',
+    );
+  });
+
+  it('still requires a non-empty value where one is required', () => {
+    const schema = z.object({ NAME: envString() });
+
+    expect(() => loadConfig({ schema, source: { NAME: '' } })).toThrow(ConfigValidationError);
+    expect(loadConfig({ schema, source: { NAME: 'seatscope' } }).NAME).toBe('seatscope');
   });
 });
 

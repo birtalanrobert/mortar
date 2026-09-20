@@ -255,7 +255,9 @@ describe('rendering an upload', () => {
         .raw()
         .toBuffer({ resolveWithObject: true });
 
-      const at = (x: number, y: number) => [...data.subarray((y * 375 + x) * 4, (y * 375 + x) * 4 + 3)];
+      const at = (x: number, y: number) => [
+        ...data.subarray((y * 375 + x) * 4, (y * 375 + x) * 4 + 3),
+      ];
 
       expect(at(2, 2)).toEqual([255, 255, 255]);
       expect(at(187, 61)[0]).toBeGreaterThan(150);

@@ -4,6 +4,73 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## observability 1.3.0
+
+### Changed
+
+- **The HTTP status decides the log level, not whether something was thrown.**
+  Every refusal reaches the interceptor as an exception — that is how a
+  framework says "no" — and all of them were logged at `error` with a full
+  stack. A ticketing product's busiest, most correct minute then looks exactly
+  like an outage: four hundred `error` lines a second, each carrying a stack,
+  for four hundred buyers being told somebody else got the seat. It floods the
+  alerting rule that is watching for the thing it can now no longer see, and
+  serialising a stack per request is real work on the one event loop that is
+  already the bottleneck under load.
+
+  A 4xx is now `warn`, logged as `request refused` with the three fields worth
+  grouping on — the error's class, its application code and the sentence the
+  caller was given — and without the stack, which describes our frames rather
+  than their mistake. A 5xx is unchanged: ours, and keeps everything.
+
+## config 1.2.0
+
+### Added
+
+- **`envText`** — a string that may be empty, which is how a feature is switched
+  off. `envString` is "this service does not run without it"; this is "an
+  address nobody published means the thing behind it is not there". A live
+  channel, an analytics endpoint, a support address: each has a page that must
+  render perfectly without one.
+
+### Fixed
+
+- **`envString('')` built a schema that could never pass.** The default was
+  substituted and then failed the `min(1)` it had just been given, so a variable
+  documented as optional took the whole surface down the first time it was
+  actually left unset — every page, at boot, with a validation error naming a
+  variable the operator had deliberately omitted. It now throws where the
+  mistake is made, naming `envText`.
+
+## realtime 2.0.1
+
+### Fixed
+
+- **The polling fallback could never deliver a first event.** A client that
+  falls back to HTTP starts with an empty cursor and asks `since: {}`; `resume`
+  reads that as "I am new here" and answers with `latest` and no events, which
+  is deliberate — a newcomer does not want the whole backlog. But the polling
+  loop advanced its cursor only from events it received, so it never left zero:
+  the next poll asked `{}` again, and the one after that, for ever. A page that
+  polls perfectly and is never told a thing.
+
+  It now seeds from `latest`, after applying the events and only for a channel
+  still standing at zero — the same two conditions the socket path has always
+  applied to the `start` frame. Seeding a channel that has just been handed a
+  resume would throw that resume away.
+
+  The socket half was never affected, which is why this survived two releases:
+  the fallback is what a venue with a hostile network gets, and nobody had
+  watched one work.
+
+- **`connecting` was reported for every retry behind a working fallback.** Once
+  polling is running the page is connected — over HTTP — and the socket attempt
+  behind it is background work. Each attempt moved the state back, so a seat map
+  that was updating perfectly said "connecting…" for as long as it was open, and
+  `polling` showed only for the instant between a socket dying and the next try.
+  On a network that eats WebSockets that is every few seconds. The state a
+  product shows is now the state it is in.
+
 ## billing 3.1.0
 
 ### Added

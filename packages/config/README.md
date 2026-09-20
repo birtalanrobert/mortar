@@ -91,3 +91,12 @@ variable nor the service.
 everything in an environment is a string. `envDuration` accepts `30d`, `12h`,
 `500ms` or a plain number of milliseconds — a TTL written as `2592000000` is a
 TTL nobody can check by eye.
+
+**`envString` is required and non-empty; `envText` may be empty.** The
+difference is the difference between "this service does not run without it" and
+"an address nobody published means the thing behind it is not there" — a live
+channel, an analytics endpoint, a support address. `envString('')` is refused
+where it is written rather than at boot: the schema it used to build
+substituted the default and then failed its own `min(1)`, so a variable
+documented as optional took every page down the first time somebody actually
+left it unset.

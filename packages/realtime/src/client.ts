@@ -105,7 +105,18 @@ export class RealtimeClient {
   private open(): void {
     if (this.closed) return;
 
-    this.moveTo('connecting');
+    /*
+     * **Not while polling.** Once the fallback is running the page *is*
+     * connected — over HTTP rather than over a socket — and the retry behind it
+     * is background work. Reporting `connecting` for it left a seat map that
+     * was updating perfectly saying "connecting…" for as long as it was open,
+     * because every retry cycle moved the state back and the polling state only
+     * ever showed for the instant between a socket dying and the next attempt.
+     *
+     * The state a product shows is the state it is in, which is the whole
+     * reason `onState` exists.
+     */
+    if (!this.poller) this.moveTo('connecting');
 
     const make =
       this.options.socketFactory ?? ((url: string) => new WebSocket(url) as unknown as SocketLike);
@@ -282,12 +293,41 @@ export class RealtimeClient {
 
         if (!response.ok) return;
 
-        const body = (await response.json()) as { events?: RealtimeEvent[] };
+        const body = (await response.json()) as {
+          events?: RealtimeEvent[];
+          latest?: Record<string, number>;
+        };
 
         for (const event of body.events ?? []) {
           const verdict = this.cursor.offer(event);
           if (verdict === 'take') this.options.onEvent(event);
           if (verdict === 'gap') this.options.onResync?.(event.channel);
+        }
+
+        /*
+         * Seed a cursor that has never stood anywhere.
+         *
+         * **Without this the fallback can never deliver anything.** A fresh
+         * client sends `since: {}`, `resume` reads that as "I am new here" and
+         * answers with `latest` and no events — which is correct and
+         * deliberate — and the cursor then has nothing to advance from. So the
+         * next poll sends `{}` again, and the one after that, for ever: a page
+         * that polls perfectly and is never told a thing.
+         *
+         * The socket half has always done this, on the `start` frame the
+         * server sends when a subscription is accepted. The polling half was
+         * written to the same shape and missed it, which is exactly the failure
+         * this package's own README warns about — a fallback nobody has seen
+         * work is one that stops working on the day it is needed.
+         *
+         * **After the events, and only where the cursor is still at zero**, for
+         * the same reason the socket path checks: seeding a channel that has
+         * just been given a resume would throw that resume away.
+         */
+        for (const [channel, latest] of Object.entries(body.latest ?? {})) {
+          if (this.cursor.seenAt(channel) === 0 && latest > 0) {
+            this.cursor.start(channel, latest);
+          }
         }
       } catch {
         // The network is gone rather than merely hostile to sockets. Saying so

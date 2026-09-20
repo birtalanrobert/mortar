@@ -124,9 +124,34 @@ export const envEnum = <T extends readonly [string, ...string[]]>(
   defaultValue?: T[number],
 ) => z.enum(values).default(defaultValue as T[number]);
 
-/** A required non-empty string. */
-export const envString = (defaultValue?: string) =>
-  defaultValue === undefined ? z.string().min(1) : z.string().min(1).default(defaultValue);
+/**
+ * A required non-empty string.
+ *
+ * An empty default is refused rather than accepted, because the schema it
+ * built could never validate: the default was substituted and then failed the
+ * `min(1)` it had just been given. Nothing said so until the variable was
+ * actually left unset — which is a deployment, not a test — and then every
+ * request failed validation at boot. `envText` is what an empty default means.
+ */
+export const envString = (defaultValue?: string) => {
+  if (defaultValue === '') {
+    throw new Error(
+      'envString() cannot default to an empty string — it requires a non-empty one. Use envText() for a value that may be empty.',
+    );
+  }
+
+  return defaultValue === undefined ? z.string().min(1) : z.string().min(1).default(defaultValue);
+};
+
+/**
+ * A string that may be empty, which is how a feature is switched off.
+ *
+ * The distinction is worth a second function: `envString` is "this service does
+ * not run without it", and this is "an address nobody published means the thing
+ * behind it is not there". A live channel, an analytics endpoint, a support
+ * address — each has a page that must render perfectly without one.
+ */
+export const envText = (defaultValue = '') => z.string().default(defaultValue);
 
 /**
  * A secret: a required string with a minimum length, because a signing key of

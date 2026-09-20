@@ -201,7 +201,7 @@ describe('LoggingInterceptor', () => {
   it('logs and rethrows a failing handler', async () => {
     const { logger, lines } = capture();
     const interceptor = new LoggingInterceptor(logger, new InMemoryMetrics());
-    const failure = Object.assign(new Error('nope'), { status: 422 });
+    const failure = Object.assign(new Error('the server fell over'), { status: 500 });
 
     await new Promise<void>((resolve) =>
       interceptor
@@ -209,7 +209,47 @@ describe('LoggingInterceptor', () => {
         .subscribe({ error: () => resolve() }),
     );
 
-    expect(lines()[0]).toMatchObject({ level: 'error', statusCode: 422 });
+    expect(lines()[0]).toMatchObject({ level: 'error', statusCode: 500 });
+  });
+
+  /**
+   * A refusal is an outcome, not an outage.
+   *
+   * Every "no" a framework gives reaches the interceptor as a thrown
+   * exception, and logging all of them at `error` with a stack made a
+   * ticketing product's busiest correct minute indistinguishable from a
+   * failure: four hundred error lines with four hundred stacks, for four
+   * hundred buyers told somebody else got the seat.
+   */
+  it('logs a refused request as a refusal, with what was refused and no stack', async () => {
+    const { logger, lines } = capture();
+    const interceptor = new LoggingInterceptor(logger, new InMemoryMetrics());
+    const refused = Object.assign(new Error('One of those seats has just gone.'), {
+      status: 422,
+      code: 'seats_taken',
+      name: 'SeatsTakenError',
+    });
+
+    await new Promise<void>((resolve) =>
+      interceptor
+        .intercept(makeContext(), { handle: () => throwError(() => refused) })
+        .subscribe({ error: () => resolve() }),
+    );
+
+    const line = lines()[0] as Record<string, unknown>;
+
+    expect(line).toMatchObject({
+      level: 'warn',
+      statusCode: 422,
+      refusal: 'SeatsTakenError',
+      code: 'seats_taken',
+      reason: 'One of those seats has just gone.',
+    });
+
+    // The stack describes our frames, not the caller's mistake — and it is the
+    // expensive half of the line.
+    expect(line.err).toBeUndefined();
+    expect(line.stack).toBeUndefined();
   });
 
   it('ignores non-HTTP execution contexts', async () => {

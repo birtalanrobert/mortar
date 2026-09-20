@@ -59,8 +59,25 @@ export class LoggingInterceptor implements NestInterceptor {
         .counter('http_requests_total')
         .increment(1, { method, route, status: String(statusCode) });
 
-      if (error) this.logger.error('request failed', error, fields);
-      else if (statusCode >= 500) this.logger.error('request', fields);
+      /*
+       * **The status decides the level, not whether something was thrown.**
+       *
+       * Every refusal reaches here as an exception — that is how a framework
+       * says "no" — and logging all of them at `error` with a stack made a
+       * ticketing product's busiest, most correct minute look like an outage:
+       * four hundred `error` lines a second, each a full stack, for four
+       * hundred buyers being told somebody else got the seat. It floods an
+       * alerting rule that is watching for exactly the thing it now cannot
+       * see, and serialising a stack per request is real work on the one loop
+       * that is already the bottleneck.
+       *
+       * A 4xx is an outcome the caller asked for and is told about. It is
+       * logged at `warn` with what was refused and why — the type, the code and
+       * the message — and without the stack, which describes our frames rather
+       * than their mistake. A 5xx is ours, and keeps everything.
+       */
+      if (statusCode >= 500) this.logger.error('request failed', error ?? fields, fields);
+      else if (error) this.logger.warn('request refused', { ...fields, ...refusal(error) });
       else if (statusCode >= 400) this.logger.warn('request', fields);
       else this.logger.info('request', fields);
     };
@@ -78,4 +95,22 @@ export class LoggingInterceptor implements NestInterceptor {
       }),
     );
   }
+}
+
+/**
+ * What a refusal was, in three fields and no stack.
+ *
+ * Enough to find it in an aggregator and group it — the class, the application
+ * code where there is one, and the sentence the caller was given.
+ */
+function refusal(error: unknown): Record<string, unknown> {
+  if (!(error instanceof Error)) return { refusal: String(error) };
+
+  const code = (error as { code?: unknown }).code;
+
+  return {
+    refusal: error.name,
+    ...(typeof code === 'string' ? { code } : {}),
+    reason: error.message,
+  };
 }

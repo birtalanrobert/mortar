@@ -11,6 +11,7 @@ export {
   envPort,
   envSecret,
   envString,
+  envText,
   envUrl,
   z,
 } from './schema';

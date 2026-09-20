@@ -288,4 +288,210 @@ describe('the polling fallback', () => {
 
     one.stop();
   });
+
+  /**
+   * And goes on saying so while it retries the socket behind it.
+   *
+   * The retry is background work: the page is connected, over HTTP. Moving the
+   * state back to `connecting` for each attempt left a seat map that was
+   * updating perfectly reporting "connecting…" for as long as it was open —
+   * `polling` showed only for the instant between a socket dying and the next
+   * attempt, which on a network that eats WebSockets is every few seconds.
+   */
+  it('does not report connecting again for a retry behind a working fallback', async () => {
+    const states: string[] = [];
+
+    const one = new RealtimeClient({
+      url: 'wss://example.test/realtime',
+      pollUrl: 'https://example.test/poll',
+      channels: ['station:grill'],
+      pollMs: 1_000,
+      onEvent: () => {},
+      onState: (state) => states.push(state),
+      socketFactory: () => {
+        throw new Error('blocked');
+      },
+      fetch: (async () => ({
+        ok: true,
+        json: async () => ({ events: [] }),
+      })) as unknown as typeof fetch,
+    });
+
+    one.start();
+    await vi.advanceTimersByTimeAsync(0);
+    /* Past the first backoff and the second, so two retries have been made. */
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(states).toEqual(['connecting', 'polling']);
+    expect(one.connection).toBe('polling');
+
+    one.stop();
+  });
+});
+
+/**
+ * The gap that made the fallback useless.
+ *
+ * A fresh client sends `since: {}`; `resume` reads that as "I am new here" and
+ * answers with `latest` and no events, which is correct and deliberate. The
+ * cursor then had nothing to advance from — so the next poll sent `{}` again,
+ * and the one after that, for ever. A page that polled perfectly and was never
+ * told a thing.
+ *
+ * The socket half had always seeded from the `start` frame. The polling half
+ * was written to the same shape and missed it, which is exactly what this
+ * package's README warns about: a fallback nobody has seen work is one that
+ * stops working on the day it is needed.
+ */
+describe('a polling client with no cursor', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('seeds itself from the latest it is told, and receives the next event', async () => {
+    const asked: string[] = [];
+    const received: RealtimeEvent[] = [];
+
+    const one = new RealtimeClient({
+      url: 'wss://example.test/realtime',
+      pollUrl: 'https://example.test/poll',
+      channels: ['station:grill'],
+      onEvent: (received_) => received.push(received_),
+      pollMs: 1_000,
+      socketFactory: () => {
+        throw new Error('blocked');
+      },
+      fetch: (async (url: string) => {
+        asked.push(String(url));
+
+        /* The first answer is what a quiet channel gives a newcomer: where it
+           stands, and nothing to apply. */
+        if (asked.length === 1) {
+          return { ok: true, json: async () => ({ events: [], latest: { 'station:grill': 7 } }) };
+        }
+
+        return {
+          ok: true,
+          json: async () => ({
+            events: [event('station:grill', 8)],
+            latest: { 'station:grill': 8 },
+          }),
+        };
+      }) as unknown as typeof fetch,
+    });
+
+    one.start();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(asked[0], 'the first ask has no cursor, as it should not').toContain(
+      encodeURIComponent('{}'),
+    );
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    /* The second ask stands where the first answer said it did — which is the
+       whole fix. */
+    expect(asked[1]).toContain(encodeURIComponent('{"station:grill":7}'));
+    expect(received.map((one_) => one_.seq)).toEqual([8]);
+
+    one.stop();
+  });
+
+  /**
+   * And a channel that has never carried anything is not the exception.
+   *
+   * `latest: 0` is a channel with no history, so there is nothing to seed
+   * *from* — and nothing is the right cursor: the first event to arrive is
+   * offered against a channel this client has no position in, which the cursor
+   * takes. Seeding zero explicitly would be the same answer by a longer route;
+   * what matters is that the frame is delivered rather than swallowed as a
+   * cursor advance, which is what a naive fix would have done.
+   */
+  it('delivers the first frame on a channel that has never carried anything', async () => {
+    const asked: string[] = [];
+    const received: RealtimeEvent[] = [];
+
+    const one = new RealtimeClient({
+      url: 'wss://example.test/realtime',
+      pollUrl: 'https://example.test/poll',
+      channels: ['station:grill'],
+      onEvent: (received_) => received.push(received_),
+      pollMs: 1_000,
+      socketFactory: () => {
+        throw new Error('blocked');
+      },
+      fetch: (async (url: string) => {
+        asked.push(String(url));
+
+        if (asked.length === 1) {
+          return { ok: true, json: async () => ({ events: [], latest: { 'station:grill': 0 } }) };
+        }
+
+        return {
+          ok: true,
+          json: async () => ({
+            events: [event('station:grill', 1)],
+            latest: { 'station:grill': 1 },
+          }),
+        };
+      }) as unknown as typeof fetch,
+    });
+
+    one.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(received.map((one_) => one_.seq)).toEqual([1]);
+
+    one.stop();
+  });
+
+  /**
+   * And never over the top of a resume it has just been given.
+   *
+   * A client that asked for everything after 412 and was answered must keep
+   * what it was answered; seeding from `latest` there would throw the replay
+   * away and leave a hole nothing fills.
+   */
+  it('does not reseed a cursor that already stands somewhere', async () => {
+    const asked: string[] = [];
+    const received: RealtimeEvent[] = [];
+
+    const one = new RealtimeClient({
+      url: 'wss://example.test/realtime',
+      pollUrl: 'https://example.test/poll',
+      channels: ['station:grill'],
+      onEvent: (received_) => received.push(received_),
+      pollMs: 1_000,
+      socketFactory: () => {
+        throw new Error('blocked');
+      },
+      fetch: (async (url: string) => {
+        asked.push(String(url));
+
+        return {
+          ok: true,
+          json: async () => ({
+            events: [event('station:grill', asked.length)],
+            /* A server that is far ahead of what it just sent — which is what
+               a busy channel looks like between two pages of a replay. */
+            latest: { 'station:grill': 900 },
+          }),
+        };
+      }) as unknown as typeof fetch,
+    });
+
+    one.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(asked[1]).toContain(encodeURIComponent('{"station:grill":1}'));
+    expect(received.map((one_) => one_.seq)).toEqual([1, 2]);
+
+    one.stop();
+  });
 });

@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/realtime",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Channels with sequence numbers, gap detection, resume and a tested polling fallback",
   "license": "AGPL-3.0-only",
   "repository": {
