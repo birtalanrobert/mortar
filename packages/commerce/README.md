@@ -88,6 +88,12 @@ booking console's first load.
 - **The record outlives the provider.** Amounts, dates, what it was for and who
   decided are stored in full rather than as identifiers to fetch, because a
   business must be able to produce its own takings after the account is closed.
+- **A webhook carries the provider's delivery id, and deduplicating is the
+  caller's job.** `settle` is safe to run twice — it assigns a state rather than
+  performing an act — but what a product does _around_ it usually is not: a
+  buyer can be sent two tickets. `ProviderEvent.id` is the identifier to keep,
+  and not `externalId`, which names the payment and repeats across the several
+  events one payment produces.
 - **There is no foreign key to whatever was paid for.** One product takes a
   deposit against an appointment, another against a seat, a third against a
   table's tab; a key to any one of them is what would stop this being shared.

@@ -364,19 +364,57 @@ describe('reading Stripe’s answers', () => {
       });
     });
 
-    it('reads a refund against the payment it belongs to', () => {
+    it('reads a refund against the payment it belongs to, and whose it is', () => {
       const connect = withSecret(
         vi.fn().mockReturnValue({
           type: 'charge.refunded',
-          data: { object: { id: 'ch_1', payment_intent: 'pi_1' } },
+          id: 'evt_refund',
+          data: {
+            object: {
+              id: 'ch_1',
+              payment_intent: 'pi_1',
+              metadata: { tenant: 'tenant-1', subject: 'order:4' },
+            },
+          },
         }),
       );
 
-      // Named by the intent, because that is what our own row records.
+      /*
+       * The tenant matters here as much as anywhere, and it was missing.
+       *
+       * `settle` ignores an event that cannot say whose it is, so a refund made
+       * in Stripe's own dashboard — which is how a business refunds somebody —
+       * changed nothing: the customer had their money back and our books still
+       * said captured.
+       */
       expect(connect.verify('{}', 'v1=ok')).toMatchObject({
         externalId: 'pi_1',
         state: 'refunded',
+        tenantId: 'tenant-1',
       });
+    });
+
+    /**
+     * Every event carries the provider's own delivery id.
+     *
+     * Stripe retries for hours on any response it does not like, including the
+     * ones it never received because the process was restarting. Without an
+     * identifier for the *delivery*, a caller cannot tell a retry from a new
+     * event — and `externalId` will not do, because one payment produces
+     * several events and deduplicating on it would drop the later ones.
+     */
+    it('names the delivery, not only what it is about', () => {
+      const kinds = [
+        { type: 'payment_intent.succeeded', data: { object: { id: 'pi_1', status: 'succeeded' } } },
+        { type: 'charge.refunded', data: { object: { id: 'ch_1', payment_intent: 'pi_1' } } },
+        { type: 'account.updated', data: { object: { id: 'acct_1' } } },
+        { type: 'invoice.paid', data: { object: {} } },
+      ];
+
+      for (const [index, event] of kinds.entries()) {
+        const connect = withSecret(vi.fn().mockReturnValue({ ...event, id: `evt_${index}` }));
+        expect(connect.verify('{}', 'v1=ok')?.id, event.type).toBe(`evt_${index}`);
+      }
     });
 
     it('reads the tenant back out of a payment event', () => {

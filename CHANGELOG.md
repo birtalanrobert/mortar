@@ -4,6 +4,31 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## commerce 4.3.0
+
+### Added
+
+- **`ProviderEvent.id`** — the provider's own identifier for a webhook
+  delivery, so a repeat can be recognised as one. Every provider retries for
+  hours on any response it does not like, including the ones it never received
+  because the process was restarting; without an id for the _delivery_ a caller
+  either does the work twice or has to make every handler idempotent by hand.
+  The second is only possible where the work is an assignment rather than an
+  act: marking a payment captured twice is harmless, sending a buyer two tickets
+  is not. `externalId` cannot stand in — one payment produces several events,
+  and deduplicating on it would drop the later ones.
+
+### Fixed
+
+- **A refund made in Stripe's own dashboard changed nothing.** `charge.refunded`
+  carried no tenant, and `settle` ignores an event that cannot say whose it is —
+  deliberately, because every table it would read is under row-level security
+  and an unbound lookup returns nothing at all. So the customer had their money
+  back and the books still said captured, which is the direction of error a
+  business finds out about from its accountant. The charge's metadata carries
+  the tenant (Stripe copies a payment intent's onto the charge it creates), and
+  it is read now.
+
 ## observability 1.3.0
 
 ### Changed

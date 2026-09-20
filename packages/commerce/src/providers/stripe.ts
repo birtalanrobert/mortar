@@ -323,6 +323,7 @@ function interpretEvent(event: Stripe.Event): ProviderEvent {
       const result = interpretIntent(intent);
 
       return {
+        id: event.id,
         ...(intent.metadata?.tenant ? { tenantId: intent.metadata.tenant } : {}),
         kind: 'payment',
         externalId: intent.id,
@@ -339,8 +340,22 @@ function interpretEvent(event: Stripe.Event): ProviderEvent {
 
     case 'charge.refunded': {
       const charge = event.data.object as Stripe.Charge;
+
+      /*
+       * The tenant, from the charge's own metadata.
+       *
+       * Stripe copies a payment intent's metadata onto the charge it creates,
+       * which is where this comes from — and without it the event was dropped
+       * on the floor: `settle` ignores an event that cannot say whose it is,
+       * so **a refund made in the provider's own dashboard changed nothing
+       * here**. The customer had their money back and the books still said
+       * captured, which is the direction of error a business finds out about
+       * from its accountant.
+       */
       return {
+        id: event.id,
         kind: 'payment',
+        ...(charge.metadata?.tenant ? { tenantId: charge.metadata.tenant } : {}),
         externalId: typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.id,
         state: 'refunded',
       };
@@ -350,6 +365,7 @@ function interpretEvent(event: Stripe.Event): ProviderEvent {
       const account = event.data.object as Stripe.Account;
 
       return {
+        id: event.id,
         kind: 'account',
         externalId: account.id,
         ...(account.metadata?.tenant ? { tenantId: account.metadata.tenant } : {}),
@@ -365,7 +381,7 @@ function interpretEvent(event: Stripe.Event): ProviderEvent {
        * will drift; treating an unknown one as an error means retries and an
        * alert for something that was never any of our business.
        */
-      return { kind: 'other', externalId: event.id };
+      return { id: event.id, kind: 'other', externalId: event.id };
   }
 }
 

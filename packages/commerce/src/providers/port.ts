@@ -141,6 +141,21 @@ export interface RefundRequest {
 
 /** What a provider's webhook turned out to be about. */
 export interface ProviderEvent {
+  /**
+   * The provider's own identifier for this delivery, so a repeat can be
+   * recognised as one.
+   *
+   * **Every provider retries**, for hours, on any response it does not like —
+   * including the ones it did not receive because the process was restarting.
+   * A caller that cannot tell a retry from a new event either does the work
+   * twice or has to make every handler idempotent by hand, and the second is
+   * only possible where the work is an assignment rather than an act: marking
+   * a payment captured twice is harmless, sending the buyer two tickets is not.
+   *
+   * Not the payment's identifier: one payment produces several events, and
+   * deduplicating on `externalId` would drop the second one.
+   */
+  readonly id: string;
   readonly kind: 'payment' | 'account' | 'other';
   readonly externalId: string;
   /**
