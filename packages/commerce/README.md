@@ -94,6 +94,11 @@ booking console's first load.
   buyer can be sent two tickets. `ProviderEvent.id` is the identifier to keep,
   and not `externalId`, which names the payment and repeats across the several
   events one payment produces.
+- **A dispute is reported and not recorded.** `settle` understands the event and
+  returns nothing: the money has already moved, and what a dispute needs is
+  evidence assembled from what was bought — the product's rows, not the
+  payment's. The deadline arrives with the first event, because missing it loses
+  the money whatever the evidence would have said.
 - **There is no foreign key to whatever was paid for.** One product takes a
   deposit against an appointment, another against a seat, a third against a
   table's tab; a key to any one of them is what would stop this being shared.

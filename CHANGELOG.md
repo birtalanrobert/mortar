@@ -4,6 +4,28 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## commerce 4.4.0
+
+### Added
+
+- **Disputes.** `ProviderEvent` gains a `dispute` kind carrying the dispute's
+  own id, the bank's reason, a status reduced to the four that change what to do
+  — open, under review, won, lost — and **the deadline evidence has to beat**,
+  which is the field that actually matters: missing it loses the money whatever
+  the evidence would have said. Stripe's seven statuses collapse into those
+  four, and an unfamiliar one reads as `lost`, because the safe default is the
+  one that makes a product act rather than file the money as recovered.
+
+  `settle` deliberately does not record it: the money has already moved and
+  there is nothing on a payment row to update. What a dispute needs is evidence
+  assembled from what was _bought_, which lives in the product rather than here.
+
+- **`fingerprint`** on a charge result and on a payment event — the provider's
+  own handle on "this is the same card as that one", neither a number nor
+  reversible. It is the only thing a product can count _per card_ with, and a
+  cap per card is the anti-scalping control that gets asked for first: an
+  address and an email cost nothing to invent, and a card does not.
+
 ## commerce 4.3.0
 
 ### Added

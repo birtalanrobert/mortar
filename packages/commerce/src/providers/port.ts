@@ -99,6 +99,17 @@ export interface ChargeResult {
    */
   readonly clientSecret?: string;
   readonly instrument?: string;
+  /**
+   * The card itself, as the provider recognises it across payments.
+   *
+   * Not a number and not reversible — the provider's own handle on "this is the
+   * same card as that one". It is the only thing a product can count *per card*
+   * with: an address and an email cost nothing to invent, and a card does not,
+   * which is why a cap per card is the anti-scalping control venues ask for
+   * first. Absent where the provider does not offer one, and a product that
+   * cannot see one must fall back to something it can.
+   */
+  readonly fingerprint?: string;
   readonly detail?: string;
 }
 
@@ -139,6 +150,30 @@ export interface RefundRequest {
   readonly reference: string;
 }
 
+/**
+ * A customer's bank taking the money back, and what is left to do about it.
+ *
+ * **Not a refund.** A refund is the business deciding; this is the customer's
+ * bank deciding, usually months later, and the money is gone the moment it
+ * starts. What a product can do is produce evidence before the deadline — and
+ * the deadline is the field that matters most, because missing it loses the
+ * money whatever the evidence would have said.
+ */
+export interface Dispute {
+  readonly externalId: string;
+  /** What the bank says it is about, in its own vocabulary. */
+  readonly reason: string;
+  /**
+   * `open` needs evidence, `under_review` has it and is waiting, `won` and
+   * `lost` are final. A provider's own vocabulary is wider and less useful.
+   */
+  readonly status: 'open' | 'under_review' | 'won' | 'lost';
+  readonly amount: number;
+  readonly currency: string;
+  /** When evidence stops being accepted. Missing it is losing. */
+  readonly dueBy?: Date;
+}
+
 /** What a provider's webhook turned out to be about. */
 export interface ProviderEvent {
   /**
@@ -156,7 +191,7 @@ export interface ProviderEvent {
    * deduplicating on `externalId` would drop the second one.
    */
   readonly id: string;
-  readonly kind: 'payment' | 'account' | 'other';
+  readonly kind: 'payment' | 'account' | 'dispute' | 'other';
   readonly externalId: string;
   /**
    * Whose it is, read back from the metadata we set on the way out.
@@ -168,7 +203,11 @@ export interface ProviderEvent {
   readonly tenantId?: string;
   readonly state?: 'authorized' | 'captured' | 'failed' | 'refunded';
   readonly accountStatus?: ProviderAccount;
+  /** Set when `kind` is `dispute`, and the reason that kind exists. */
+  readonly dispute?: Dispute;
   readonly instrument?: string;
+  /** The card, where the event carries one. See `ChargeResult.fingerprint`. */
+  readonly fingerprint?: string;
   readonly detail?: string;
 }
 

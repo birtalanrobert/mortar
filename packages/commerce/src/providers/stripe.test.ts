@@ -349,6 +349,39 @@ describe('reading Stripe’s answers', () => {
       expect(connect.verify('{}', 'v1=nonsense')).toBeUndefined();
     });
 
+    /**
+     * The card itself, so a product can count per card.
+     *
+     * An address and an email cost nothing to invent; a card does not, which is
+     * why a cap per card is the anti-scalping control venues ask for first. The
+     * fingerprint is the provider's own handle on "the same card as that one",
+     * and it is neither a number nor reversible.
+     */
+    it('carries the card’s fingerprint through a payment event', () => {
+      const connect = withSecret(
+        vi.fn().mockReturnValue({
+          type: 'payment_intent.succeeded',
+          id: 'evt_card',
+          data: {
+            object: {
+              id: 'pi_card',
+              status: 'succeeded',
+              latest_charge: {
+                payment_method_details: {
+                  card: { brand: 'visa', last4: '4242', fingerprint: 'fp_abc' },
+                },
+              },
+            },
+          },
+        }),
+      );
+
+      expect(connect.verify('{}', 'v1=ok')).toMatchObject({
+        instrument: 'visa ending 4242',
+        fingerprint: 'fp_abc',
+      });
+    });
+
     it('reads a completed payment', () => {
       const connect = withSecret(
         vi.fn().mockReturnValue({
@@ -442,6 +475,67 @@ describe('reading Stripe’s answers', () => {
         externalId: 'pi_9',
         tenantId: 'tenant-1',
       });
+    });
+
+    /**
+     * A customer's bank taking the money back.
+     *
+     * Not a refund: a refund is the business deciding, and this is somebody
+     * else deciding months later. The **deadline** is the field that matters —
+     * missing it loses the money whatever the evidence would have said — so it
+     * arrives with the first event rather than being looked up later.
+     */
+    it('reads a dispute, with the deadline evidence has to beat', () => {
+      const connect = withSecret(
+        vi.fn().mockReturnValue({
+          type: 'charge.dispute.created',
+          id: 'evt_dispute',
+          data: {
+            object: {
+              id: 'dp_1',
+              payment_intent: 'pi_7',
+              reason: 'fraudulent',
+              status: 'needs_response',
+              amount: 9625,
+              currency: 'ron',
+              metadata: { tenant: 'tenant-1' },
+              evidence_details: { due_by: 1_800_000_000 },
+            },
+          },
+        }),
+      );
+
+      expect(connect.verify('{}', 'v1=ok')).toMatchObject({
+        kind: 'dispute',
+        /* Named by the payment, because that is what our own row records. */
+        externalId: 'pi_7',
+        tenantId: 'tenant-1',
+        dispute: {
+          externalId: 'dp_1',
+          reason: 'fraudulent',
+          status: 'open',
+          amount: 9625,
+          currency: 'RON',
+          dueBy: new Date(1_800_000_000 * 1000),
+        },
+      });
+    });
+
+    it('treats a dispute status it does not know as lost', () => {
+      /*
+       * The safe default for an unknown state is the one that makes a product
+       * act. Filing an unfamiliar status as won would record money as recovered
+       * when it is gone.
+       */
+      const connect = withSecret(
+        vi.fn().mockReturnValue({
+          type: 'charge.dispute.closed',
+          id: 'evt_x',
+          data: { object: { id: 'dp_2', status: 'something_new', amount: 100, currency: 'ron' } },
+        }),
+      );
+
+      expect(connect.verify('{}', 'v1=ok')?.dispute?.status).toBe('lost');
     });
 
     it('acknowledges an event it has no opinion about', () => {

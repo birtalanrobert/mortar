@@ -569,6 +569,14 @@ export class CommerceService {
       return (await this.payoutAccount(tenantId)) ?? undefined;
     }
 
+    /*
+     * A dispute is not this package's to record.
+     *
+     * The money has already moved and there is nothing here to update: what a
+     * dispute needs is evidence assembled from whatever was *bought*, which is
+     * the product's own rows rather than the payment's. Returning nothing lets
+     * the caller see it was understood and ignored, rather than swallowed.
+     */
     if (event.kind !== 'payment' || !event.state) return undefined;
 
     // Inside the tenant's own policy, which is the only way this table can be

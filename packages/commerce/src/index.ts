@@ -42,6 +42,7 @@ export { NoPayments } from './providers/none';
 export type {
   ChargeRequest,
   ChargeResult,
+  Dispute,
   OnboardingLink,
   PaymentProvider,
   ProviderAccount,

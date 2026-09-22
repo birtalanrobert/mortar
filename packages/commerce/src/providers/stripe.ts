@@ -2,6 +2,7 @@ import Stripe from 'stripe';
 import type {
   ChargeRequest,
   ChargeResult,
+  Dispute,
   OnboardingLink,
   PaymentProvider,
   ProviderAccount,
@@ -263,6 +264,36 @@ export class StripeConnect implements PaymentProvider {
   }
 }
 
+/**
+ * Stripe's dispute statuses, reduced to the four that change what to do.
+ *
+ * Stripe has seven, and the differences between several of them are internal to
+ * its own workflow: what a product does about `warning_needs_response` and
+ * `needs_response` is the same thing — produce evidence before the deadline.
+ */
+function interpretDisputeStatus(status: Stripe.Dispute.Status): Dispute['status'] {
+  switch (status) {
+    case 'warning_needs_response':
+    case 'needs_response':
+      return 'open';
+    case 'warning_under_review':
+    case 'under_review':
+      return 'under_review';
+    case 'won':
+    case 'warning_closed':
+      return 'won';
+    default:
+      /*
+       * `lost` and anything Stripe adds later.
+       *
+       * The safe default for an unknown dispute status is the one that makes a
+       * product act: treating an unfamiliar state as won would file the money
+       * as recovered when it is gone.
+       */
+      return 'lost';
+  }
+}
+
 /** Stripe's account shape, reduced to the question anybody actually asks. */
 function interpretAccount(account: Stripe.Account): ProviderAccount {
   const requirements = [
@@ -297,10 +328,9 @@ function interpretIntent(intent: Stripe.PaymentIntent): ChargeResult {
           : 'pending';
 
   const charge = intent.latest_charge;
-  const card =
-    typeof charge === 'object' && charge?.payment_method_details?.card
-      ? `${charge.payment_method_details.card.brand} ending ${charge.payment_method_details.card.last4}`
-      : undefined;
+  const details = typeof charge === 'object' ? charge?.payment_method_details?.card : undefined;
+
+  const card = details ? `${details.brand} ending ${details.last4}` : undefined;
 
   return {
     externalId: intent.id,
@@ -310,6 +340,9 @@ function interpretIntent(intent: Stripe.PaymentIntent): ChargeResult {
       ? { redirectUrl: intent.next_action.redirect_to_url.url }
       : {}),
     ...(card ? { instrument: card } : {}),
+    /* The provider's own handle on "this is the same card as that one" — not a
+       number and not reversible. It is what a cap per card can be counted on. */
+    ...(details?.fingerprint ? { fingerprint: details.fingerprint } : {}),
     ...(intent.last_payment_error?.message ? { detail: intent.last_payment_error.message } : {}),
   };
 }
@@ -334,6 +367,7 @@ function interpretEvent(event: Stripe.Event): ProviderEvent {
               ? 'captured'
               : 'authorized',
         ...(result.instrument ? { instrument: result.instrument } : {}),
+        ...(result.fingerprint ? { fingerprint: result.fingerprint } : {}),
         ...(result.detail ? { detail: result.detail } : {}),
       };
     }
@@ -358,6 +392,44 @@ function interpretEvent(event: Stripe.Event): ProviderEvent {
         ...(charge.metadata?.tenant ? { tenantId: charge.metadata.tenant } : {}),
         externalId: typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.id,
         state: 'refunded',
+      };
+    }
+
+    /*
+     * A customer's bank taking the money back.
+     *
+     * All three of created, updated and closed, because the *deadline* is what
+     * a product has to act on and it arrives with the first — and the outcome
+     * arrives with the last, months later, often after everybody has forgotten.
+     */
+    case 'charge.dispute.created':
+    case 'charge.dispute.updated':
+    case 'charge.dispute.closed': {
+      const dispute = event.data.object as Stripe.Dispute;
+      const charge = dispute.charge;
+
+      return {
+        id: event.id,
+        kind: 'dispute',
+        /* Named by the payment it is about, which is what our own row records
+           — a dispute's own id is carried inside it. */
+        externalId:
+          typeof dispute.payment_intent === 'string'
+            ? dispute.payment_intent
+            : typeof charge === 'string'
+              ? charge
+              : dispute.id,
+        ...(dispute.metadata?.tenant ? { tenantId: dispute.metadata.tenant } : {}),
+        dispute: {
+          externalId: dispute.id,
+          reason: dispute.reason,
+          status: interpretDisputeStatus(dispute.status),
+          amount: dispute.amount,
+          currency: dispute.currency.toUpperCase(),
+          ...(dispute.evidence_details?.due_by
+            ? { dueBy: new Date(dispute.evidence_details.due_by * 1000) }
+            : {}),
+        },
       };
     }
 
