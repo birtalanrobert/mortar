@@ -1,4 +1,3 @@
-import sharp from 'sharp';
 import { ValidationError } from '@birtalanrobert/http';
 
 export interface DrawingOptions {
@@ -29,6 +28,13 @@ export interface DrawingOptions {
  * Rendered at the size it will be printed at rather than at some larger size
  * and scaled: a seat map is small circles, and a rasteriser given the final
  * dimensions places them on pixel boundaries instead of blurring each one.
+ *
+ * **`sharp` is loaded when this is called, not when the module is imported.**
+ * It is an optional peer dependency, and the rest of this subpath — the QR
+ * codes, the printable cards — has never needed it: a product printing table
+ * tents should not have to install a native image pipeline because a barrel
+ * mentions one. A static import here made it required for everybody, which is
+ * the defect this shape exists to avoid.
  */
 export async function renderDrawing(svg: string, options: DrawingOptions): Promise<Buffer> {
   const width = Math.round(options.width);
@@ -50,6 +56,8 @@ export async function renderDrawing(svg: string, options: DrawingOptions): Promi
     );
   }
 
+  const sharp = await pipeline();
+
   return (
     sharp(Buffer.from(svg), {
       /* A generated drawing is small. The ceiling is here so a bug that computes
@@ -69,4 +77,21 @@ export async function renderDrawing(svg: string, options: DrawingOptions): Promi
       .png({ compressionLevel: 9 })
       .toBuffer()
   );
+}
+
+/**
+ * The image pipeline, or a refusal that names what is missing.
+ *
+ * The message matters: a bare `Cannot find module 'sharp'` thrown from inside a
+ * dependency is a stack trace nobody traces back to an optional peer they were
+ * never told they needed.
+ */
+async function pipeline(): Promise<typeof import('sharp')> {
+  try {
+    return (await import('sharp')).default;
+  } catch {
+    throw new Error(
+      "Drawing a plan needs the optional peer dependency 'sharp'. Add it to this service.",
+    );
+  }
 }
