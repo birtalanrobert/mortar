@@ -39,6 +39,20 @@ export interface PrintableCard {
   readonly lines?: readonly string[];
   /** Small, at the foot: the business's name, or a code to type instead. */
   readonly footnote?: string;
+  /**
+   * A small picture of where this one is, as PNG or JPEG bytes.
+   *
+   * Per card rather than per document, which is the whole reason it is here and
+   * not beside `logo`: a sheet of four tickets is four different seats, and one
+   * drawing shared between them would be a map that is right about a quarter of
+   * the sheet. `renderDrawing` turns a generated SVG into what this wants.
+   *
+   * Optional and small on purpose. It sits between the heading and the code,
+   * takes a fixed band of the card and is the first thing to give up its space
+   * when the card is short — because a ticket without a map still admits
+   * somebody and a ticket without a code does not.
+   */
+  readonly plan?: Buffer;
 }
 
 /**
@@ -93,6 +107,12 @@ interface Furniture {
   readonly level: ErrorCorrection;
 }
 
+/** A card with its own plan already embedded, so the layout stays synchronous. */
+interface Prepared {
+  readonly card: PrintableCard;
+  readonly plan: PDFImage | null;
+}
+
 /**
  * Print-ready cards with a code on each.
  *
@@ -142,12 +162,26 @@ export async function printableCards(
      */
     font: await pdf.embedFont(own(options.font)),
     bold: await pdf.embedFont(own(options.boldFont ?? options.font)),
-    logo: options.logo ? await embedLogo(pdf, options.logo) : null,
+    logo: options.logo ? await embedImage(pdf, options.logo, 'logo') : null,
     brand: colourOf(options.brandColour),
     level: options.errorCorrection ?? 'M',
   };
 
-  for (const group of chunk(cards, format === 'a5' ? 2 : 1)) {
+  /*
+   * The plans, embedded once each before anything is drawn.
+   *
+   * Sequential rather than concurrent because embedding parses the bytes and a
+   * sheet is a handful of cards; and up front because drawing is synchronous —
+   * making the layout async to fetch an image would thread a promise through
+   * every panel for no benefit.
+   */
+  const prepared: Prepared[] = [];
+
+  for (const card of cards) {
+    prepared.push({ card, plan: card.plan ? await embedImage(pdf, card.plan, 'plan') : null });
+  }
+
+  for (const group of chunk(prepared, format === 'a5' ? 2 : 1)) {
     const page = pdf.addPage([A4.width, A4.height]);
 
     if (format === 'tent') drawTent(page, group[0]!, furniture);
@@ -165,7 +199,7 @@ export async function printableCards(
  * both read upright. Printed the obvious way, one of them is upside down, and
  * the venue discovers that after printing twenty of them.
  */
-function drawTent(page: PDFPage, card: PrintableCard, furniture: Furniture): void {
+function drawTent(page: PDFPage, card: Prepared, furniture: Furniture): void {
   const half = A4.height / 2;
 
   drawCard(page, card, { x: 0, y: 0, width: A4.width, height: half }, furniture);
@@ -199,7 +233,7 @@ function drawTent(page: PDFPage, card: PrintableCard, furniture: Furniture): voi
 /** One or two cards to a sheet, with a solid line where the guillotine goes. */
 function drawCut(
   page: PDFPage,
-  cards: readonly PrintableCard[],
+  cards: readonly Prepared[],
   furniture: Furniture,
   format: CardFormat,
 ): void {
@@ -232,7 +266,8 @@ function drawCut(
  * heading that overlaps the quiet zone the first time a table is called
  * "Terasa 12" instead of "12".
  */
-function drawCard(page: PDFPage, card: PrintableCard, panel: Panel, furniture: Furniture): void {
+function drawCard(page: PDFPage, prepared: Prepared, panel: Panel, furniture: Furniture): void {
+  const card = prepared.card;
   const padding = Math.min(panel.width, panel.height) * 0.08;
   const inner = panel.width - padding * 2;
 
@@ -265,6 +300,30 @@ function drawCard(page: PDFPage, card: PrintableCard, panel: Panel, furniture: F
     });
 
     top -= size + padding * 0.6;
+  }
+
+  /*
+   * The plan, between the heading and the code.
+   *
+   * A fixed band rather than a share of what is left, because a picture that
+   * shrinks with the text is a picture nobody can read on half the sheets — and
+   * it is claimed *after* the heading so a long seat name pushes the map down
+   * rather than covering it.
+   */
+  if (prepared.plan) {
+    const band = panel.height * 0.16;
+    const ratio = prepared.plan.width / prepared.plan.height;
+    const height = Math.min(band, inner / ratio);
+    const width = height * ratio;
+
+    page.drawImage(prepared.plan, {
+      x: panel.x + (panel.width - width) / 2,
+      y: top - height,
+      width,
+      height,
+    });
+
+    top -= height + padding * 0.5;
   }
 
   if (card.footnote) {
@@ -361,7 +420,7 @@ function fit(text: string, font: PDFFont, width: number, ceiling: number): numbe
   return Math.max(4, (ceiling * width) / measured);
 }
 
-async function embedLogo(pdf: PDFDocument, bytes: Buffer): Promise<PDFImage> {
+async function embedImage(pdf: PDFDocument, bytes: Buffer, field: string): Promise<PDFImage> {
   const detected = detectType(bytes);
 
   if (detected?.contentType === 'image/png') return pdf.embedPng(own(bytes));
@@ -369,9 +428,9 @@ async function embedLogo(pdf: PDFDocument, bytes: Buffer): Promise<PDFImage> {
 
   throw new ValidationError([
     {
-      field: 'logo',
-      message: 'A logo has to be a PNG or a JPEG.',
-      code: 'unembeddable_logo',
+      field,
+      message: `A ${field} has to be a PNG or a JPEG.`,
+      code: 'unembeddable_image',
     },
   ]);
 }

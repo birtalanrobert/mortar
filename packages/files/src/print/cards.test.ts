@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { PDFDocument } from 'pdf-lib';
 import { describe, expect, it } from 'vitest';
 import { printableCards } from './cards';
+import { renderDrawing } from './drawing';
 
 /**
  * A real typeface, because the thing being tested is that a Romanian venue's
@@ -167,10 +168,16 @@ describe('printableCards', () => {
     expect(await codeOf(printableCards([], { font: NOTO }))).toBe('no_cards');
   });
 
-  it('refuses a logo a PDF cannot hold', async () => {
+  it('refuses an image a PDF cannot hold', async () => {
     expect(
       await codeOf(printableCards([CARD], { font: NOTO, logo: Buffer.from('GIF89a not really') })),
-    ).toBe('unembeddable_logo');
+    ).toBe('unembeddable_image');
+
+    expect(
+      await codeOf(
+        printableCards([{ ...CARD, plan: Buffer.from('GIF89a not really') }], { font: NOTO }),
+      ),
+    ).toBe('unembeddable_image');
   });
 
   /**
@@ -185,6 +192,37 @@ describe('printableCards', () => {
   });
 
   /**
+   * A plan is per card, and that is the whole reason it is not beside the logo.
+   *
+   * A sheet of four tickets is four different seats; one drawing shared between
+   * them would be a map that is right about a quarter of the sheet.
+   */
+  it('gives each card its own plan', async () => {
+    const one = await plan('#c1121f');
+    const other = await plan('#1d4ed8');
+
+    const pdf = await printableCards(
+      [
+        { ...CARD, heading: 'F 11', plan: one },
+        { ...CARD, heading: 'F 12', plan: other },
+      ],
+      { font: NOTO, format: 'a5' },
+    );
+
+    expect(await pagesOf(pdf)).toBe(1);
+    /* Both are in the document rather than one embedded twice, which is what a
+       shared image would look like from the outside. */
+    expect(await imagesOf(pdf)).toBe(2);
+  });
+
+  it('prints a card with no plan exactly as before', async () => {
+    const without = await printableCards([CARD], { font: NOTO });
+
+    expect(await imagesOf(without)).toBe(0);
+    expect(await pagesOf(without)).toBe(1);
+  });
+
+  /**
    * A long table label shrinks rather than running off the card. The failure it
    * replaces is silent: text drawn past the edge is simply not on the paper.
    */
@@ -196,3 +234,55 @@ describe('printableCards', () => {
     expect(await pagesOf(long)).toBe(1);
   });
 });
+
+/**
+ * Turning a drawing into pixels.
+ *
+ * The thing worth asserting is the refusal, not the rasteriser: this is the one
+ * door in the package that accepts an SVG, and everything about whether that is
+ * safe rests on it being handed a string the product generated rather than a
+ * file somebody uploaded.
+ */
+describe('renderDrawing', () => {
+  it('produces a PNG at the width it was asked for', async () => {
+    const png = await renderDrawing(svg('#c1121f'), { width: 200 });
+
+    /* The PNG signature, read from the bytes rather than trusted. */
+    expect(png.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    /* Width lives in the IHDR, big-endian, at byte 16. */
+    expect(png.readUInt32BE(16)).toBe(200);
+  });
+
+  it('refuses something that is not a drawing at all', async () => {
+    await expect(renderDrawing('<html><body>no</body></html>', { width: 100 })).rejects.toThrow();
+    await expect(renderDrawing(svg('#000'), { width: 0 })).rejects.toThrow();
+    await expect(renderDrawing(svg('#000'), { width: 40_000 })).rejects.toThrow();
+  });
+
+  it('flattens onto paper rather than leaving it transparent', async () => {
+    /*
+     * A PDF viewer composites transparency against whatever is behind it — the
+     * paper on a printed sheet, and sometimes black on a screen. A map drawn in
+     * dark grey disappears for half the people who open it.
+     */
+    const png = await renderDrawing(svg('#c1121f'), { width: 60 });
+
+    /* Colour type 2 is RGB with no alpha channel; 6 would be RGBA. */
+    expect(png.readUInt8(25)).toBe(2);
+  });
+});
+
+const svg = (colour: string): string =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 20" width="40" height="20">` +
+  `<circle cx="10" cy="10" r="4" fill="${colour}"/></svg>`;
+
+const plan = (colour: string): Promise<Buffer> => renderDrawing(svg(colour), { width: 160 });
+
+/** How many images a document actually embeds, by counting its XObjects. */
+async function imagesOf(pdf: Buffer): Promise<number> {
+  const document = await PDFDocument.load(pdf);
+
+  return document.context
+    .enumerateIndirectObjects()
+    .filter(([, object]) => String(object).includes('/Subtype /Image')).length;
+}
