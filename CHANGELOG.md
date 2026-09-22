@@ -4,6 +4,22 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## files 1.10.0
+
+### Added
+
+- **`PrintableCard.lines`** — detail lines under the caption, above the
+  footnote. A table tent needs none of them; a ticket needs several, and they
+  are what tells two otherwise identical pieces of paper apart: the date, the
+  seat, whose name is on it. The second consumer of `printableCards` wanted a
+  card with six things on it rather than three, which is the difference between
+  a heading and an identity.
+
+  Each is one line and is not wrapped — a line too long for the card is shrunk
+  to fit, like every other string here. Where a sentence breaks is a decision
+  about the caller's own words, and a layout that guessed would guess in three
+  languages.
+
 ## commerce 4.4.0
 
 ### Added

@@ -119,6 +119,50 @@ describe('printableCards', () => {
     expect(pdf.length).toBeGreaterThan(NOTO.length);
   });
 
+  /**
+   * The detail lines a ticket needs and a table tent does not.
+   *
+   * What is actually being checked is that they are *drawn* — a layout that
+   * accepted the array and quietly ran out of room would still produce a valid
+   * one-page PDF, which is the failure nothing else here would see. A page
+   * carrying four more lines of text is a longer content stream than one
+   * carrying none.
+   */
+  it('prints the detail lines under the caption', async () => {
+    const bare = await printableCards([CARD], { font: NOTO });
+    const detailed = await printableCards(
+      [
+        {
+          ...CARD,
+          lines: ['14 noiembrie 2027, 19:30', 'Sala Mare · Rândul F, locul 12', 'Ana Popescu'],
+        },
+      ],
+      { font: NOTO },
+    );
+
+    expect(await pagesOf(detailed)).toBe(1);
+    expect(detailed.length).toBeGreaterThan(bare.length);
+  });
+
+  /**
+   * A line too long for the card shrinks, like every other string here. The
+   * alternative is text drawn past the edge, which is simply not on the paper
+   * and which nothing in a page count can see.
+   */
+  it('shrinks a detail line that will not fit', async () => {
+    const pdf = await printableCards(
+      [
+        {
+          ...CARD,
+          lines: ['Sala Mare, sectorul de nord-vest, rândul F, locul 12, intrarea dinspre parc'],
+        },
+      ],
+      { font: NOTO },
+    );
+
+    expect(await pagesOf(pdf)).toBe(1);
+  });
+
   it('refuses to print nothing', async () => {
     expect(await codeOf(printableCards([], { font: NOTO }))).toBe('no_cards');
   });

@@ -22,6 +22,21 @@ export interface PrintableCard {
   readonly heading?: string;
   /** Under the code, and the only instruction most people read. */
   readonly caption?: string;
+  /**
+   * What this one is, line by line, under the caption.
+   *
+   * A table tent needs none of these; a ticket needs several — the date, the
+   * seat, whose name is on it — and they are what tells two otherwise
+   * identical pieces of paper apart. Smaller than the caption and larger than
+   * the footnote, because they are read standing up by somebody who has
+   * already found the right sheet.
+   *
+   * Each is one line and is **not wrapped**: a line too long for the card is
+   * shrunk to fit, like every other string here. A caller with a sentence to
+   * say should break it themselves, because where it breaks is a decision
+   * about their own words.
+   */
+  readonly lines?: readonly string[];
   /** Small, at the foot: the business's name, or a code to type instead. */
   readonly footnote?: string;
 }
@@ -86,10 +101,10 @@ interface Furniture {
  * different code on each" is the step where they stop — which is why this is a
  * feature rather than a support article with a template attached.
  *
- * **The words are the caller's.** This lays out a code, a heading, a caption and
- * a footnote on paper that folds and cuts where the marks say; what any of them
- * say is the product's, and a shared component that decided would be one every
- * product has to fight.
+ * **The words are the caller's.** This lays out a code, a heading, a caption,
+ * any number of detail lines and a footnote on paper that folds and cuts where
+ * the marks say; what any of them say is the product's, and a shared component
+ * that decided would be one every product has to fight.
  */
 export async function printableCards(
   cards: readonly PrintableCard[],
@@ -264,6 +279,27 @@ function drawCard(page: PDFPage, card: PrintableCard, panel: Panel, furniture: F
 
     bottom += size + padding * 0.6;
   }
+
+  /*
+   * Built from the bottom up, so the detail lines sit above the footnote and
+   * below the caption while each still claims its own space — and the code
+   * above them takes whatever is left, which is the rule this layout follows
+   * everywhere.
+   */
+  for (const line of [...(card.lines ?? [])].reverse()) {
+    const size = fit(line, furniture.font, inner, panel.height * 0.05);
+    page.drawText(line, {
+      x: panel.x + (panel.width - furniture.font.widthOfTextAtSize(line, size)) / 2,
+      y: bottom,
+      size,
+      font: furniture.font,
+      color: rgb(0.25, 0.25, 0.25),
+    });
+
+    bottom += size + padding * 0.25;
+  }
+
+  if (card.lines?.length) bottom += padding * 0.35;
 
   if (card.caption) {
     const size = fit(card.caption, furniture.font, inner, panel.height * 0.07);
