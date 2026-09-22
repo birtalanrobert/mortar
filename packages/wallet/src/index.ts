@@ -91,8 +91,12 @@ export { verifyPkPass, type PassVerdict, type VerifyOptions } from './apple/veri
 /* --- Google --- */
 
 export {
+  buildEventTicketClass,
+  buildEventTicketObject,
   buildLoyaltyClass,
   buildLoyaltyObject,
+  type EventTicketClassInput,
+  type EventTicketObjectInput,
   type GoogleIssuer,
   type LoyaltyClassInput,
   type LoyaltyObjectInput,

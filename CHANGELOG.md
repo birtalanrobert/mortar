@@ -4,6 +4,38 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## wallet 1.3.0
+
+### Added
+
+- **Google event tickets**: `buildEventTicketClass` and `buildEventTicketObject`,
+  and `saveLink` now carries either an event ticket or a loyalty object.
+
+  This package was designed against two specifications — a stamp card and an
+  event ticket — and the Apple side needed nothing: a `.pkpass` is one format
+  and `PassContent` already said `eventTicket`. Google models the two as
+  **different classes with different fields**, so a ticket sent as a loyalty
+  object installs with a balance where its seat should be. Google keys the save
+  token's payload by kind, which is why carrying both, or neither, is now
+  refused rather than silently producing a pass nobody wanted.
+
+  Two things the ticket shape needed that a card did not. The class is **per
+  performance rather than per production**, because Google puts the date, the
+  venue and the name on the class and an object cannot override them — a season
+  sharing one class shows every holder the first night's date. And the times are
+  written **with the venue's own offset** rather than as UTC: `17:30Z` and
+  `19:30+02:00` are the same moment and only the second is what the ticket says,
+  so a holder shown the first arrives after the interval. The offset is computed
+  per date rather than per venue, because a performance on the last Sunday in
+  October is an hour from one the week before.
+
+  `multipleDevicesAndHoldersAllowedStatus` differs deliberately: a loyalty card
+  is `MULTIPLE_HOLDERS`, because one that vanished when somebody changed phone
+  looks broken; a ticket is `ONE_USER_ALL_DEVICES`, because a pass several
+  people can hold at once is the screenshot problem with Google's blessing.
+  Passing one on is the product's act, where the old code is revoked as the new
+  one is issued.
+
 ## files 1.10.0
 
 ### Added

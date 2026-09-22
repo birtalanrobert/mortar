@@ -75,3 +75,37 @@ describe('the save link', () => {
     expect(() => buildSaveToken(input({ origins: [] }))).toThrow(/origins/);
   });
 });
+
+/**
+ * Google keys the token's payload by what kind of pass it holds.
+ *
+ * A ticket sent as `loyaltyObjects` installs as a loyalty card with a balance
+ * where its seat should be — which is a pass that looks wrong to the holder and
+ * entirely fine to every assertion about the JWT itself.
+ */
+describe('an event ticket save link', () => {
+  it('carries the ticket under Google’s own key', () => {
+    const token = buildSaveToken({
+      ...input({ loyaltyObject: undefined }),
+      eventTicketObject: { id: '3388.one' },
+      eventTicketClass: { id: '3388.hamlet' },
+    });
+
+    const verified = verifyJwt(token, publicKey, 'RS256');
+
+    expect((verified!.claims as { payload: Record<string, unknown> }).payload).toEqual({
+      eventTicketObjects: [{ id: '3388.one' }],
+      eventTicketClasses: [{ id: '3388.hamlet' }],
+    });
+  });
+
+  it('refuses a token carrying neither', () => {
+    expect(() => buildSaveToken(input({ loyaltyObject: undefined }))).toThrow(/exactly one pass/);
+  });
+
+  it('refuses a token carrying both', () => {
+    expect(() => buildSaveToken(input({ eventTicketObject: { id: '3388.one' } }))).toThrow(
+      /exactly one pass/,
+    );
+  });
+});

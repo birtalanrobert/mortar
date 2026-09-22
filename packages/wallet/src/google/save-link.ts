@@ -31,9 +31,20 @@ export interface SaveLinkInput {
    */
   origins: readonly string[];
   /** The object as {@link buildLoyaltyObject} produced it. */
-  loyaltyObject: Record<string, unknown>;
+  loyaltyObject?: Record<string, unknown>;
   /** The class, when it is created by the same token rather than beforehand. */
   loyaltyClass?: Record<string, unknown>;
+  /**
+   * The ticket, as {@link buildEventTicketObject} produced it.
+   *
+   * Google keys the token's payload by what kind of pass it holds, so a ticket
+   * sent as `loyaltyObjects` installs as a loyalty card with a balance where
+   * its seat should be. One of this and `loyaltyObject` is required; both
+   * together is a token that saves two passes and is almost certainly a
+   * mistake, so it is refused.
+   */
+  eventTicketObject?: Record<string, unknown>;
+  eventTicketClass?: Record<string, unknown>;
   /** The moment the token says it was issued. */
   now: Date;
 }
@@ -54,8 +65,28 @@ export function buildSaveToken(input: SaveLinkInput): string {
     );
   }
 
-  const payload: Record<string, unknown> = { loyaltyObjects: [input.loyaltyObject] };
+  if (Boolean(input.loyaltyObject) === Boolean(input.eventTicketObject)) {
+    throw new ValidationError(
+      [
+        {
+          field: 'loyaltyObject',
+          message:
+            'A save link carries exactly one pass: a loyalty object or an event ticket object. ' +
+            'Google keys the payload by kind, and a ticket sent as a loyalty card installs with a ' +
+            'balance where its seat should be.',
+          code: 'one_object_required',
+        },
+      ],
+      'A save link carries exactly one pass.',
+    );
+  }
+
+  const payload: Record<string, unknown> = {};
+
+  if (input.loyaltyObject) payload.loyaltyObjects = [input.loyaltyObject];
   if (input.loyaltyClass) payload.loyaltyClasses = [input.loyaltyClass];
+  if (input.eventTicketObject) payload.eventTicketObjects = [input.eventTicketObject];
+  if (input.eventTicketClass) payload.eventTicketClasses = [input.eventTicketClass];
 
   return signJwt(
     {
