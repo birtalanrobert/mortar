@@ -4,6 +4,35 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## comms 1.10.0
+
+### Added
+
+- **`sentTo`, `forget` and `purge`**: what a product needs from a message log
+  when somebody asks what is held about them, asks to be forgotten, and when a
+  published retention schedule comes due.
+
+  `sentTo(tenantId, address)` answers "what have you ever sent _me_", which no
+  subject id can: one person's messages are spread across every booking they
+  ever made. `history` still answers the other question, "what happened about
+  this booking".
+
+  `forget(tenantId, address)` replaces the address and clears the heading,
+  keeping the row — the same trade `FilesService.erase` makes: a record saying a
+  message was delivered on a date is worth more than a gap where it used to be,
+  and an erasure is about the person rather than about the fact that somebody
+  was written to. **Suppressions are deliberately untouched**: an address that
+  said "stop" has to keep being refused, and forgetting that is how an erased
+  person is emailed again the next time a business imports a list.
+
+  `purge(before, limit)` deletes rows past their retention — deleted rather than
+  emptied, because a row that old has nothing left worth keeping and a table of
+  hollowed rows still grows for ever. Bounded, and returns what it deleted, so a
+  sweep runs again until it returns zero.
+
+  Both are here rather than in each product because a product doing this for
+  itself has to know which columns hold a person, in a table it does not own.
+
 ## billing 3.2.0
 
 ### Added

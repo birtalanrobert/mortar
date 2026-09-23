@@ -484,3 +484,143 @@ describe('addresses that have said no', () => {
     expect(await comms.suppressionFor(TENANT, 'sms', '+40722000005')).toBeNull();
   });
 });
+
+/**
+ * What a person asks for, which no subject id can answer.
+ *
+ * `history` is "what happened about this booking"; one person's messages are
+ * spread across every booking they ever made.
+ */
+describe('everything written to one address', () => {
+  it('finds them across subjects, and nobody else’s', async () => {
+    const comms = service({ email: new NoopMessagePort('email') });
+
+    await comms.send(
+      { channel: 'email', to: 'ana@example.com', text: 'one' },
+      { tenantId: TENANT, subject: 'order:1' },
+    );
+    await comms.send(
+      { channel: 'email', to: 'ana@example.com', text: 'two' },
+      { tenantId: TENANT, subject: 'order:2' },
+    );
+    await comms.send(
+      { channel: 'email', to: 'dan@example.com', text: 'three' },
+      { tenantId: TENANT, subject: 'order:3' },
+    );
+
+    const sent = await comms.sentTo(TENANT, 'ana@example.com');
+
+    expect(sent).toHaveLength(2);
+    expect(sent.every((log) => log.address === 'ana@example.com')).toBe(true);
+  });
+});
+
+/**
+ * Erasure, and the line it stops at.
+ *
+ * Two obligations pull against each other here and both are real: a person may
+ * ask to be forgotten, and a business that was told "stop emailing me" has to
+ * keep honouring that. So the log is emptied of them and the suppression is
+ * not — which is the one piece of a person there is a continuing reason to
+ * hold.
+ */
+describe('forgetting one address', () => {
+  const rows = async () =>
+    dataSource.getRepository(MessageLog).find({ order: { createdAt: 'ASC' } });
+
+  it('empties the address and keeps the row', async () => {
+    const comms = service({ email: new NoopMessagePort('email') });
+
+    await comms.send(
+      { channel: 'email', to: 'ana@example.com', subject: 'Your tickets', text: 'here' },
+      { tenantId: TENANT, subject: 'order:1' },
+    );
+
+    expect(await comms.forget(TENANT, 'ana@example.com')).toBe(1);
+
+    const [log] = await rows();
+
+    /* A record saying a message was sent on a date is worth more than a gap
+       where it used to be — and it can no longer say to whom. */
+    expect(log).toMatchObject({ address: 'erased@invalid', heading: null, state: 'accepted' });
+  });
+
+  it('leaves everybody else alone', async () => {
+    const comms = service({ email: new NoopMessagePort('email') });
+
+    await comms.send({ channel: 'email', to: 'ana@example.com', text: 'x' }, { tenantId: TENANT });
+    await comms.send({ channel: 'email', to: 'dan@example.com', text: 'y' }, { tenantId: TENANT });
+
+    await comms.forget(TENANT, 'ana@example.com');
+
+    expect((await rows()).map((log) => log.address)).toEqual(['erased@invalid', 'dan@example.com']);
+  });
+
+  it('does not reach into another business’s log', async () => {
+    const comms = service({ email: new NoopMessagePort('email') });
+    const other = '22222222-2222-4222-8222-222222222222';
+
+    await comms.send({ channel: 'email', to: 'ana@example.com', text: 'x' }, { tenantId: other });
+
+    expect(await comms.forget(TENANT, 'ana@example.com')).toBe(0);
+    expect((await rows())[0]!.address).toBe('ana@example.com');
+  });
+
+  /**
+   * The address stays on the suppression list, and that is the decision.
+   *
+   * Forgetting it is how an erased person ends up emailed again the next time
+   * somebody imports a list.
+   */
+  it('keeps a refusal, because the refusal has to keep working', async () => {
+    const comms = service({ email: new NoopMessagePort('email') });
+
+    await comms.unsubscribe(TENANT, 'email', 'ana@example.com');
+    await comms.forget(TENANT, 'ana@example.com');
+
+    expect(await comms.suppressionFor(TENANT, 'email', 'ana@example.com')).toBeDefined();
+  });
+});
+
+/**
+ * And the other half of the same obligation: a schedule needs something that
+ * runs.
+ */
+describe('purging what is too old to keep', () => {
+  const age = async (address: string, days: number) =>
+    dataSource.query(
+      `UPDATE "mortar_message_log" SET "created_at" = now() - ($2 || ' days')::interval
+        WHERE "address" = $1`,
+      [address, String(days)],
+    );
+
+  it('deletes what is past the date and nothing that is not', async () => {
+    const comms = service({ email: new NoopMessagePort('email') });
+
+    await comms.send({ channel: 'email', to: 'old@example.com', text: 'x' }, { tenantId: TENANT });
+    await comms.send({ channel: 'email', to: 'new@example.com', text: 'y' }, { tenantId: TENANT });
+    await age('old@example.com', 400);
+
+    const deleted = await comms.purge(new Date(Date.now() - 200 * 86_400_000));
+
+    expect(deleted).toBe(1);
+    expect((await dataSource.getRepository(MessageLog).find()).map((log) => log.address)).toEqual([
+      'new@example.com',
+    ]);
+  });
+
+  it('is bounded, so a first run against years of history is short', async () => {
+    const comms = service({ email: new NoopMessagePort('email') });
+
+    for (const address of ['a@example.com', 'b@example.com', 'c@example.com']) {
+      await comms.send({ channel: 'email', to: address, text: 'x' }, { tenantId: TENANT });
+      await age(address, 400);
+    }
+
+    /* A sweep runs again until it returns zero, which is what the count is
+       for. */
+    expect(await comms.purge(new Date(), 2)).toBe(2);
+    expect(await comms.purge(new Date(), 2)).toBe(1);
+    expect(await comms.purge(new Date(), 2)).toBe(0);
+  });
+});

@@ -136,6 +136,28 @@ went to an address nobody issued" is an answer only a log can give.
 statements, and a log table is the last place they should be sitting when
 someone asks for an erasure.
 
+### When somebody asks what is held, asks to be forgotten, or a schedule comes due
+
+```ts
+await comms.sentTo(tenantId, 'ana@example.com'); // everything ever written to them
+await comms.forget(tenantId, 'ana@example.com'); // the row stays, the address goes
+await comms.purge(new Date('2025-01-01')); // past its retention: deleted
+```
+
+`sentTo` is the subject access question and `history` is the booking question:
+one person's messages are spread across every booking they ever made, so no
+subject id can answer the first.
+
+`forget` keeps the row and empties it, for the same reason `FilesService.erase`
+does: a record saying a message was delivered on a date is worth more than a gap
+where it used to be. **Suppressions are untouched** — an address that said
+"stop" has to keep being refused, and forgetting that is how an erased person is
+emailed again the next time a business imports a list.
+
+`purge` deletes rather than empties: a row past its retention has nothing left
+worth keeping, and a table of hollowed rows still grows for ever. It is bounded
+and returns what it deleted, so a sweep runs again until it returns zero.
+
 ## Sending
 
 `MessagePort` per channel. What it exposes is fixed by behaviour rather than by

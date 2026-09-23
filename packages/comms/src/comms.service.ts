@@ -397,6 +397,103 @@ export class CommsService {
       .find({ where: { tenantId, subject }, order: { createdAt: 'DESC' } });
   }
 
+  /**
+   * Everything written to one address, newest first.
+   *
+   * {@link history} answers "what happened about this booking"; this answers
+   * "what have you ever sent *me*", which is the question a subject access
+   * request asks and which no subject id can answer — one person's messages are
+   * spread across every booking they ever made.
+   *
+   * Bounded, because an address with ten years of messages behind it is a
+   * response nobody can read and a query nobody planned for.
+   */
+  async sentTo(
+    tenantId: string,
+    address: string,
+    limit = 500,
+    manager?: EntityManager,
+  ): Promise<MessageLog[]> {
+    return this.manager(manager)
+      .getRepository(MessageLog)
+      .find({ where: { tenantId, address }, order: { createdAt: 'DESC' }, take: limit });
+  }
+
+  // ── Erasure, and throwing away what is too old to keep ───────────────────
+
+  /**
+   * Takes one person's address out of the log, and keeps the log.
+   *
+   * **The row survives and the address does not**, which is the same trade
+   * `FilesService.erase` makes and for the same reason: a record saying a
+   * message was sent on a date is worth more than a gap where it used to be,
+   * and an erasure is about the person rather than about the fact that somebody
+   * was written to. What is left says "an email about this booking was
+   * delivered on the 4th" and cannot say to whom.
+   *
+   * Here rather than in each product, because every one of them will need it
+   * the first time somebody asks to be forgotten — and a product deleting rows
+   * out of this table for itself is a product that has to know which columns
+   * hold a person, in a table it does not own.
+   *
+   * **Suppressions are deliberately untouched.** An address that said "stop"
+   * has to keep being refused, and forgetting that is how an erased person ends
+   * up emailed again the next time a venue imports a list. It is the one piece
+   * of a person a business has a continuing obligation to hold.
+   *
+   * Returns how many rows were changed, so a caller can record the number in
+   * its own audit trail rather than the address.
+   */
+  async forget(tenantId: string, address: string, manager?: EntityManager): Promise<number> {
+    const repository = this.manager(manager).getRepository(MessageLog);
+
+    /*
+     * Replaced rather than nulled: the column is `NOT NULL`, and a placeholder
+     * that is obviously not an address is easier to read six months later than
+     * an empty string — which looks like a bug rather than a decision.
+     */
+    const result = await repository.update(
+      { tenantId, address },
+      { address: 'erased@invalid', heading: null },
+    );
+
+    return result.affected ?? 0;
+  }
+
+  /**
+   * Deletes log rows older than a date, whoever they belong to.
+   *
+   * The other half of the same obligation: a published retention schedule needs
+   * something that actually runs, and a message log is the table that grows
+   * fastest and holds an address in every row. A product decides *how long* —
+   * that is a promise it has published — and this does the deleting.
+   *
+   * Deleted rather than emptied, unlike {@link forget}: a row old enough to be
+   * past its retention has nothing left worth keeping, and a table of hollowed
+   * rows is a table that still grows for ever.
+   *
+   * Bounded by `limit` so a first run against years of history is a series of
+   * short transactions rather than one that locks the table for a minute.
+   * Returns what it deleted, so a sweep can run again until it returns zero.
+   */
+  async purge(before: Date, limit = 5_000, manager?: EntityManager): Promise<number> {
+    const repository = this.manager(manager).getRepository(MessageLog);
+
+    const doomed = await repository
+      .createQueryBuilder('log')
+      .select('log.id', 'id')
+      .where('log.createdAt < :before', { before })
+      .orderBy('log.createdAt', 'ASC')
+      .limit(limit)
+      .getRawMany<{ id: string }>();
+
+    if (doomed.length === 0) return 0;
+
+    const result = await repository.delete(doomed.map((row) => row.id));
+
+    return result.affected ?? 0;
+  }
+
   // ── Addresses that have said no ──────────────────────────────────────────
 
   /**
