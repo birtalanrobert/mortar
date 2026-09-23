@@ -90,17 +90,40 @@ const logger = createLogger({ serviceName: 'importer', level: 'info' });
 
 ## Metrics
 
-An in-process registry with counters, gauges and histograms, exposed in
-Prometheus text format:
+An in-process registry with counters, gauges and histograms. A metric is named
+once — with the sentence that explains it — and the instrument it returns is
+what carries values and labels:
 
 ```ts
-metrics.increment('jobs_total', { status: 'failed' });
-metrics.observe('job_duration_ms', elapsed, { queue: 'notifications' });
-
-// GET /metrics
-return metrics.toPrometheus();
+metrics.counter('jobs_total', 'Jobs handled, by outcome.').increment(1, { status: 'failed' });
+metrics.gauge('queue_depth', 'Jobs waiting.').set(waiting, { queue: 'notifications' });
+metrics.histogram('job_duration_ms', 'How long a job took.').observe(elapsed, { queue });
 ```
 
 Labels are stored beside the observation rather than parsed back out of a key,
 because parsing a key back into labels breaks the first time a label value
 contains the separator.
+
+### Serving them
+
+`toPrometheus` renders a snapshot as text exposition. It is a plain function
+rather than a method so that a Nest controller, a bare `node:http` handler and
+a test can all use the same one — a deployment points a single scraper at every
+process it runs, and two of them rendering the same registry differently is a
+dashboard that can only show half a system.
+
+```ts
+import { InMemoryMetrics, toPrometheus, type Metrics } from '@birtalanrobert/observability';
+
+@Get('metrics')
+read(): string {
+  // A deployment supplying its own adapter exports through that instead, and
+  // this should report nothing rather than pretend to be the source.
+  return this.metrics instanceof InMemoryMetrics ? toPrometheus(this.metrics.snapshot()) : '';
+}
+```
+
+Histograms render as `_count`, `_sum` and `_max`, not as buckets: the figure
+read off them is `rate(_sum) / rate(_count)`, which needs no boundaries chosen
+in advance, and `_max` answers the question an average cannot — how slow the
+slowest one was.

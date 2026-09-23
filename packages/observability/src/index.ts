@@ -14,3 +14,4 @@ export {
   type HistogramSeries,
   type MetricsSnapshot,
 } from './metrics';
+export { toPrometheus } from './prometheus';
