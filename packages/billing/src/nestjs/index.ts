@@ -8,7 +8,12 @@
 export { BillingPlan } from './plan.entity';
 export { Subscription } from './subscription.entity';
 export { UsageRecord } from './usage-record.entity';
-export { BILLING_PROVIDER, BillingService, type Standing } from './billing.service';
+export {
+  BILLING_PROVIDER,
+  BillingService,
+  type Standing,
+  type UsageTotal,
+} from './billing.service';
 export { CreateBilling1790200000000 } from '../migrations/1790200000000-CreateBilling';
 
 import { BillingPlan } from './plan.entity';

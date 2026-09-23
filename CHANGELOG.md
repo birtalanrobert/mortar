@@ -4,6 +4,31 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## billing 3.2.0
+
+### Added
+
+- **`recount` and `usageBetween`**: the second shape of metered usage, for a
+  product that counts a _table_ on a schedule rather than an _event_ as it
+  happens.
+
+  `record` adds, which is the only correct arithmetic for a text message sent or
+  a pack bought. A ticketing platform meters from the rows that record the
+  tickets, read every night — and there adding is wrong in both directions: a
+  second run doubles the day, and a ticket refunded after the first run never
+  comes back off. Expressing that with `record` would mean the product
+  remembering what it last counted, which means reading this package's table
+  from outside this package.
+
+  An unchanged figure keeps its `reported_at`. Clearing it on every recount
+  would owe the provider the same day every night for as long as the
+  aggregation keeps finding the same answer, which is every night after the
+  first.
+
+  `usageBetween` exists for the same reason the read inside `reportUsage` had to
+  move: `mortar_usage_records` carries `FORCE ROW LEVEL SECURITY`, so a product
+  summing a period for itself would read nothing and report success.
+
 ## wallet 1.3.0
 
 ### Added

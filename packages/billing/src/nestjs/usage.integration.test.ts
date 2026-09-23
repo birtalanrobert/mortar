@@ -179,3 +179,134 @@ describe('reporting what a tenant used', () => {
     expect(await billing(new Recording()).reportUsage([])).toBe(0);
   });
 });
+
+/**
+ * Counting a table on a schedule rather than an event as it happens.
+ *
+ * The second shape of metering, and the one a product billing per ticket needs:
+ * the rows that record the tickets are the source, read every night. Adding
+ * would be wrong in both directions — a second run doubles the day, and a
+ * ticket refunded after the first run never comes back off.
+ */
+describe('recounting a day', () => {
+  const billing = () => new BillingService(dataSource, new NoBilling());
+
+  const dayOf = async (tenantId: string, meter: string, day: string) =>
+    runInTenantTransaction(
+      dataSource,
+      (scoped) =>
+        scoped.query<Array<{ quantity: number; reported_at: Date | null }>>(
+          `SELECT "quantity", "reported_at" FROM "mortar_usage_records"
+            WHERE "tenant_id" = $1 AND "meter" = $2 AND "day" = $3::date`,
+          [tenantId, meter, day],
+        ),
+      { tenantId },
+    );
+
+  it('counts a day nothing has counted yet', async () => {
+    await billing().recount(TENANT, 'tickets', '2026-09-01', 40);
+
+    expect(await dayOf(TENANT, 'tickets', '2026-09-01')).toMatchObject([{ quantity: 40 }]);
+  });
+
+  it('replaces the figure rather than adding to it', async () => {
+    const service = billing();
+
+    await service.recount(TENANT, 'tickets', '2026-09-01', 40);
+    await service.recount(TENANT, 'tickets', '2026-09-01', 40);
+
+    expect(await dayOf(TENANT, 'tickets', '2026-09-01')).toMatchObject([{ quantity: 40 }]);
+  });
+
+  /* A ticket refunded after the aggregation ran. An incrementing meter has no
+     way to take it off again. */
+  it('follows a figure downwards', async () => {
+    const service = billing();
+
+    await service.recount(TENANT, 'tickets', '2026-09-01', 40);
+    await service.recount(TENANT, 'tickets', '2026-09-01', 38);
+
+    expect(await dayOf(TENANT, 'tickets', '2026-09-01')).toMatchObject([{ quantity: 38 }]);
+  });
+
+  /**
+   * And an unchanged figure is not owed to the provider again.
+   *
+   * Clearing `reported_at` on every recount would send the same day every
+   * night for as long as the aggregation keeps finding the same answer, which
+   * is every night after the first.
+   */
+  it('does not re-owe a day whose figure has not moved', async () => {
+    const provider = new Recording();
+    const service = new BillingService(dataSource, provider);
+
+    await runInTenantTransaction(
+      dataSource,
+      (scoped) =>
+        scoped.query(
+          `INSERT INTO "mortar_subscriptions" ("tenant_id", "plan_code", "status", "customer_ref")
+           VALUES ($1, 'standard', 'active', 'cus_one')`,
+          [TENANT],
+        ),
+      { tenantId: TENANT },
+    );
+
+    await service.recount(TENANT, 'tickets', '2026-09-01', 40);
+    await service.reportUsage([TENANT], new Date('2026-09-02'));
+    await service.recount(TENANT, 'tickets', '2026-09-01', 40);
+
+    expect(await service.reportUsage([TENANT], new Date('2026-09-02'))).toBe(0);
+
+    await service.recount(TENANT, 'tickets', '2026-09-01', 41);
+
+    expect(await service.reportUsage([TENANT], new Date('2026-09-02'))).toBe(1);
+    expect(provider.reported.at(-1)).toMatchObject({ quantity: 41 });
+  });
+});
+
+/** What a period came to, which is the number a statement is made of. */
+describe('reading a period back', () => {
+  const billing = () => new BillingService(dataSource, new NoBilling());
+
+  it('sums the days in the period, per meter', async () => {
+    const service = billing();
+
+    await service.recount(TENANT, 'tickets', '2026-09-01', 40);
+    await service.recount(TENANT, 'tickets', '2026-09-02', 12);
+    await service.record(TENANT, 'sms.segments', '2026-09-02', 3);
+
+    expect(await service.usageBetween(TENANT, '2026-09-01', '2026-09-30')).toEqual([
+      { meter: 'sms.segments', quantity: 3 },
+      { meter: 'tickets', quantity: 40 + 12 },
+    ]);
+  });
+
+  it('includes both ends of the period', async () => {
+    const service = billing();
+
+    await service.recount(TENANT, 'tickets', '2026-08-31', 5);
+    await service.recount(TENANT, 'tickets', '2026-09-01', 7);
+    await service.recount(TENANT, 'tickets', '2026-09-30', 9);
+    await service.recount(TENANT, 'tickets', '2026-10-01', 11);
+
+    expect(await service.usageBetween(TENANT, '2026-09-01', '2026-09-30')).toEqual([
+      { meter: 'tickets', quantity: 7 + 9 },
+    ]);
+  });
+
+  /* The policy is the reason this is a method here rather than a query there. */
+  it('reads one tenant and not the one beside it', async () => {
+    const service = billing();
+
+    await service.recount(TENANT, 'tickets', '2026-09-01', 40);
+    await service.recount(OTHER, 'tickets', '2026-09-01', 900);
+
+    expect(await service.usageBetween(TENANT, '2026-09-01', '2026-09-30')).toEqual([
+      { meter: 'tickets', quantity: 40 },
+    ]);
+  });
+
+  it('answers nothing for a period with no usage in it', async () => {
+    expect(await billing().usageBetween(TENANT, '2026-09-01', '2026-09-30')).toEqual([]);
+  });
+});

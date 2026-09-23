@@ -96,6 +96,13 @@ its own, because importing it pulls in the whole SDK.
   nobody can use, which is noticed at once.
 - **Usage is counted here and reported in a batch.** A provider call on the path
   of every text message sent is a provider outage that stops the product.
+- **Two ways to count, and the product picks by what it is counting.** `record`
+  adds, for an event as it happens — a message sent, a pack bought. `recount`
+  sets, for a table read on a schedule — tickets issued yesterday — where adding
+  would double the day on a second run and could never take a refunded ticket
+  off again. `usageBetween` reads a period back, because the table has a policy
+  on it and a product summing it for itself would read nothing and report
+  success.
 - **The subscription row is written when the provider says money moved**, not on
   the way to the payment page — that is a subscription for somebody who closed
   the tab.

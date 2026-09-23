@@ -18,6 +18,12 @@ import { Subscription } from './subscription.entity';
 /** The provider this deployment uses, injected so tests can supply their own. */
 export const BILLING_PROVIDER = Symbol('BILLING_PROVIDER');
 
+/** What one meter came to over a period. */
+export interface UsageTotal {
+  readonly meter: string;
+  readonly quantity: number;
+}
+
 /** Where a business stands, in the terms a product actually asks about. */
 export interface Standing {
   readonly status: SubscriptionStatus;
@@ -355,6 +361,83 @@ export class BillingService {
         ),
       { tenantId },
     );
+  }
+
+  /**
+   * Sets what a tenant used on a day, replacing whatever was counted before.
+   *
+   * The other shape of metering, and both are needed. {@link record} is for a
+   * product that counts an **event** as it happens — a text message sent, a
+   * pack bought — where adding is the only correct arithmetic and running twice
+   * would mean it happened twice. This is for a product that counts a **table**
+   * on a schedule: tickets issued yesterday, read out of the rows that record
+   * them. There, adding is the wrong arithmetic in both directions — a second
+   * run doubles the day, and a ticket refunded after the first run never comes
+   * back off.
+   *
+   * A product that tried to express this with `record` would have to remember
+   * what it last counted, which means reading this table from outside the
+   * package that owns it.
+   *
+   * **An unchanged count is not re-reported.** Clearing `reported_at`
+   * unconditionally would send a day to the provider again every night for as
+   * long as the aggregation keeps finding the same answer, which is every night
+   * after the first. The provider de-duplicates on the reference we send, so
+   * the charge would be right and the noise would be real; a provider that does
+   * not is a double charge. Only a day whose figure actually moved is owed
+   * again.
+   */
+  async recount(tenantId: string, meter: string, day: string, quantity: number): Promise<void> {
+    await runInTenantTransaction(
+      this.dataSource,
+      (scoped) =>
+        scoped.query(
+          `INSERT INTO "mortar_usage_records" ("tenant_id", "meter", "day", "quantity")
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT ("tenant_id", "meter", "day")
+             DO UPDATE SET "quantity" = EXCLUDED."quantity",
+                           "reported_at" = CASE
+                             WHEN "mortar_usage_records"."quantity" = EXCLUDED."quantity"
+                               THEN "mortar_usage_records"."reported_at"
+                             ELSE NULL
+                           END,
+                           "updated_at" = now()`,
+          [tenantId, meter, day, quantity],
+        ),
+      { tenantId },
+    );
+  }
+
+  /**
+   * What a tenant used between two days, per meter. Both ends included.
+   *
+   * Here rather than in the product because the alternative is a product
+   * writing `SELECT … FROM "mortar_usage_records"` for itself, against a table
+   * with a forced policy on it — which returns no rows and reports success from
+   * an unbound connection, and is the failure this service has already been
+   * caught by once.
+   *
+   * Days rather than timestamps, because that is what a usage record is: a
+   * product aggregating a table decides for itself which timezone a day ends
+   * in, and a period boundary read in UTC would move a venue's last night of
+   * the month into the next one.
+   */
+  async usageBetween(tenantId: string, from: string, to: string): Promise<UsageTotal[]> {
+    const rows = await runInTenantTransaction(
+      this.dataSource,
+      (scoped) =>
+        scoped.query<Array<{ meter: string; quantity: string }>>(
+          `SELECT "meter", SUM("quantity") AS "quantity"
+             FROM "mortar_usage_records"
+            WHERE "tenant_id" = $1 AND "day" >= $2::date AND "day" <= $3::date
+            GROUP BY "meter"
+            ORDER BY "meter"`,
+          [tenantId, from, to],
+        ),
+      { tenantId },
+    );
+
+    return rows.map((row) => ({ meter: row.meter, quantity: Number(row.quantity) }));
   }
 
   /**
