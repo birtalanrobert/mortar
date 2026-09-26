@@ -8,13 +8,13 @@ import type { MetricsSnapshot } from './metrics';
  * API and a worker, and two processes rendering the same registry differently
  * is a dashboard that can only ever show half of a system.
  *
- * Histograms are exposed as `_count`, `_sum` and `_max` rather than as buckets.
- * A Prometheus histogram needs bucket boundaries chosen in advance and a
- * `_bucket` series per boundary; the figure actually read off these — mean
- * duration — is `rate(_sum) / rate(_count)`, which needs neither. `_max` is not
- * a Prometheus convention and is carried anyway, because the slowest request in
- * a window is the question somebody asks during an incident and an average
- * cannot answer it.
+ * A histogram is exposed as its cumulative `_bucket` series up to `+Inf` —
+ * when the snapshot carries buckets, as `InMemoryMetrics`' does — then `_count`,
+ * `_sum` and `_max`. The buckets are what a percentile is read from: a p95 is
+ * `histogram_quantile(0.95, rate(…_bucket[5m]))`, and a mean alone cannot say
+ * whether one request in twenty is slow. `_max` is not a Prometheus convention
+ * and is carried anyway, because the slowest request in a window is the
+ * question somebody asks during an incident.
  *
  * Deliberately not a registry of its own: it takes a snapshot and returns a
  * string, so a process can serve it from Nest, from `node:http`, or write it to
@@ -30,6 +30,16 @@ export function toPrometheus(snapshot: MetricsSnapshot): string {
     lines.push(format(series.name, series.labels, series.value));
   }
   for (const series of snapshot.histograms) {
+    // Cumulative, one per bound and then `+Inf`, which is every observation:
+    // what `histogram_quantile` reads a percentile from.
+    for (const bucket of series.buckets ?? []) {
+      lines.push(
+        format(`${series.name}_bucket`, { ...series.labels, le: bucket.le }, bucket.count),
+      );
+    }
+    if (series.buckets) {
+      lines.push(format(`${series.name}_bucket`, { ...series.labels, le: '+Inf' }, series.count));
+    }
     lines.push(format(`${series.name}_count`, series.labels, series.count));
     lines.push(format(`${series.name}_sum`, series.labels, series.sum));
     lines.push(format(`${series.name}_max`, series.labels, series.max));

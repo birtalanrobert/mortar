@@ -104,6 +104,19 @@ Labels are stored beside the observation rather than parsed back out of a key,
 because parsing a key back into labels breaks the first time a label value
 contains the separator.
 
+`InMemoryMetrics` is the registry `LoggerModule` provides unless given another,
+so it is built for a process that runs for months. **Nothing it keeps grows with
+what it records**: a histogram is a count per bucket, a count, a sum, a minimum
+and a maximum — the buckets `DEFAULT_BUCKETS_MS` unless the first caller names
+the histogram with its own, which then fix it — and a ring of its most recent
+observations for `observations()`, a thousand unless `recentObservations` says
+otherwise. Naming a histogram again with different buckets is refused: one
+metric counted into two sets of buckets is two metrics under one name.
+
+```ts
+metrics.histogram('timeline_punctuality_seconds', 'From due to done.', [0.1, 0.5, 1, 5, 30]);
+```
+
 ### Serving them
 
 `toPrometheus` renders a snapshot as text exposition. It is a plain function
@@ -123,7 +136,8 @@ read(): string {
 }
 ```
 
-Histograms render as `_count`, `_sum` and `_max`, not as buckets: the figure
-read off them is `rate(_sum) / rate(_count)`, which needs no boundaries chosen
-in advance, and `_max` answers the question an average cannot — how slow the
-slowest one was.
+A histogram renders as its cumulative `_bucket` series up to `+Inf`, then
+`_count`, `_sum` and `_max`. The buckets are what a percentile comes from —
+`histogram_quantile(0.95, rate(job_duration_ms_bucket[5m]))` — which a mean
+cannot give; `_max` answers the question neither can, how slow the slowest one
+was. A snapshot assembled by hand with no buckets renders without them.

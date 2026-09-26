@@ -3,11 +3,14 @@ export { DEFAULT_REDACTED_PATHS, REDACTED, buildRedactionPaths, safeUrl } from '
 export { createLogger, createNoopLogger, type CreateLoggerOptions } from './logger';
 export {
   DEFAULT_BUCKETS_MS,
+  DEFAULT_RECENT_OBSERVATIONS,
   InMemoryMetrics,
   createNoopMetrics,
   type Counter,
   type Gauge,
   type Histogram,
+  type HistogramBucket,
+  type InMemoryMetricsOptions,
   type MetricLabels,
   type Metrics,
   type MetricSeries,

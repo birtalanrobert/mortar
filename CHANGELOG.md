@@ -4,6 +4,54 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## observability 1.5.0
+
+### Fixed
+
+- **`InMemoryMetrics` no longer keeps every histogram observation.** It pushed
+  each one onto an array for the life of the process, and it is the registry
+  `LoggerModule` gives a process unless told otherwise — so an API whose
+  `LoggingInterceptor` times every request grew by one number per request, for
+  months, in production. Its `snapshot()` then spread them all into `Math.min`
+  and `Math.max`, which throws a `RangeError` past about a hundred thousand: the
+  `/metrics` route started failing on its own after enough traffic.
+
+  A histogram is now what Prometheus keeps — a count per bucket, the count, the
+  sum, the minimum and the maximum — fixed in size by its buckets, plus a ring
+  of its most recent observations for `observations()`: a thousand, or
+  `new InMemoryMetrics({ recentObservations })`.
+
+### Added
+
+- **Buckets.** `histogram(name, help, buckets)` now uses the `buckets` it was
+  always offered (`DEFAULT_BUCKETS_MS` unless given). The first caller to name
+  a histogram fixes them; naming it again without buckets is the same
+  histogram, and naming it again with different ones throws, because one metric
+  counted into two sets of buckets is two metrics under one name.
+- **`HistogramSeries.buckets`**, cumulative, filled by `InMemoryMetrics` and
+  optional in the type, so a snapshot assembled by hand is still one.
+- **`toPrometheus` renders them** as `_bucket` series up to `+Inf` before
+  `_count`, `_sum` and `_max`, which is what `histogram_quantile` reads a
+  percentile from. A snapshot with no buckets renders exactly as before.
+
+### Changed
+
+- **`observations()` returns the most recent observations**, oldest first, not
+  all of them. A test that records fewer than a thousand sees no difference.
+
+## config 1.3.0
+
+### Fixed
+
+- **A password inside a URL is redacted, whatever the key is called.** Keys
+  were redacted by name, and `DATABASE_URL`, `REDIS_URL` and `SMTP_URL` name no
+  secret although the password in each is one — for an email relay it is the
+  provider's API key — so every boot banner printed them in full, in every
+  environment. `redactConfig`, and therefore `describeConfig` and `logOnBoot`,
+  now mask the password of any URL in any string value or list with `***`,
+  keeping the scheme, the user and the host, so a banner still says which role
+  connected to where.
+
 ## comms 1.10.0
 
 ### Added

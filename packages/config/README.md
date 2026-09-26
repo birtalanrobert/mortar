@@ -41,6 +41,17 @@ something to inject, and this is the thing everything else injects.
 
 The module is `@Global()`, so one registration covers the whole application.
 
+## What the banner redacts
+
+`logOnBoot` prints every key once, through `describeConfig`, and nothing secret
+reaches it. A key whose name says it is a secret — `…PASSWORD`, `…TOKEN`,
+anything ending in `KEY` — is shown as a prefix and a length. Every other value
+has any password inside a URL masked, because a connection string's key names
+no secret although its password is one: `DATABASE_URL` prints with its password
+as `***`, and its scheme, user, host and database as they are, still saying
+which role connected to which host. `redactConfig` applies the same rule for anything else that logs
+configuration.
+
 ## Reading the configuration
 
 Inject the validated object with `ConfigModule.token()`:

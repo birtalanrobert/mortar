@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { InMemoryMetrics, createNoopMetrics } from './metrics';
+import { DEFAULT_BUCKETS_MS, InMemoryMetrics, createNoopMetrics } from './metrics';
 
 describe('InMemoryMetrics', () => {
   it('counts', () => {
@@ -104,7 +104,17 @@ describe('snapshot', () => {
     });
     expect(snapshot.gauges).toEqual([{ name: 'queue_depth', labels: { queue: 'mail' }, value: 7 }]);
     expect(snapshot.histograms).toEqual([
-      { name: 'job_duration_ms', labels: { queue: 'mail' }, count: 2, sum: 40, min: 10, max: 30 },
+      {
+        name: 'job_duration_ms',
+        labels: { queue: 'mail' },
+        count: 2,
+        sum: 40,
+        min: 10,
+        max: 30,
+        // DEFAULT_BUCKETS_MS, counted cumulatively: 10 is in every bucket from
+        // 10 up, and 30 in every bucket from 50 up.
+        buckets: DEFAULT_BUCKETS_MS.map((le) => ({ le, count: le < 10 ? 0 : le < 30 ? 1 : 2 })),
+      },
     ]);
   });
 
@@ -122,5 +132,90 @@ describe('snapshot', () => {
       gauges: [],
       histograms: [],
     });
+  });
+});
+
+/**
+ * A histogram's memory, which is what a long-running process pays for it.
+ *
+ * It used to keep every observation: a process timing every request grew by one
+ * number per request for as long as it ran, and `snapshot()` spread them all into
+ * `Math.min`, which throws a `RangeError` past about a hundred thousand.
+ */
+describe('a histogram, however much it records', () => {
+  it('stays the same size, and still snapshots', () => {
+    const metrics = new InMemoryMetrics();
+    const histogram = metrics.histogram('request_ms', 'How long.', [10, 100]);
+
+    for (let index = 0; index < 1_000_000; index += 1) histogram.observe(index % 200);
+
+    const [series] = metrics.snapshot().histograms;
+    expect(series).toEqual({
+      name: 'request_ms',
+      labels: {},
+      count: 1_000_000,
+      sum: 99_500_000,
+      min: 0,
+      max: 199,
+      buckets: [
+        { le: 10, count: 55_000 },
+        { le: 100, count: 505_000 },
+      ],
+    });
+    expect(metrics.observations('request_ms')).toHaveLength(1000);
+  });
+
+  it('keeps its most recent observations for assertions, oldest first', () => {
+    const metrics = new InMemoryMetrics({ recentObservations: 3 });
+    const histogram = metrics.histogram('h');
+    for (const value of [1, 2, 3, 4, 5]) histogram.observe(value);
+
+    expect(metrics.observations('h')).toEqual([3, 4, 5]);
+    // The counts cover everything, not only what is kept.
+    expect(metrics.snapshot().histograms[0]).toEqual(
+      expect.objectContaining({ count: 5, sum: 15, min: 1, max: 5 }),
+    );
+  });
+
+  it('can keep none, and still counts', () => {
+    const metrics = new InMemoryMetrics({ recentObservations: 0 });
+    metrics.histogram('h').observe(7);
+
+    expect(metrics.observations('h')).toEqual([]);
+    expect(metrics.snapshot().histograms[0]?.count).toBe(1);
+  });
+
+  it('refuses to keep a count of observations that is not one', () => {
+    expect(() => new InMemoryMetrics({ recentObservations: -1 })).toThrow('recentObservations');
+    expect(() => new InMemoryMetrics({ recentObservations: 1.5 })).toThrow('recentObservations');
+  });
+
+  it('counts each bucket cumulatively, whatever order the bounds were given in', () => {
+    const metrics = new InMemoryMetrics();
+    const histogram = metrics.histogram('lag_seconds', 'Lag.', [5, 1]);
+    for (const value of [0.5, 1, 3, 7, -2]) histogram.observe(value);
+
+    expect(metrics.snapshot().histograms[0]).toEqual(
+      expect.objectContaining({
+        min: -2,
+        max: 7,
+        buckets: [
+          { le: 1, count: 3 },
+          { le: 5, count: 4 },
+        ],
+      }),
+    );
+  });
+
+  it('is one histogram when named again without buckets, and refused when named with others', () => {
+    const metrics = new InMemoryMetrics();
+    metrics.histogram('lag_seconds', 'Lag.', [1, 5]).observe(2);
+    metrics.histogram('lag_seconds').observe(3);
+
+    expect(metrics.snapshot().histograms[0]?.count).toBe(2);
+    expect(() => metrics.histogram('lag_seconds', 'Lag.', [1, 10])).toThrow(
+      'already bucketed at [1, 5]',
+    );
+    expect(() => metrics.histogram('lag_seconds', 'Lag.', [5, 1])).not.toThrow();
   });
 });

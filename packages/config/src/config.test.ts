@@ -245,6 +245,58 @@ describe('redaction', () => {
   });
 });
 
+/**
+ * The leak the key list could not see: a connection string's key names no
+ * secret, and its password is one. Every product printed `DATABASE_URL` in full
+ * on every boot — and in one, `SMTP_URL`'s password was the email provider's
+ * API key.
+ */
+describe('a URL whose key names no secret', () => {
+  it('keeps its scheme, user, host and path, and loses its password', () => {
+    expect(redactConfig({ DATABASE_URL: 'postgres://app:hunter2@db:5432/rota' }).DATABASE_URL).toBe(
+      'postgres://app:***@db:5432/rota',
+    );
+  });
+
+  it('masks a password with no user in front of it', () => {
+    expect(redactConfig({ REDIS_URL: 'redis://:hunter2@cache:6379/0' }).REDIS_URL).toBe(
+      'redis://:***@cache:6379/0',
+    );
+  });
+
+  it('masks every one in a list, and each one in a text', () => {
+    const out = redactConfig({
+      UPSTREAMS: ['https://a:one@x.example', 'https://y.example'],
+      NOTE: 'primary postgres://p:two@a/db, replica postgres://r:three@b/db',
+    });
+    expect(out.UPSTREAMS).toEqual(['https://a:***@x.example', 'https://y.example']);
+    expect(out.NOTE).toBe('primary postgres://p:***@a/db, replica postgres://r:***@b/db');
+  });
+
+  it('leaves a URL with nothing to hide as it is', () => {
+    const out = redactConfig({
+      SITE_URL: 'https://holdfast.example/en',
+      MIRROR: 'https://reader@mirror.example/feed',
+      PORT: 4400,
+      ENABLED: true,
+    });
+    expect(out).toEqual({
+      SITE_URL: 'https://holdfast.example/en',
+      MIRROR: 'https://reader@mirror.example/feed',
+      PORT: 4400,
+      ENABLED: true,
+    });
+  });
+
+  it('never reaches the boot banner', () => {
+    const out = describeConfig({
+      SMTP_URL: 'smtps://resend:re_live_abcdef123456@smtp.resend.com:465',
+    });
+    expect(out).toContain('smtps://resend:***@smtp.resend.com:465');
+    expect(out).not.toContain('re_live_abcdef123456');
+  });
+});
+
 describe('describeConfig', () => {
   it('renders an aligned, redacted boot banner', () => {
     const out = describeConfig({

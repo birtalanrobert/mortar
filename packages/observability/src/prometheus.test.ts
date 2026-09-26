@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { MetricsSnapshot } from './metrics';
+import { InMemoryMetrics, type MetricsSnapshot } from './metrics';
 import { toPrometheus } from './prometheus';
 
 const empty: MetricsSnapshot = { counters: [], gauges: [], histograms: [] };
@@ -35,6 +35,42 @@ describe('toPrometheus', () => {
       'job_duration_ms_sum{job="send"} 40',
       'job_duration_ms_max{job="send"} 30',
     ]);
+  });
+
+  it('renders a histogram’s buckets, cumulative up to +Inf, before its count', () => {
+    const text = toPrometheus({
+      ...empty,
+      histograms: [
+        {
+          name: 'lag_seconds',
+          labels: { kind: 'noop' },
+          count: 5,
+          sum: 71.5,
+          min: 0.5,
+          max: 60,
+          buckets: [
+            { le: 1, count: 2 },
+            { le: 5, count: 3 },
+          ],
+        },
+      ],
+    });
+
+    expect(text.split('\n').filter(Boolean)).toEqual([
+      'lag_seconds_bucket{kind="noop",le="1"} 2',
+      'lag_seconds_bucket{kind="noop",le="5"} 3',
+      'lag_seconds_bucket{kind="noop",le="+Inf"} 5',
+      'lag_seconds_count{kind="noop"} 5',
+      'lag_seconds_sum{kind="noop"} 71.5',
+      'lag_seconds_max{kind="noop"} 60',
+    ]);
+  });
+
+  it('renders what InMemoryMetrics records, buckets and all', () => {
+    const metrics = new InMemoryMetrics();
+    metrics.histogram('op_ms', 'An operation.', [10]).observe(4);
+
+    expect(toPrometheus(metrics.snapshot())).toContain('op_ms_bucket{le="+Inf"} 1');
   });
 
   it('escapes backslashes before quotes', () => {

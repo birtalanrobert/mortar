@@ -51,19 +51,16 @@ function labelKey(labels: MetricLabels = {}): string {
   return keys.map((key) => `${key}=${String(labels[key])}`).join(',');
 }
 
-/**
- * An in-memory implementation, useful in tests where an assertion on a metric
- * is the clearest way to prove a code path ran.
- */
-interface Observations {
-  readonly labels: MetricLabels;
-  readonly values: number[];
-}
-
 export interface MetricSeries {
   readonly name: string;
   readonly labels: MetricLabels;
   readonly value: number;
+}
+
+/** How many observations fell at or below `le` — cumulative, as Prometheus reads a bucket. */
+export interface HistogramBucket {
+  readonly le: number;
+  readonly count: number;
 }
 
 export interface HistogramSeries {
@@ -73,6 +70,12 @@ export interface HistogramSeries {
   readonly sum: number;
   readonly min: number;
   readonly max: number;
+  /**
+   * One entry per bound, cumulative. Optional so that a snapshot assembled by
+   * hand — in a test, or by an adapter that has no buckets — is still one;
+   * `InMemoryMetrics` always fills it.
+   */
+  readonly buckets?: readonly HistogramBucket[];
 }
 
 export interface MetricsSnapshot {
@@ -81,10 +84,103 @@ export interface MetricsSnapshot {
   readonly histograms: readonly HistogramSeries[];
 }
 
+export interface InMemoryMetricsOptions {
+  /**
+   * How many of a series' most recent observations `observations()` can
+   * return. Everything else a histogram knows is a fixed number of counters,
+   * so this is the only thing about it that grows with use — and it stops
+   * growing here.
+   */
+  readonly recentObservations?: number;
+}
+
+/** How many recent observations each histogram series keeps for `observations()`, unless told otherwise. */
+export const DEFAULT_RECENT_OBSERVATIONS = 1000;
+
+/**
+ * One histogram series: a count per bucket, the count, sum, minimum and
+ * maximum — all fixed in size whatever is observed — and a ring of the most
+ * recent observations.
+ */
+class HistogramState {
+  readonly counts: number[];
+  count = 0;
+  sum = 0;
+  min = Infinity;
+  max = -Infinity;
+  private readonly recent: number[] = [];
+  private next = 0;
+
+  constructor(
+    readonly labels: MetricLabels,
+    private readonly bounds: readonly number[],
+    private readonly keep: number,
+  ) {
+    this.counts = bounds.map(() => 0);
+  }
+
+  observe(value: number): void {
+    const index = this.bounds.findIndex((bound) => value <= bound);
+    if (index >= 0) this.counts[index]! += 1;
+    this.count += 1;
+    this.sum += value;
+    if (value < this.min) this.min = value;
+    if (value > this.max) this.max = value;
+
+    if (this.keep === 0) return;
+    if (this.recent.length < this.keep) {
+      this.recent.push(value);
+    } else {
+      this.recent[this.next] = value;
+      this.next = (this.next + 1) % this.keep;
+    }
+  }
+
+  /** The kept observations, oldest first. */
+  observations(): readonly number[] {
+    return this.recent.length < this.keep
+      ? [...this.recent]
+      : [...this.recent.slice(this.next), ...this.recent.slice(0, this.next)];
+  }
+
+  buckets(): HistogramBucket[] {
+    let running = 0;
+    return this.bounds.map((le, index) => ({ le, count: (running += this.counts[index]!) }));
+  }
+}
+
+interface HistogramFamily {
+  readonly bounds: readonly number[];
+  readonly series: Map<string, HistogramState>;
+}
+
+/**
+ * An in-memory registry: what a process serves on `/metrics`, and what a test
+ * asserts on when an assertion on a metric is the clearest way to prove a code
+ * path ran.
+ *
+ * **Its memory does not grow with what it records.** A histogram is a count per
+ * bucket, a count, a sum, a minimum and a maximum — the shape Prometheus keeps —
+ * plus a bounded ring of the most recent observations for `observations()`. It
+ * used to keep every observation, for exact percentiles: a process timing every
+ * request then grew by one number per request for as long as it ran, and its
+ * snapshot spread them all into `Math.min`, which throws past about a hundred
+ * thousand. That is the default registry `LoggerModule` gives a production
+ * process, so it has to hold for one.
+ */
 export class InMemoryMetrics implements Metrics {
   private readonly counters = new Map<string, Map<string, Sample>>();
   private readonly gauges = new Map<string, Map<string, Sample>>();
-  private readonly histograms = new Map<string, Map<string, Observations>>();
+  private readonly histograms = new Map<string, HistogramFamily>();
+  private readonly keep: number;
+
+  constructor(options: InMemoryMetricsOptions = {}) {
+    const keep = options.recentObservations ?? DEFAULT_RECENT_OBSERVATIONS;
+    if (!Number.isInteger(keep) || keep < 0) {
+      throw new Error(`recentObservations must be a whole number of at least 0, not ${keep}.`);
+    }
+    this.keep = keep;
+  }
 
   counter(name: string): Counter {
     const series = this.series(this.counters, name);
@@ -113,21 +209,39 @@ export class InMemoryMetrics implements Metrics {
     };
   }
 
-  histogram(name: string): Histogram {
-    let series = this.histograms.get(name);
-    if (!series) {
-      series = new Map<string, Observations>();
-      this.histograms.set(name, series);
+  /**
+   * A histogram, bucketed at `buckets` — `DEFAULT_BUCKETS_MS` unless given.
+   *
+   * The first caller to name a histogram fixes its buckets. Naming it again
+   * without buckets is the same histogram; naming it again with different
+   * ones is refused, because one metric counted into two sets of buckets is
+   * two metrics under one name, and a quantile read across them is nonsense.
+   */
+  histogram(name: string, _help?: string, buckets?: readonly number[]): Histogram {
+    let family = this.histograms.get(name);
+    if (!family) {
+      const bounds = [...(buckets ?? DEFAULT_BUCKETS_MS)].sort((a, b) => a - b);
+      if (bounds.some((bound) => !Number.isFinite(bound))) {
+        throw new Error(`Histogram ${name}: every bucket bound must be a finite number.`);
+      }
+      family = { bounds, series: new Map() };
+      this.histograms.set(name, family);
+    } else if (buckets && [...buckets].sort((a, b) => a - b).join() !== family.bounds.join()) {
+      throw new Error(`Histogram ${name} is already bucketed at [${family.bounds.join(', ')}].`);
     }
-    const observations = series;
+
+    const { bounds, series } = family;
     const observe = (value: number, labels: MetricLabels = {}) => {
       const key = labelKey(labels);
-      const bucket = observations.get(key);
-      // The labels are stored beside the values rather than recovered from the
+      let state = series.get(key);
+      // The labels are stored beside the counts rather than recovered from the
       // key later: a label value containing `=` or `,` would not survive the
       // round trip, and one eventually will.
-      if (bucket) bucket.values.push(value);
-      else observations.set(key, { labels, values: [value] });
+      if (!state) {
+        state = new HistogramState(labels, bounds, this.keep);
+        series.set(key, state);
+      }
+      state.observe(value);
     };
     return {
       observe,
@@ -149,10 +263,9 @@ export class InMemoryMetrics implements Metrics {
    * `observations()` can only answer about a name the caller already knows,
    * which an exporter by definition does not.
    *
-   * Histograms are reported as count, sum, min and max rather than as buckets.
-   * Bucketing is a presentation decision that belongs to whatever scrapes this,
-   * and keeping raw observations here means a percentile can still be computed
-   * exactly rather than interpolated.
+   * Histograms carry their buckets, cumulative, beside the count, sum, minimum
+   * and maximum — so a percentile can be read from what is scraped
+   * (`histogram_quantile` over `_bucket`).
    */
   snapshot(): MetricsSnapshot {
     const flatten = (source: Map<string, Map<string, Sample>>): MetricSeries[] =>
@@ -163,14 +276,15 @@ export class InMemoryMetrics implements Metrics {
     return {
       counters: flatten(this.counters),
       gauges: flatten(this.gauges),
-      histograms: [...this.histograms.entries()].flatMap(([name, series]) =>
-        [...series.values()].map(({ labels, values }) => ({
+      histograms: [...this.histograms.entries()].flatMap(([name, family]) =>
+        [...family.series.values()].map((state) => ({
           name,
-          labels,
-          count: values.length,
-          sum: values.reduce((total, value) => total + value, 0),
-          min: values.length > 0 ? Math.min(...values) : 0,
-          max: values.length > 0 ? Math.max(...values) : 0,
+          labels: state.labels,
+          count: state.count,
+          sum: state.sum,
+          min: state.count > 0 ? state.min : 0,
+          max: state.count > 0 ? state.max : 0,
+          buckets: state.buckets(),
         })),
       ),
     };
@@ -182,9 +296,13 @@ export class InMemoryMetrics implements Metrics {
     return this.counters.get(name)?.get(key)?.value ?? this.gauges.get(name)?.get(key)?.value;
   }
 
-  /** Recorded observations of a histogram, for assertions. */
+  /**
+   * A histogram's most recent observations, oldest first, for assertions: at
+   * most `recentObservations` of them (a thousand by default). The counts in
+   * `snapshot()` cover everything ever observed.
+   */
   observations(name: string, labels: MetricLabels = {}): readonly number[] {
-    return this.histograms.get(name)?.get(labelKey(labels))?.values ?? [];
+    return this.histograms.get(name)?.series.get(labelKey(labels))?.observations() ?? [];
   }
 
   reset(): void {

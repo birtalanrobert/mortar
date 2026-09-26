@@ -59,10 +59,31 @@ export function redactValue(value: unknown): string {
 }
 
 /**
+ * `scheme://user:password@` anywhere in a text: the scheme and user kept, the
+ * password taken. A password with `@` or `/` in it is percent-encoded in a URL,
+ * so neither can end the match early.
+ */
+const URL_PASSWORD = /(\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]*:)[^\s@/]+@/gi;
+
+/**
+ * Every URL password in a value masked, the rest left alone — so a banner
+ * still says which host and which role, and not with what.
+ */
+function redactUrlPasswords(text: string): string {
+  return text.replace(URL_PASSWORD, '$1***@');
+}
+
+/**
  * Produces a log-safe copy of a configuration object.
  *
  * Used by the boot banner, by error reporting and by the health endpoint's
  * diagnostic mode. Nested objects are walked; keys are matched at every level.
+ *
+ * **A key's name is not enough.** `DATABASE_URL`, `REDIS_URL` and `SMTP_URL`
+ * name no secret, and the password inside each is one — for an email relay it
+ * is the provider's API key — so every banner printed it in full. So besides the
+ * keys that name a secret, every string value, and every string in a list, has
+ * any URL password in it masked, whatever its key is called.
  */
 export function redactConfig<T extends Record<string, unknown>>(
   config: T,
@@ -71,7 +92,13 @@ export function redactConfig<T extends Record<string, unknown>>(
   for (const [key, value] of Object.entries(config)) {
     if (isSecretKey(key)) {
       result[key] = redactValue(value);
-    } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+    } else if (typeof value === 'string') {
+      result[key] = redactUrlPasswords(value);
+    } else if (Array.isArray(value)) {
+      result[key] = value.map((entry: unknown) =>
+        typeof entry === 'string' ? redactUrlPasswords(entry) : entry,
+      );
+    } else if (value && typeof value === 'object') {
       result[key] = redactConfig(value as Record<string, unknown>);
     } else {
       result[key] = value;
