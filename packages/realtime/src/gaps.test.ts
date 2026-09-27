@@ -26,6 +26,31 @@ describe('a client’s position in a channel', () => {
     expect(cursor.seenAt('station:grill')).toBe(412);
   });
 
+  it('takes the first event after standing at 0, however it is numbered', () => {
+    const cursor = new ChannelCursor();
+    // Joined while the channel was empty.
+    cursor.start('station:grill', 0);
+
+    /*
+     * 0 stands before the channel's first event, not before event 1: a backlog
+     * that numbers from its clock begins in the trillions, and a jump from 0
+     * would drop the first event of every channel a client joined empty.
+     */
+    expect(cursor.offer(event('station:grill', 1_790_000_000_000))).toBe('take');
+    expect(cursor.offer(event('station:grill', 1_790_000_000_001))).toBe('take');
+    expect(cursor.seenAt('station:grill')).toBe(1_790_000_000_001);
+  });
+
+  it('knows a position of 0 from no position at all', () => {
+    const cursor = new ChannelCursor();
+    cursor.start('station:grill', 0);
+
+    // 0 is sent on a reconnection, so what arrived meanwhile is replayed.
+    expect(cursor.has('station:grill')).toBe(true);
+    expect(cursor.has('station:pass')).toBe(false);
+    expect(cursor.since()).toEqual({ 'station:grill': 0 });
+  });
+
   it('takes the next one', () => {
     const cursor = new ChannelCursor();
     cursor.start('station:grill', 412);

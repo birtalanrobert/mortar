@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MemoryBacklog } from './backlog';
+import { MemoryBacklog, type BacklogPort } from './backlog';
 import { RealtimePublisher } from './publisher';
 import { resume } from './resume';
 
@@ -150,7 +150,65 @@ describe('answering a client that says where it stands', () => {
      * want the tickets from lunch — and a `gap` here would make it reload for
      * nothing on every boot.
      */
-    expect(await resume(backlog, 'c', 0)).toMatchObject({ events: [], gap: null, latest: 3 });
+    expect(await resume(backlog, 'c', undefined)).toMatchObject({
+      events: [],
+      gap: null,
+      latest: 3,
+    });
+  });
+
+  it('replays everything to a client that joined while the channel was empty', async () => {
+    const backlog = await fill(3);
+
+    /*
+     * 0 is a position, not a newcomer. A phone opened on a quiet channel stands
+     * at 0; it locks, a timer finishes, and it reconnects. Read as "new here",
+     * it was answered from now and never told about the event it slept through.
+     */
+    const answer = await resume(backlog, 'c', 0);
+
+    expect(answer.events.map((event) => event.seq)).toEqual([1, 2, 3]);
+    expect(answer.gap).toBeNull();
+  });
+
+  it('tells a client standing further along than the channel to start again', async () => {
+    // A backlog in memory restarts with its process, and numbers from 1 again.
+    const backlog = await fill(2);
+    const answer = await resume(backlog, 'c', 7);
+
+    /*
+     * Answered with nothing, the client would keep 7 and skip the next five
+     * events as already seen, and no one would know.
+     */
+    expect(answer.events).toEqual([]);
+    expect(answer.gap).toMatchObject({ kind: 'gap', channel: 'c', from: 2 });
+  });
+
+  it('replays a channel numbered from somewhere other than 1 to a client at 0', async () => {
+    // A run that began at 1000, as a backlog numbering from its clock begins.
+    const run = (oldest: number): BacklogPort => ({
+      append: () => Promise.reject(new Error('not used')),
+      since: async (_channel, after) =>
+        [1000, 1001, 1002]
+          .filter((seq) => seq >= oldest && seq > after)
+          .map((seq) => ({ channel: 'c', seq, type: 'a', data: {}, at: 0 })),
+      bounds: async () => ({ oldest, latest: 1002, first: 1000 }),
+    });
+
+    const whole = await resume(run(1000), 'c', 0);
+    expect(whole.events.map((event) => event.seq)).toEqual([1000, 1001, 1002]);
+    expect(whole.gap).toBeNull();
+
+    // Its first event trimmed away: a client at 0 cannot be served completely.
+    const trimmed = await resume(run(1001), 'c', 0);
+    expect(trimmed.events).toEqual([]);
+    expect(trimmed.gap).toMatchObject({ kind: 'gap', channel: 'c', from: 1002 });
+  });
+
+  it('tells a client standing somewhere in a channel that has emptied to start again', async () => {
+    const answer = await resume(new MemoryBacklog(), 'c', 4);
+
+    expect(answer.gap).toMatchObject({ kind: 'gap', channel: 'c', from: 0 });
   });
 
   it('refuses to half-answer a client that was away too long', async () => {

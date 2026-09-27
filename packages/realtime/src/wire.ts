@@ -16,7 +16,11 @@
 export interface RealtimeEvent<T = unknown> {
   readonly channel: string;
   /**
-   * Monotonic within the channel, starting at 1. Never reused, never reordered.
+   * Monotonic within the channel. Never reused, never reordered — including
+   * across a channel that went quiet long enough for its backlog to forget it:
+   * `RedisBacklog` starts a channel at the Redis server's clock in
+   * milliseconds, so a channel used again is numbered above anything it was
+   * numbered before. `MemoryBacklog` starts at 1.
    *
    * Per channel rather than global, because a global counter would make every
    * subscriber's gap detection depend on traffic they cannot see — a kitchen
@@ -71,7 +75,10 @@ export type ServerFrame =
        */
       readonly kind: 'gap';
       readonly channel: string;
-      /** The oldest sequence still available. Everything before it is lost. */
+      /**
+       * Where the channel stands now. The client starts again from here, and
+       * fetches its own state, because what lay between cannot be replayed.
+       */
       readonly from: number;
     }
   | { readonly kind: 'pong'; readonly at: number };

@@ -257,8 +257,8 @@ export class RealtimeSocketServer {
         const standing: Record<string, number> = {};
 
         for (const channel of allowed) {
-          const since = frame.since?.[channel] ?? 0;
-          const answer = await resume(this.options.backlog, channel, since);
+          // Absent is no position, which is not the same as a position of 0.
+          const answer = await resume(this.options.backlog, channel, frame.since?.[channel]);
 
           standing[channel] = answer.latest;
 

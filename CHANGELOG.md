@@ -4,6 +4,71 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## realtime 2.2.0
+
+Four ways a client could miss events without being told. Each is fixed below
+and covered by a test that fails on 2.1.0.
+
+### Fixed
+
+- **A channel that expired and was used again skipped events on pages already
+  open.** `RedisBacklog` expires a quiet channel's counter with its log, so the
+  channel's next event was numbered 1 again. A page left open overnight still
+  stood at, say, 7. It skipped events 1 to 7 as duplicates, and nothing told it.
+  A channel now starts at the Redis server's clock in milliseconds, so a channel
+  used again is numbered above anything it handed out before, unless it averaged
+  more than one event a millisecond for its whole life. An open page sees a jump
+  and resynchronises. Where the channel's current run began is kept beside it,
+  and `BacklogPort.bounds` reports it as `first`.
+
+- **A client that joined an empty channel lost what arrived while it was
+  away.** It stood at 0, and `resume` read 0 as "new here", so it answered from
+  now. A phone opened on a quiet channel locked, a timer finished, and the phone
+  came back to nothing. `resume` now tells no position (`undefined`: join from
+  now) apart from a position of 0 (seen nothing, so replay everything since the
+  channel's first event). The socket server and `pollSince` pass a missing
+  position through as `undefined`. `ChannelCursor` takes the first event after
+  0 whatever it is numbered, and `has(channel)` tells 0 apart from no position.
+
+- **A polling client ignored `gaps`.** A channel it had fallen too far behind in
+  was named in `gaps`. The client kept its position, asked from it again, was
+  told the same, and never delivered another event on that channel. The socket
+  never came back to repair it, because the fallback is for networks that eat
+  sockets. It now does what a `gap` frame does: it starts again where the
+  channel stands and calls `onResync`.
+
+- **A polling client that joined an empty channel never took a position.** Its
+  next poll was a join again, answered from now, and the channel's first event
+  was stepped over. It now takes 0.
+
+- **A client standing further along than a channel has ever been is told to
+  start again.** This happens after a `MemoryBacklog` restarts with its
+  process. The client used to be answered with nothing, and it skipped
+  everything up to its old position.
+
+### Changed
+
+- **`RedisBacklog` numbers a new channel from the server's clock, not from 1.**
+  Sequences stay monotonic, gap-free and per channel, and `MemoryBacklog` still
+  starts at 1. A channel created before this version carries on from where it
+  stands.
+- **`resume(backlog, channel, since)` takes `since: number | undefined`.** A
+  direct caller that passed 0 to mean "new here" now passes `undefined`.
+  `parsePollQuery` already leaves an absent channel out, so `pollSince` needs no
+  change.
+
+## redis 1.1.1
+
+### Fixed
+
+- **`RedisService.subscriber` connects on its first `SUBSCRIBE`, not when it
+  is read.** `RedisBroadcast` takes the subscriber in its constructor. A process
+  that only sends, such as a worker publishing into a gateway's backlog, builds
+  one and never calls `listen`, and 1.1.0 gave that process an idle connection
+  for its whole life. `close()` disconnects a subscriber that never subscribed,
+  rather than sending `QUIT`, which would open the connection only to close
+  it.
+
 ## redis 1.1.0
 
 ### Added

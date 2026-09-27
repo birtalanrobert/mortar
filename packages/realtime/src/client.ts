@@ -174,8 +174,14 @@ export class RealtimeClient {
     switch (frame.kind) {
       case 'welcome':
         for (const [channel, seq] of Object.entries(frame.channels)) {
-          // Only for a channel this client has no position in. A `welcome` that
-          // reset the cursor would throw away the resume it just asked for.
+          /*
+           * Only for a channel this client has no position in, or stands at 0
+           * in. A `welcome` that reset the cursor would throw away the resume it
+           * just asked for. A client at 0 has been replayed everything the
+           * channel carried before this frame arrives, so it still stands at 0
+           * only if there was nothing — or if a server from before positions
+           * of 0 answered it as a newcomer, and then this is where it must go.
+           */
           if (this.cursor.seenAt(channel) === 0) this.cursor.start(channel, seq);
         }
         return;
@@ -295,6 +301,7 @@ export class RealtimeClient {
 
         const body = (await response.json()) as {
           events?: RealtimeEvent[];
+          gaps?: string[];
           latest?: Record<string, number>;
         };
 
@@ -305,29 +312,47 @@ export class RealtimeClient {
         }
 
         /*
-         * Seed a cursor that has never stood anywhere.
+         * A channel the backlog could not serve from where this client stood:
+         * start again from where it stands now, and tell the product — exactly
+         * what a `gap` frame does over the socket.
          *
-         * **Without this the fallback can never deliver anything.** A fresh
-         * client sends `since: {}`, `resume` reads that as "I am new here" and
-         * answers with `latest` and no events — which is correct and
-         * deliberate — and the cursor then has nothing to advance from. So the
-         * next poll sends `{}` again, and the one after that, for ever: a page
-         * that polls perfectly and is never told a thing.
+         * The poller used to ignore `gaps`. It kept its position, asked from it
+         * again on the next poll, was told the same thing, and never delivered
+         * another event on that channel — on the network the fallback exists
+         * for, where the socket never comes back to repair it.
+         */
+        for (const channel of body.gaps ?? []) {
+          this.cursor.start(channel, body.latest?.[channel] ?? 0);
+          this.options.onResync?.(channel);
+        }
+
+        /*
+         * Take a position in every channel that has none — where the channel
+         * stands, **0 included**.
          *
-         * The socket half has always done this, on the `start` frame the
-         * server sends when a subscription is accepted. The polling half was
-         * written to the same shape and missed it, which is exactly the failure
-         * this package's own README warns about — a fallback nobody has seen
-         * work is one that stops working on the day it is needed.
+         * **Without a position the fallback can never deliver anything.** A
+         * client with none is joining, and `resume` answers it with `latest`
+         * and no events, which is correct and deliberate. Without recording
+         * that answer, the next poll joins again, and the one after that, for
+         * ever: a page that polls perfectly and is never told a thing.
          *
-         * **After the events, and only where the cursor is still at zero**, for
-         * the same reason the socket path checks: seeding a channel that has
-         * just been given a resume would throw that resume away.
+         * **0 is a position.** A client that joined an empty channel has seen
+         * nothing, and the next poll saying `0` is what gets it the channel's
+         * first event. Leaving it with no position made that poll a join as
+         * well, and a join is answered from now: the first event was stepped
+         * over as history, and the page was never told.
+         *
+         * **After the events, and never over a position already held**, for the
+         * same reason the socket path checks: seeding a channel that has just
+         * been given a resume would throw that resume away. The one exception
+         * is a position of 0 facing a channel that has moved on, which only a
+         * server from before positions of 0 could answer with no events — so
+         * such a client is not held at 0 for ever.
          */
         for (const [channel, latest] of Object.entries(body.latest ?? {})) {
-          if (this.cursor.seenAt(channel) === 0 && latest > 0) {
-            this.cursor.start(channel, latest);
-          }
+          const joining = !this.cursor.has(channel);
+          const leftBehind = this.cursor.seenAt(channel) === 0 && latest > 0;
+          if (joining || leftBehind) this.cursor.start(channel, latest);
         }
       } catch {
         // The network is gone rather than merely hostile to sockets. Saying so

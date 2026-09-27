@@ -303,16 +303,36 @@ describe('pub/sub — redis.subscriber', () => {
     await closing;
   });
 
-  it('is not opened by a process that never listens', async () => {
+  it('is not connected by a process that holds it and never listens', async () => {
+    /*
+     * A process that only sends — a worker publishing into a gateway's backlog
+     * — still builds a `RedisBroadcast`, which takes the subscriber in its
+     * constructor. Reading it must not open a connection that then sits idle
+     * for the life of the process, and closing it must not open one either.
+     */
     const client = createTestRedis('pubsub');
     const app = await NestFactory.createApplicationContext(RedisModule.forRootWithClient(client), {
       logger: false,
     });
+    const subscriber = app.get(RedisService).subscriber;
     await client.ping();
 
+    expect(subscriber.status).toBe('wait');
     expect(await connections(client)).not.toContain('name=mortar-test-subscriber');
-    const closing = ended(client);
+
+    const closing = Promise.all([ended(subscriber), ended(client)]);
     await app.close();
     await closing;
+  });
+
+  it('connects on its first subscription', async () => {
+    const redis = new RedisService(createTestRedis('pubsub'));
+    const subscriber = redis.subscriber;
+    expect(await connections(redis.client)).not.toContain('name=mortar-test-subscriber');
+
+    await subscriber.subscribe('pubsub-suite:first');
+
+    expect(await connections(redis.client)).toContain('name=mortar-test-subscriber');
+    await redis.close();
   });
 });

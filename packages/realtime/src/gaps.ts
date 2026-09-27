@@ -20,6 +20,18 @@ export class ChannelCursor {
     return this.seen.get(channel) ?? 0;
   }
 
+  /**
+   * Whether the client has a position in a channel at all.
+   *
+   * Not `seenAt(channel) > 0`: a client that joined a channel while it was
+   * empty stands at 0, and 0 is a position — everything the channel carries
+   * afterwards is what it has not seen. A client with no position is joining,
+   * and starts from now.
+   */
+  has(channel: string): boolean {
+    return this.seen.has(channel);
+  }
+
   /** Starts a channel at a known point, from a `welcome` or a resume. */
   start(channel: string, seq: number): void {
     this.seen.set(channel, seq);
@@ -46,8 +58,14 @@ export class ChannelCursor {
   offer(event: RealtimeEvent): 'take' | 'skip' | 'gap' {
     const seen = this.seen.get(event.channel);
 
-    // A channel nobody has a position in: this is the position.
-    if (seen === undefined) {
+    /*
+     * A channel nobody has a position in: this is the position. And a position
+     * of 0 — joined while the channel was empty — stands before the channel's
+     * first event, whatever that event is numbered: a backlog that numbers from
+     * its clock starts in the trillions, and calling that a jump from 0 would
+     * drop the first event on every channel a client joined empty.
+     */
+    if (seen === undefined || seen === 0) {
       this.seen.set(event.channel, event.seq);
       return 'take';
     }

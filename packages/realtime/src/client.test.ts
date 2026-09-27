@@ -122,6 +122,26 @@ describe('a client that can prove what it has seen', () => {
     one.stop();
   });
 
+  it('resumes a channel it joined while it was empty from 0, not as a newcomer', () => {
+    const one = client();
+    one.start();
+    socket.open();
+    socket.deliver({ kind: 'welcome', channels: { 'station:grill': 0 } });
+
+    socket.close();
+    vi.advanceTimersByTime(2_000);
+    socket.open();
+
+    /*
+     * 0 is where it stands, and saying so is what gets it the events that
+     * arrived while it was away. Saying nothing would make it a newcomer, and a
+     * newcomer is answered from now.
+     */
+    expect(socket.frames().at(-1)).toMatchObject({ since: { 'station:grill': 0 } });
+
+    one.stop();
+  });
+
   it('notices a jump and asks again, without moving its cursor', () => {
     const one = client();
     one.start();
@@ -404,12 +424,11 @@ describe('a polling client with no cursor', () => {
   /**
    * And a channel that has never carried anything is not the exception.
    *
-   * `latest: 0` is a channel with no history, so there is nothing to seed
-   * *from* — and nothing is the right cursor: the first event to arrive is
-   * offered against a channel this client has no position in, which the cursor
-   * takes. Seeding zero explicitly would be the same answer by a longer route;
-   * what matters is that the frame is delivered rather than swallowed as a
-   * cursor advance, which is what a naive fix would have done.
+   * `latest: 0` is a channel with no history, and 0 is where this client now
+   * stands. The next poll says so, and a server answers a position of 0 with
+   * everything the channel has carried since — its first event. Left with no
+   * position, the next poll would join again, be answered from now, and step
+   * over that event as history.
    */
   it('delivers the first frame on a channel that has never carried anything', async () => {
     const asked: string[] = [];
@@ -445,7 +464,53 @@ describe('a polling client with no cursor', () => {
     await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(1_000);
 
+    expect(asked[1]).toContain(encodeURIComponent('{"station:grill":0}'));
     expect(received.map((one_) => one_.seq)).toEqual([1]);
+
+    one.stop();
+  });
+
+  it('starts again where the channel stands when the backlog cannot serve it', async () => {
+    const asked: string[] = [];
+    const received: RealtimeEvent[] = [];
+    const resyncs: string[] = [];
+
+    const one = new RealtimeClient({
+      url: 'wss://example.test/realtime',
+      pollUrl: 'https://example.test/poll',
+      channels: ['station:grill'],
+      onEvent: (received_) => received.push(received_),
+      onResync: (channel) => resyncs.push(channel),
+      pollMs: 1_000,
+      socketFactory: () => {
+        throw new Error('blocked');
+      },
+      fetch: (async (url: string) => {
+        asked.push(String(url));
+
+        const answers = [
+          { events: [event('station:grill', 3)], latest: { 'station:grill': 3 } },
+          // Away too long: the backlog now starts after where this client stands.
+          { events: [], gaps: ['station:grill'], latest: { 'station:grill': 40 } },
+          { events: [event('station:grill', 41)], latest: { 'station:grill': 41 } },
+        ];
+        return { ok: true, json: async () => answers[asked.length - 1] ?? answers[2] };
+      }) as unknown as typeof fetch,
+    });
+
+    one.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    /*
+     * Told, and moved to where the channel stands — the same as a `gap` frame
+     * over the socket. Ignoring `gaps`, the poller asked from 3 for ever and
+     * never delivered another event on this channel.
+     */
+    expect(resyncs).toEqual(['station:grill']);
+    expect(asked[2]).toContain(encodeURIComponent('{"station:grill":40}'));
+    expect(received.map((one_) => one_.seq)).toEqual([3, 41]);
 
     one.stop();
   });

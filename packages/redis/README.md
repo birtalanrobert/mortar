@@ -100,9 +100,10 @@ await broadcast.listen(publisher);
 
 The connection a process listens on. It is separate from `redis.client`,
 because a connection that has subscribed may issue nothing else. There is one
-per process, opened the first time something asks for it, with the client's
-server, credentials and reconnection. `ioredis` subscribes again by itself
-after reconnecting.
+per process, with the client's server, credentials and reconnection. It
+connects on its first `SUBSCRIBE`, so a process that only sends can hand it to
+`RedisBroadcast` without holding an idle connection. `ioredis` subscribes again
+by itself after reconnecting.
 
 It is closed with the application, together with the client. A subscriber
 built beside the module is one that nothing quits, and it keeps the process

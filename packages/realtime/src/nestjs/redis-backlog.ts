@@ -23,13 +23,38 @@ export interface RedisBacklogOptions {
  *
  * Redis runs a script atomically, so the number and the row arrive together or
  * neither does.
+ *
+ * **A channel starts at the Redis server's clock, in milliseconds**, not at 1.
+ * The counter expires with the channel, so a channel that went quiet for a day
+ * and is used again starts over — and starting over at 1 numbered its next
+ * event below what a page left open overnight had already seen. That page
+ * skipped it as a duplicate, and every event after it up to its old position,
+ * and nothing told it. Starting at the clock numbers the new run above anything
+ * the old one handed out, unless it averaged more than one event a millisecond
+ * for its whole life, so an open page sees a jump — a gap — and resynchronises.
+ * Where the run began is kept beside it, because a client that joined the
+ * channel empty stands at 0 and is owed everything from there.
+ *
+ * The numbers are formatted with `%d` wherever they become text. Lua 5.1
+ * writes a number with at most fourteen significant digits, so a sequence that
+ * outgrew them would be stored as an exponent — a corrupted row, not an error.
  */
 const APPEND = `
-  local seq = redis.call('INCR', KEYS[1])
-  redis.call('ZADD', KEYS[2], seq, ARGV[1] .. seq .. ARGV[2])
+  local seq
+  if redis.call('EXISTS', KEYS[1]) == 1 then
+    seq = redis.call('INCR', KEYS[1])
+  else
+    local now = redis.call('TIME')
+    seq = tonumber(now[1]) * 1000 + math.floor(tonumber(now[2]) / 1000)
+    redis.call('SET', KEYS[1], string.format('%d', seq))
+    redis.call('SET', KEYS[3], string.format('%d', seq))
+  end
+  local id = string.format('%d', seq)
+  redis.call('ZADD', KEYS[2], id, ARGV[1] .. id .. ARGV[2])
   redis.call('ZREMRANGEBYRANK', KEYS[2], 0, -1 - tonumber(ARGV[3]))
   redis.call('EXPIRE', KEYS[1], ARGV[4])
   redis.call('EXPIRE', KEYS[2], ARGV[4])
+  redis.call('EXPIRE', KEYS[3], ARGV[4])
   return seq
 `;
 
@@ -76,9 +101,10 @@ export class RedisBacklog implements BacklogPort {
      */
     const seq = (await this.redis.eval(
       APPEND,
-      2,
+      3,
       this.seqKey(channel),
       this.logKey(channel),
+      this.firstKey(channel),
       '{"seq":',
       `,${body.slice(1)}`,
       String(this.keep),
@@ -103,15 +129,21 @@ export class RedisBacklog implements BacklogPort {
     });
   }
 
-  async bounds(channel: string): Promise<{ oldest: number; latest: number }> {
-    const [first, last] = await Promise.all([
+  async bounds(channel: string): Promise<{ oldest: number; latest: number; first?: number }> {
+    const [head, tail, begun] = await Promise.all([
       this.redis.zrange(this.logKey(channel), 0, 0, 'WITHSCORES'),
       this.redis.zrange(this.logKey(channel), -1, -1, 'WITHSCORES'),
+      this.redis.get(this.firstKey(channel)),
     ]);
 
-    if (first.length < 2 || last.length < 2) return { oldest: 0, latest: 0 };
+    if (head.length < 2 || tail.length < 2) return { oldest: 0, latest: 0 };
 
-    return { oldest: Number(first[1]), latest: Number(last[1]) };
+    return {
+      oldest: Number(head[1]),
+      latest: Number(tail[1]),
+      // Absent for a channel begun before runs were recorded, which began at 1.
+      ...(begun === null ? {} : { first: Number(begun) }),
+    };
   }
 
   private seqKey(channel: string): string {
@@ -120,5 +152,10 @@ export class RedisBacklog implements BacklogPort {
 
   private logKey(channel: string): string {
     return `${this.prefix}:log:${channel}`;
+  }
+
+  /** Where the channel's current run began: what a client standing at 0 is owed from. */
+  private firstKey(channel: string): string {
+    return `${this.prefix}:first:${channel}`;
   }
 }

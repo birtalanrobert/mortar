@@ -34,8 +34,13 @@ export interface BacklogPort {
    * `oldest` is what makes a `gap` frame possible: a client that asks from
    * before it cannot be served, and must be told rather than sent a partial
    * replay that looks complete.
+   *
+   * `first` is the number the channel's current run began at, for a backlog
+   * that does not begin at 1. A client standing at 0 has seen nothing, and is
+   * owed everything from `first` on; only `first` says whether that is still
+   * held or has been trimmed away. Absent, it is 1.
    */
-  bounds(channel: string): Promise<{ oldest: number; latest: number }>;
+  bounds(channel: string): Promise<{ oldest: number; latest: number; first?: number }>;
 }
 
 /**

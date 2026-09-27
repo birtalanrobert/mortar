@@ -41,7 +41,10 @@ Three behaviours are worth knowing before using it:
 - **It resumes from where it stood.** A reconnection subscribes with the last
   sequence it saw in each channel, so the events that arrived while it was away
   are sent. Subscribing "from now" loses exactly the window a reconnection
-  exists to cover.
+  exists to cover. A client that joined a channel while it was empty stands at
+  **0**, and 0 is a position, not a newcomer: it is sent everything the
+  channel has carried since. Only a channel the client has no position in at
+  all is joined from now.
 - **Duplicates are normal.** A resume overlaps the live stream by design,
   because the alternative is a race in which the gap between "here is your
   backlog" and "you are now live" loses an event. `ChannelCursor` makes the
@@ -87,6 +90,15 @@ An event arriving over the broadcast from another process goes through
 second database nobody chose; a bounded one can fail to answer, and saying so
 out loud is what keeps a client honest. `MemoryBacklog` implements it for tests
 and single-process deployments.
+
+**Numbers never go backwards, even across a channel that was forgotten.**
+`RedisBacklog` lets a quiet channel expire, and a channel used again starts over.
+It starts at the Redis server's clock in milliseconds rather than at 1, so its
+next event is numbered above anything a page left open overnight has seen. The
+page sees a jump and resynchronises. Numbered from 1, the same event would have
+looked like a duplicate and been skipped without a word. A client standing
+further along than a channel has ever been, such as after a `MemoryBacklog`
+restarted with its process, is told to start again.
 
 ## The server half
 

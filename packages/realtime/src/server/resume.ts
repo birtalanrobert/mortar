@@ -8,34 +8,48 @@ import type { RealtimeEvent, ServerFrame } from '../wire';
  * place — which is what makes the fallback a fallback rather than a second
  * protocol that behaves slightly differently on the day it is needed.
  *
- * Three outcomes, and the third is the one that has to be honest:
+ * `since` is the client's position in the channel, or `undefined` when it has
+ * none. The two are different questions. No position is a client joining: it
+ * starts from now. A position of 0 is a client that joined while the channel
+ * was empty, and has therefore seen nothing the channel has carried since —
+ * so everything held is what it missed.
  *
- * - **Nothing.** The client is current. The commonest case, and it must be
- *   cheap: a display polling every three seconds mostly asks for nothing.
+ * Four outcomes, and the last two are the ones that have to be honest:
+ *
+ * - **Nothing.** The client is current, or has just joined. The commonest
+ *   case, and it must be cheap: a display polling every three seconds mostly
+ *   asks for nothing.
  * - **Events.** Everything after where it stood, oldest first.
- * - **A gap.** The client asked from before the backlog reaches. It cannot be
- *   served, and it is told so — a partial replay that looks complete is the
- *   failure this whole package exists to prevent.
+ * - **A gap, behind.** The client asked from before the backlog reaches. It
+ *   cannot be served, and it is told so — a partial replay that looks complete
+ *   is the failure this whole package exists to prevent.
+ * - **A gap, ahead.** The client stands further along than the channel has ever
+ *   been, so the channel started again: a `MemoryBacklog` restarted with its
+ *   process. What the client believes it saw is not what the channel holds, and
+ *   every event up to its position would be skipped as already seen.
  */
 export async function resume(
   backlog: BacklogPort,
   channel: string,
-  since: number,
+  since: number | undefined,
 ): Promise<{ events: readonly RealtimeEvent[]; gap: ServerFrame | null; latest: number }> {
-  const { oldest, latest } = await backlog.bounds(channel);
-
-  // A channel with nothing in it. Not a gap: there is nothing to have missed.
-  if (latest === 0) return { events: [], gap: null, latest: 0 };
+  const { oldest, latest, first = 1 } = await backlog.bounds(channel);
 
   /*
-   * `since === 0` means "I am new here" rather than "I have seen nothing and
-   * want everything since the beginning of time". A screen bolted to a wall and
-   * switched on at six in the evening does not want the tickets from lunch, and
-   * a `gap` frame would make it reload for nothing.
+   * No position: a client joining. A screen bolted to a wall and switched on at
+   * six in the evening does not want the tickets from lunch, and a `gap` frame
+   * would make it reload for nothing.
    */
-  if (since === 0) return { events: [], gap: null, latest };
+  if (since === undefined) return { events: [], gap: null, latest };
 
-  if (since < oldest - 1) {
+  // 0 stands just before the channel's first event, whatever that is numbered.
+  const position = since === 0 ? first - 1 : since;
+
+  // Current — or a channel with nothing in it and a client that has seen
+  // nothing, which is not a gap: there is nothing to have missed.
+  if (position === latest) return { events: [], gap: null, latest };
+
+  if (position > latest || position < oldest - 1) {
     return {
       events: [],
       gap: { kind: 'gap', channel, from: latest },
@@ -43,5 +57,5 @@ export async function resume(
     };
   }
 
-  return { events: await backlog.since(channel, since), gap: null, latest };
+  return { events: await backlog.since(channel, position), gap: null, latest };
 }

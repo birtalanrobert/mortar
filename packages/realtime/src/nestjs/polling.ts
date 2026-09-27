@@ -25,7 +25,8 @@ export async function pollSince(
   const latest: Record<string, number> = {};
 
   for (const channel of channels) {
-    const answer = await resume(backlog, channel, since[channel] ?? 0);
+    // Absent is no position, which is not the same as a position of 0.
+    const answer = await resume(backlog, channel, since[channel]);
 
     latest[channel] = answer.latest;
     if (answer.gap) {

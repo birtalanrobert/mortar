@@ -10,7 +10,7 @@ import type { RealtimeEvent } from '../wire';
 import { RedisBacklog } from './redis-backlog';
 import { RedisBroadcast } from './redis-broadcast';
 import { RealtimeSocketServer } from './socket';
-import { pollSince } from './polling';
+import { parsePollQuery, pollSince } from './polling';
 
 /**
  * The whole thing, over a real socket and a real Redis.
@@ -87,10 +87,14 @@ describe('a realtime gateway', () => {
     client.start();
     await settle();
 
-    await publisher.publish({ channel: 'station:grill', type: 'ticket.created', data: { id: 1 } });
+    const sent = await publisher.publish({
+      channel: 'station:grill',
+      type: 'ticket.created',
+      data: { id: 1 },
+    });
     await settle();
 
-    expect(received.map((event) => event.seq)).toEqual([1]);
+    expect(received.map((event) => event.seq)).toEqual([sent.seq]);
     client.stop();
   });
 
@@ -108,7 +112,8 @@ describe('a realtime gateway', () => {
     );
 
     const seqs = published.map((event) => event.seq).sort((a, b) => a - b);
-    expect(seqs).toEqual(Array.from({ length: 20 }, (_, index) => index + 1));
+    const first = seqs[0]!;
+    expect(seqs).toEqual(Array.from({ length: 20 }, (_, index) => first + index));
   });
 
   it('sends a reconnecting client exactly what it missed', async () => {
@@ -116,7 +121,7 @@ describe('a realtime gateway', () => {
     client.start();
     await settle();
 
-    await publisher.publish({ channel: 'station:grill', type: 'a', data: {} });
+    const first = await publisher.publish({ channel: 'station:grill', type: 'a', data: {} });
     await settle();
 
     // The display loses its network, and three tickets arrive while it is away.
@@ -132,7 +137,8 @@ describe('a realtime gateway', () => {
      * The window a reconnection exists to cover. A client that subscribed from
      * now would have a kitchen missing three tickets and no way to know.
      */
-    expect(received.map((event) => event.seq)).toEqual([1, 2, 3, 4]);
+    expect(received.map((event) => event.type)).toEqual(['a', 'b', 'c', 'd']);
+    expect(received.map((event) => event.seq - first.seq)).toEqual([0, 1, 2, 3]);
     client.stop();
   });
 
@@ -169,8 +175,9 @@ describe('a realtime gateway', () => {
   });
 
   it('starts a new screen at now rather than at this morning', async () => {
+    let last = 0;
     for (let index = 0; index < 4; index += 1) {
-      await publisher.publish({ channel: 'station:pass', type: 'x', data: { index } });
+      last = (await publisher.publish({ channel: 'station:pass', type: 'x', data: { index } })).seq;
     }
 
     const { client, received, resyncs } = connect(['station:pass']);
@@ -181,7 +188,7 @@ describe('a realtime gateway', () => {
     // lunch — and must not reload for nothing on every boot.
     expect(received).toEqual([]);
     expect(resyncs).toEqual([]);
-    expect(client.seenAt('station:pass')).toBe(4);
+    expect(client.seenAt('station:pass')).toBe(last);
 
     client.stop();
   });
@@ -250,23 +257,26 @@ describe('a realtime gateway', () => {
     local.onEvent((event) => seen.push(event));
     other.onEvent((event) => elsewhere.push(event));
 
-    await local.publish({ channel: 'station:echo', type: 'ticket.created', data: {} });
+    const sent = await local.publish({
+      channel: 'station:echo',
+      type: 'ticket.created',
+      data: {},
+    });
     await settle(300);
 
     // Once at home — delivered locally, not again on the way back.
-    expect(seen.map((event) => event.seq)).toEqual([1]);
+    expect(seen.map((event) => event.seq)).toEqual([sent.seq]);
     // And once at the other process, which is the entire point of sending it.
-    expect(elsewhere.map((event) => event.seq)).toEqual([1]);
+    expect(elsewhere.map((event) => event.seq)).toEqual([sent.seq]);
 
     for (const client of [mine, theirs, listening, alsoListening]) client.disconnect();
   });
 
   it('answers the polling fallback with the same events as the socket', async () => {
-    for (const type of ['a', 'b']) {
-      await publisher.publish({ channel: 'station:fry', type, data: {} });
-    }
+    const first = await publisher.publish({ channel: 'station:fry', type: 'a', data: {} });
+    const second = await publisher.publish({ channel: 'station:fry', type: 'b', data: {} });
 
-    const answer = await pollSince(backlog, ['station:fry'], { 'station:fry': 1 });
+    const answer = await pollSince(backlog, ['station:fry'], { 'station:fry': first.seq });
 
     /*
      * The same `resume` the socket uses, which is what stops the fallback being
@@ -274,16 +284,20 @@ describe('a realtime gateway', () => {
      */
     expect(answer.events.map((event) => event.type)).toEqual(['b']);
     expect(answer.gaps).toEqual([]);
-    expect(answer.latest).toEqual({ 'station:fry': 2 });
+    expect(answer.latest).toEqual({ 'station:fry': second.seq });
   });
 
   it('names only the channel a poller is too far behind in', async () => {
-    for (let index = 0; index < 8; index += 1) {
+    const busy = await publisher.publish({ channel: 'busy', type: 'x', data: { index: 0 } });
+    for (let index = 1; index < 8; index += 1) {
       await publisher.publish({ channel: 'busy', type: 'x', data: { index } });
     }
-    await publisher.publish({ channel: 'quiet', type: 'x', data: {} });
+    const quiet = await publisher.publish({ channel: 'quiet', type: 'x', data: {} });
 
-    const answer = await pollSince(backlog, ['busy', 'quiet'], { busy: 1, quiet: 1 });
+    const answer = await pollSince(backlog, ['busy', 'quiet'], {
+      busy: busy.seq,
+      quiet: quiet.seq,
+    });
 
     // A client current in one channel and stranded in another must not be made
     // to reload both.
@@ -302,5 +316,125 @@ describe('a realtime gateway', () => {
 
     expect(received.map((event) => event.type)).toEqual(['mine']);
     client.stop();
+  });
+
+  it('numbers a channel that was forgotten and used again above what it was, so an open page notices', async () => {
+    const { client, received, resyncs } = connect(['sleepy']);
+    client.start();
+    await settle();
+
+    await publisher.publish({ channel: 'sleepy', type: 'evening', data: {} });
+    await settle();
+
+    // A quiet night: what `EXPIRE` does to the channel a day later.
+    await redis.del(
+      'test-realtime:seq:sleepy',
+      'test-realtime:log:sleepy',
+      'test-realtime:first:sleepy',
+    );
+
+    await publisher.publish({ channel: 'sleepy', type: 'morning', data: {} });
+    await settle(300);
+
+    /*
+     * Numbered from 1 again, "morning" arrived below where the page stood and
+     * was skipped as a duplicate, and nothing said so. Numbered from the clock,
+     * it is a jump: the page is told to fetch its state, and carries on.
+     */
+    expect(resyncs).toContain('sleepy');
+
+    await publisher.publish({ channel: 'sleepy', type: 'noon', data: {} });
+    await settle();
+    expect(received.map((event) => event.type)).toEqual(['evening', 'noon']);
+    client.stop();
+  });
+
+  it('replays to a returning client what reached a channel that was empty when it joined', async () => {
+    const { client, received, resyncs } = connect(['fresh']);
+    client.start();
+    await settle();
+
+    // The phone locks, and a timer finishes while it is away.
+    client.stop();
+    await publisher.publish({ channel: 'fresh', type: 'finished', data: {} });
+
+    client.start();
+    await settle(300);
+
+    /*
+     * It stood at 0, which is a position. Taken for a newcomer, it was answered
+     * from now and never told about the one event it came back for.
+     */
+    expect(received.map((event) => event.type)).toEqual(['finished']);
+    expect(resyncs).toEqual([]);
+    client.stop();
+  });
+
+  describe('over the polling fallback', () => {
+    const polling = (channels: string[]) => {
+      const received: RealtimeEvent[] = [];
+      const resyncs: string[] = [];
+
+      const client = new RealtimeClient({
+        url: `ws://127.0.0.1:${port}/nowhere`,
+        pollUrl: 'http://in-process.test/poll',
+        channels,
+        onEvent: (event) => received.push(event),
+        onResync: (channel) => resyncs.push(channel),
+        pollMs: 100,
+        // A network that eats WebSockets, which is what the fallback is for.
+        socketFactory: () => {
+          throw new Error('blocked');
+        },
+        // The product's poll route, in process: what it reads, and what it answers.
+        fetch: (async (url: string) => {
+          const { channels: asked, since } = parsePollQuery(
+            Object.fromEntries(new URL(url).searchParams),
+          );
+          const body = await pollSince(backlog, asked, since);
+          return { ok: true, json: async () => body };
+        }) as unknown as typeof fetch,
+      });
+
+      return { client, received, resyncs };
+    };
+
+    it('delivers the first event of a channel it joined while it was empty', async () => {
+      const { client, received } = polling(['station:salad']);
+      client.start();
+      await settle(250);
+
+      await publisher.publish({ channel: 'station:salad', type: 'first', data: {} });
+      await settle(250);
+
+      expect(received.map((event) => event.type)).toEqual(['first']);
+      client.stop();
+    });
+
+    it('starts again where the channel stands when it fell too far behind', async () => {
+      const { client, received, resyncs } = polling(['station:wok']);
+      await publisher.publish({ channel: 'station:wok', type: 'before', data: {} });
+      client.start();
+      await settle(250);
+      client.stop();
+
+      // The backlog keeps five; eight arrive while this client is away.
+      for (let index = 0; index < 8; index += 1) {
+        await publisher.publish({ channel: 'station:wok', type: 'missed', data: { index } });
+      }
+
+      client.start();
+      await settle(250);
+      await publisher.publish({ channel: 'station:wok', type: 'after', data: {} });
+      await settle(250);
+
+      /*
+       * Told, once, and moved to where the channel stands. Ignoring `gaps`, the
+       * poller asked from where it had stood for ever and delivered nothing more.
+       */
+      expect(resyncs).toEqual(['station:wok']);
+      expect(received.map((event) => event.type)).toEqual(['after']);
+      client.stop();
+    });
   });
 });

@@ -41,7 +41,8 @@ export class RedisService {
   }
 
   /**
-   * The connection this process listens on for pub/sub, opened on first use.
+   * The connection this process listens on for pub/sub. It connects on its
+   * first `SUBSCRIBE`, not when it is read.
    *
    * A second connection because a Redis connection that has subscribed may
    * issue nothing but subscriptions, so sharing `client` would break every
@@ -55,12 +56,19 @@ export class RedisService {
    * And it is closed with the application: a subscriber opened beside this
    * module is one nothing quits, and it keeps a process alive after `SIGTERM`.
    *
+   * Lazy because code that is handed the subscriber is not always code that
+   * listens. `RedisBroadcast` takes it in its constructor, and a process that
+   * only sends — a worker publishing into a gateway's backlog — builds one and
+   * never calls `listen`. Connecting on read would give that process an idle
+   * connection for its whole life.
+   *
    * A copy of `client`'s options, so the same server, credentials and
    * reconnection. `ioredis` re-subscribes by itself after a reconnection.
    */
   get subscriber(): Redis {
     this.listening ??= this.client.duplicate({
       connectionName: `${this.client.options.connectionName ?? 'mortar-app'}-subscriber`,
+      lazyConnect: true,
     });
     return this.listening;
   }
@@ -69,12 +77,24 @@ export class RedisService {
     return checkRedisHealth(this.client, timeoutMs);
   }
 
-  /** Quits the client and, if one was opened, the subscriber. */
+  /** Quits the client and, if one was handed out, the subscriber. */
   async close(): Promise<void> {
     const subscriber = this.listening;
     this.listening = null;
-    await Promise.all([this.client.quit(), subscriber?.quit()]);
+    await Promise.all([this.client.quit(), subscriber && closeSubscriber(subscriber)]);
   }
+}
+
+/**
+ * A subscriber that never subscribed is disconnected rather than quit.
+ * `QUIT` is a command, and a command would open the connection it closes.
+ */
+async function closeSubscriber(subscriber: Redis): Promise<void> {
+  if (subscriber.status === 'wait') {
+    subscriber.disconnect();
+    return;
+  }
+  await subscriber.quit();
 }
 
 export interface RedisModuleOptions extends CreateRedisOptions {
