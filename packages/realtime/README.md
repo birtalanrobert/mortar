@@ -114,7 +114,13 @@ RealtimeModule.forRootAsync({
 });
 
 // In `main.ts`, where the HTTP server exists:
-const server = new RealtimeSocketServer({ publisher, backlog, authorise });
+const server = new RealtimeSocketServer({
+  publisher,
+  backlog,
+  admit, // is this a caller at all? Asked once, before the upgrade
+  authorise, // which of the channels it asked for may it hear?
+  onError: (error) => logger.error('realtime', error),
+});
 server.attach(app.getHttpServer());
 ```
 
@@ -135,6 +141,18 @@ moment any client asks. The socket is the fast path; the backlog is the truth.
 `authorise` returns the **subset** a caller may have rather than a boolean, so a
 display asking for two stations it may see and one it may not gets the two —
 rather than a connection that fails for a reason nobody can see.
+
+`admit` is asked **once, before the upgrade**, whether there is a caller at all.
+Without it, a request with no credential is upgraded, granted nothing, and kept
+alive by the heartbeat for as long as it answers: a socket held for free by
+anybody who can reach the port. It is also where `Origin` is checked, because a
+browser sends its cookies on a WebSocket upgrade from any page. A refusal is
+answered `403`, and an `admit` that throws `503`.
+
+A client frame may weigh **64 KiB** unless `maxPayload` says otherwise; `ws`'s
+own default is 100 MiB. A subscription that `authorise` or the backlog could not
+answer closes the connection with `1011`, so the client polls and comes back
+from where it stood. The error goes to `onError`, where the product logs it.
 
 For the polling route, `parsePollQuery` reads what the client sends and
 `pollSince` answers it through the same `resume`.

@@ -4,6 +4,53 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## realtime 2.1.0
+
+### Fixed
+
+- **A subscription that could not be answered no longer takes the process
+  down.** `RealtimeSocketServer` handed each frame to an async handler and
+  dropped its promise. When `authorise` threw, or the backlog did, the rejection
+  had nowhere to go. An unhandled rejection ends a Node process by default, so a
+  database blip in a product's `authorise` could stop every connection on that
+  replica.
+
+  The connection is now closed with `1011`. The client polls, reconnects and
+  resumes from where it stood, so nothing is lost. Carrying on was not an
+  option: a subscription that failed part-way leaves the connection holding some
+  channels with no `welcome`, and the client would believe in channels it does
+  not have. The error goes to the new `onError`.
+
+### Added
+
+- **`admit`**: whether a connection is opened at all, asked once before the
+  upgrade. Until now every upgrade on the path was accepted. A request with no
+  credential was upgraded and granted nothing by `authorise`. The heartbeat then
+  kept that socket alive for as long as the caller answered, so anybody who
+  could reach the port could hold sockets for free. `admit` is also where a
+  product checks `Origin`: a browser sends its cookies on a WebSocket upgrade
+  from any page, so a gateway that authenticates by cookie must refuse pages it
+  does not serve.
+
+  A refusal is answered `403 Forbidden`, the status RFC 6455 names. A throw is
+  answered `503 Service Unavailable`, because a check that could not be made
+  does not mean the caller was refused. It is asked only after `ws` has
+  validated the handshake and matched the path.
+
+- **`maxPayload`**: the largest frame a client may send, in bytes. A heavier
+  frame closes the connection with `1009`.
+
+- **`onError`**: told when an `admit` threw or a subscription failed, so the
+  product can log it. A reporter that throws is contained.
+
+### Changed
+
+- **A client frame may weigh 64 KiB by default.** Before, the limit was `ws`'s
+  own default of 100 MiB, which let any connection make the process buffer and
+  parse a hundred megabytes of JSON. The heaviest frame a client sends is a
+  subscription. One naming a few hundred channels, with its position in each, is
+  a few kilobytes.
+
 ## observability 1.5.0
 
 ### Fixed
