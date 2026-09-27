@@ -1,8 +1,10 @@
+import { NestFactory } from '@nestjs/core';
 import type { Redis } from 'ioredis';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { RedisCache } from './cache';
 import { checkRedisHealth } from './health';
 import { RedisLocks } from './lock';
+import { RedisModule, RedisService } from './nest';
 import { RedisRateLimiter } from './rate-limit';
 import { createTestRedis, flushTestRedis } from './testing';
 
@@ -249,5 +251,68 @@ describe('rate limiting', () => {
       Array.from({ length: 20 }, () => limiter.consume('stampede', { limit: 5, windowMs: 2000 })),
     );
     expect(results.filter((r) => r.allowed)).toHaveLength(5);
+  });
+});
+
+describe('pub/sub — redis.subscriber', () => {
+  const connections = (redis: Redis) => redis.client('LIST') as Promise<string>;
+  // `quit()` resolves on Redis's `OK`; the connection reports `end` once its
+  // socket has closed, a moment later.
+  const ended = (redis: Redis) =>
+    redis.status === 'end'
+      ? Promise.resolve()
+      : new Promise<void>((done) => redis.once('end', () => done()));
+
+  it('is one connection of its own, which hears what the client publishes', async () => {
+    const redis = new RedisService(createTestRedis('pubsub'));
+    const subscriber = redis.subscriber;
+
+    // One per process, however many things listen.
+    expect(redis.subscriber).toBe(subscriber);
+    expect(subscriber).not.toBe(redis.client);
+
+    const heard = new Promise<string>((done) =>
+      subscriber.on('message', (_channel, message) => done(message)),
+    );
+    await subscriber.subscribe('pubsub-suite:news');
+    await redis.client.publish('pubsub-suite:news', 'hello');
+    expect(await heard).toBe('hello');
+
+    // A subscribed connection may issue nothing else; the client still can.
+    await redis.client.set('still-answering', 'yes');
+    expect(await redis.client.get('still-answering')).toBe('yes');
+
+    // Named for what it is, so `CLIENT LIST` tells the two apart.
+    expect(await connections(redis.client)).toContain('name=mortar-test-subscriber');
+
+    await redis.close();
+  });
+
+  it('is closed with the application, with the client', async () => {
+    const client = createTestRedis('pubsub');
+    const app = await NestFactory.createApplicationContext(RedisModule.forRootWithClient(client), {
+      logger: false,
+    });
+    const subscriber = app.get(RedisService).subscriber;
+    await subscriber.subscribe('pubsub-suite:closing');
+    const closing = Promise.all([ended(subscriber), ended(client)]);
+
+    await app.close();
+
+    // Left open, it would keep the process alive after SIGTERM.
+    await closing;
+  });
+
+  it('is not opened by a process that never listens', async () => {
+    const client = createTestRedis('pubsub');
+    const app = await NestFactory.createApplicationContext(RedisModule.forRootWithClient(client), {
+      logger: false,
+    });
+    await client.ping();
+
+    expect(await connections(client)).not.toContain('name=mortar-test-subscriber');
+    const closing = ended(client);
+    await app.close();
+    await closing;
   });
 });

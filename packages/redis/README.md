@@ -48,7 +48,8 @@ export class Thing {
 below do not cover.
 
 `RedisService` bundles four things so a consumer injects one dependency rather
-than four; each is also usable on its own outside Nest.
+than four; each is also usable on its own outside Nest. It also holds the
+process's pub/sub connection, `redis.subscriber`, described below.
 
 ## Caching — `redis.cache`
 
@@ -89,6 +90,23 @@ if (!result.allowed) throw new RateLimitedError(result.retryAfter); // seconds
 
 `peek` asks without consuming, for a route that wants to report a budget it is
 not spending.
+
+## Pub/sub — `redis.subscriber`
+
+```ts
+const broadcast = new RedisBroadcast(redis.client, redis.subscriber, 'holdfast:realtime');
+await broadcast.listen(publisher);
+```
+
+The connection a process listens on. It is separate from `redis.client`,
+because a connection that has subscribed may issue nothing else. There is one
+per process, opened the first time something asks for it, with the client's
+server, credentials and reconnection. `ioredis` subscribes again by itself
+after reconnecting.
+
+It is closed with the application, together with the client. A subscriber
+built beside the module is one that nothing quits, and it keeps the process
+alive after `SIGTERM`. Publish on `redis.client`.
 
 ## Health
 

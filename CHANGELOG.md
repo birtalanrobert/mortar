@@ -4,6 +4,25 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## redis 1.1.0
+
+### Added
+
+- **`RedisService.subscriber`**: the connection a process listens on for
+  pub/sub. It is opened on first use as a copy of `client`'s options, named
+  `<client name>-subscriber` in `CLIENT LIST`, and shared by everything in the
+  process that listens.
+
+  A subscribed connection may issue nothing but subscriptions, so pub/sub
+  always needed a second connection, and there was nowhere to get one. Each
+  product built its own from the URL, then had to remember to quit it. One
+  product built three. A subscriber nothing quits keeps a process alive after
+  `SIGTERM`.
+
+- **`RedisService.close()`**: quits the client and, if one was opened, the
+  subscriber. `RedisModule` now calls it on shutdown instead of quitting only
+  the client.
+
 ## realtime 2.1.0
 
 ### Fixed

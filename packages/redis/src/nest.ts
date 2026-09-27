@@ -29,6 +29,7 @@ export class RedisService {
   readonly locks: RedisLocks;
   readonly cache: RedisCache;
   readonly rateLimit: RedisRateLimiter;
+  private listening: Redis | null = null;
 
   constructor(
     readonly client: Redis,
@@ -39,8 +40,40 @@ export class RedisService {
     this.rateLimit = new RedisRateLimiter(client);
   }
 
+  /**
+   * The connection this process listens on for pub/sub, opened on first use.
+   *
+   * A second connection because a Redis connection that has subscribed may
+   * issue nothing but subscriptions, so sharing `client` would break every
+   * cache read and lock behind the first `SUBSCRIBE`. One per process, shared
+   * by everything that listens, because each subscription is a channel on it
+   * rather than a connection of its own.
+   *
+   * Owned here rather than by each feature that listens, for two reasons. The
+   * rule that a service reaches Redis through `RedisService` holds for pub/sub
+   * too, rather than each gateway building clients from a URL it re-reads.
+   * And it is closed with the application: a subscriber opened beside this
+   * module is one nothing quits, and it keeps a process alive after `SIGTERM`.
+   *
+   * A copy of `client`'s options, so the same server, credentials and
+   * reconnection. `ioredis` re-subscribes by itself after a reconnection.
+   */
+  get subscriber(): Redis {
+    this.listening ??= this.client.duplicate({
+      connectionName: `${this.client.options.connectionName ?? 'mortar-app'}-subscriber`,
+    });
+    return this.listening;
+  }
+
   health(timeoutMs?: number): Promise<RedisHealth> {
     return checkRedisHealth(this.client, timeoutMs);
+  }
+
+  /** Quits the client and, if one was opened, the subscriber. */
+  async close(): Promise<void> {
+    const subscriber = this.listening;
+    this.listening = null;
+    await Promise.all([this.client.quit(), subscriber?.quit()]);
   }
 }
 
@@ -51,7 +84,7 @@ export interface RedisModuleOptions extends CreateRedisOptions {
 @Global()
 @Module({})
 export class RedisModule implements OnApplicationShutdown {
-  constructor(@Inject(MORTAR_REDIS) private readonly client: Redis) {}
+  constructor(@Inject(RedisService) private readonly redis: RedisService) {}
 
   static forRoot(options: RedisModuleOptions): DynamicModule {
     const { cache, ...connection } = options;
@@ -109,6 +142,6 @@ export class RedisModule implements OnApplicationShutdown {
   }
 
   async onApplicationShutdown(): Promise<void> {
-    await this.client.quit();
+    await this.redis.close();
   }
 }
