@@ -102,15 +102,19 @@ this.scheduler.register({
   name: 'reminders.purge',
   intervalMs: 60 * 60 * 1000,
   run: async () => this.queues.enqueue(purgeReminders, { olderThan }),
-  // Not on start: a rolling deploy restarts every replica within a minute, and
-  // `runOnStart` would turn that into one sweep per replica.
+  // On start, it runs only if this hour has not run anywhere in the fleet yet;
+  // without it, the first run is at the next hour.
   runOnStart: false,
 });
 ```
 
-`TaskScheduler` holds a distributed lock per run, so a fleet executes a task
-once rather than once each. Keep the callback short — it enqueues rather than
-doing the work, so the lock is held for milliseconds.
+`TaskScheduler` runs a task **once per interval across the fleet**. Intervals
+are counted from the epoch, so every replica ticks at the start of each one —
+12:00, 13:00, 14:00 for an hour — and the first to tick claims it. The claim is
+never released, only left to expire, so a replica that reaches the same interval
+later finds it taken; and a run still going when the next interval starts is not
+joined by a second. Keep the callback short — it enqueues rather than doing the
+work.
 
 ## The scanner
 

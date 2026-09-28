@@ -4,6 +4,58 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## jobs 1.2.0
+
+### Fixed
+
+- **`TaskScheduler` ran a task once per replica, not once per fleet.** Each
+  replica ticked one interval after it had started, and the lock was released
+  when a run finished. Replicas start at different moments, so their ticks fell
+  at different points in each interval, and each one found the lock free:
+  three replicas ran a fifteen-minute task three times every fifteen minutes,
+  and a nightly task three times a night. The lock only ever stopped two runs
+  at the same instant. The integration test that claimed otherwise started five
+  schedulers in the same instant, which a fleet never does.
+
+  Each run now **claims its interval**. The key is never released, only left to
+  expire after the interval has passed, so a replica reaching the same interval
+  later finds it taken. The lock held while a run is going still keeps a run
+  that overruns into the next interval from being joined by a second.
+
+### Changed
+
+- **Ticks fall at the start of each interval, counted from the epoch**: 12:00,
+  12:15, 12:30 for fifteen minutes, on every replica. Before, a replica ticked
+  every interval from whenever it had started. Each tick is set afresh from the
+  clock, so a late timer never carries its lateness forward. `runOnStart` runs
+  at once only if the current interval has not run anywhere in the fleet.
+- **An interval must be a whole, positive number of milliseconds**, or
+  `register` throws.
+
+### Added
+
+- **`new TaskScheduler(locks, logger, { now })`**: the clock intervals are
+  counted on, for tests.
+
+## database 1.1.1
+
+### Fixed
+
+- **`afterCommit` callbacks registered inside a savepoint that rolled back ran
+  anyway.** Every level of a transaction pushed its callbacks onto one shared
+  list, the outermost level's. If a savepoint's work was rolled back, and the
+  caller caught the error and let the transaction commit, the side effects of
+  the undone work still ran: an email for an account whose creation was undone,
+  a job for a row that was never written. Each level now keeps its own list. A
+  savepoint hands its list to its parent when it is released and drops it when
+  it rolls back. Callbacks still run once, after the outermost commit, in the
+  order they were registered.
+
+- **`afterCommit` inside `bindTransactionManager` dropped its callback without a
+  word.** The code that opened the transaction commits it, out of this module's
+  sight, so the list those callbacks went onto was never run. `afterCommit` now
+  throws there, and says where to register the side effect instead.
+
 ## realtime 2.2.0
 
 Four ways a client could miss events without being told. Each is fixed below

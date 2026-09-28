@@ -218,30 +218,60 @@ describe('scheduled tasks', () => {
     await flushTestRedis(client);
   });
 
-  it('runs once across a fleet of replicas', async () => {
+  it('runs an interval once across a fleet, whenever each replica reaches it', async () => {
+    /*
+     * Three replicas, started a moment apart within the same hour: the way a
+     * rolling deploy starts them. The old test started five at the same instant,
+     * so the lock taken by one was still held when the others asked — which a
+     * fleet never does, and which hid that each later replica ran the task again.
+     */
     let runs = 0;
-    const schedulers = Array.from({ length: 5 }, () => new TaskScheduler(locks));
+    const within = Date.UTC(2026, 8, 28, 12, 20);
+    const schedulers: TaskScheduler[] = [];
 
-    await Promise.all(
-      schedulers.map(
-        (s) =>
-          new Promise<void>((resolve) => {
-            s.register({
-              name: 'nightly-close',
-              intervalMs: 60_000,
-              runOnStart: true,
-              lockTtlMs: 5_000,
-              run: async () => {
-                runs += 1;
-              },
-            });
-            setTimeout(resolve, 150);
-          }),
-      ),
-    );
+    for (let index = 0; index < 3; index += 1) {
+      const scheduler = new TaskScheduler(locks, undefined, { now: () => within });
+      schedulers.push(scheduler);
+      scheduler.register({
+        name: 'nightly-close',
+        intervalMs: 60 * 60_000,
+        runOnStart: true,
+        run: async () => {
+          runs += 1;
+        },
+      });
+      await settled(100);
+    }
 
     expect(runs).toBe(1);
     for (const s of schedulers) s.stop();
+  });
+
+  it('runs the next interval again, on whichever replica reaches it first', async () => {
+    let runs = 0;
+    let now = Date.UTC(2026, 8, 28, 12, 20);
+    const register = () => {
+      const scheduler = new TaskScheduler(locks, undefined, { now: () => now });
+      scheduler.register({
+        name: 'hourly-close',
+        intervalMs: 60 * 60_000,
+        runOnStart: true,
+        run: async () => {
+          runs += 1;
+        },
+      });
+      return scheduler;
+    };
+
+    const first = register();
+    await settled(100);
+    now += 60 * 60_000;
+    const second = register();
+    await settled(100);
+
+    expect(runs).toBe(2);
+    first.stop();
+    second.stop();
   });
 
   it('does not take the process down when a task throws', async () => {

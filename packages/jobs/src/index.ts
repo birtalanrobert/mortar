@@ -11,5 +11,5 @@ export {
 export { JobQueues, type QueueRegistryOptions } from './queue';
 export { JobWorkers, type JobHandler, type WorkerRegistryOptions } from './worker';
 export { WindowScanner, type ScanResult, type WindowScannerOptions } from './scanner';
-export { TaskScheduler, type ScheduledTask } from './scheduler';
+export { TaskScheduler, type ScheduledTask, type TaskSchedulerOptions } from './scheduler';
 export { JobsModule, MORTAR_QUEUE_CONNECTION, type JobsModuleOptions } from './nest';

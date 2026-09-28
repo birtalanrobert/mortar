@@ -195,6 +195,57 @@ describe('afterCommit', () => {
     expect(fired).toEqual(['outer', 'inner']);
   });
 
+  it('drops what was registered in a savepoint that rolled back, and keeps the rest', async () => {
+    const fired: string[] = [];
+    await runInTransaction(dataSource, async () => {
+      await afterCommit(() => void fired.push('outer'));
+      await expect(
+        runInTransaction(dataSource, async () => {
+          await afterCommit(() => void fired.push('rolled back'));
+          throw new Error('inner failed');
+        }),
+      ).rejects.toThrow('inner failed');
+    });
+
+    /*
+     * The transaction committed, but not the savepoint's work — so not what was
+     * to follow it. Sharing one list with the outermost level ran it anyway:
+     * the email for an account whose creation was undone, sent regardless.
+     */
+    expect(fired).toEqual(['outer']);
+  });
+
+  it('drops every level inside a savepoint that rolled back', async () => {
+    const fired: string[] = [];
+    await runInTransaction(dataSource, async () => {
+      await expect(
+        runInTransaction(dataSource, async () => {
+          await afterCommit(() => void fired.push('middle'));
+          // Released into the middle level, which then rolls back.
+          await runInTransaction(dataSource, async () => {
+            await afterCommit(() => void fired.push('inner'));
+          });
+          throw new Error('middle failed');
+        }),
+      ).rejects.toThrow('middle failed');
+    });
+
+    expect(fired).toEqual([]);
+  });
+
+  it('runs what every level registered in the order it was registered', async () => {
+    const fired: string[] = [];
+    await runInTransaction(dataSource, async () => {
+      await afterCommit(() => void fired.push('first'));
+      await runInTransaction(dataSource, async () => {
+        await afterCommit(() => void fired.push('second'));
+      });
+      await afterCommit(() => void fired.push('third'));
+    });
+
+    expect(fired).toEqual(['first', 'second', 'third']);
+  });
+
   it('runs immediately when there is no transaction, so callers need not branch', async () => {
     const fired: string[] = [];
     await afterCommit(() => void fired.push('immediate'));
@@ -212,6 +263,26 @@ describe('bindTransactionManager', () => {
       });
     });
     expect(await countRows()).toBe(1);
+  });
+
+  it('refuses afterCommit, whose callback it could never run', async () => {
+    const fired: string[] = [];
+    await dataSource.transaction(async (manager) => {
+      await bindTransactionManager(manager, async () => {
+        // The application commits this transaction, out of mortar's sight.
+        await expect(afterCommit(() => void fired.push('never'))).rejects.toThrow(
+          /bindTransactionManager/,
+        );
+        // Nor inside a savepoint within it.
+        await runInTransaction(dataSource, async () => {
+          await expect(afterCommit(() => void fired.push('never'))).rejects.toThrow(
+            /bindTransactionManager/,
+          );
+        });
+      });
+    });
+
+    expect(fired).toEqual([]);
   });
 
   it('rejects a non-transactional manager', async () => {

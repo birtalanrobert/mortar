@@ -16,8 +16,23 @@ interface TransactionScope {
   readonly queryRunner: QueryRunner;
   /** Nesting depth; > 0 means we are inside a savepoint, not a top-level tx. */
   readonly depth: number;
-  /** Callbacks to run once the outermost transaction has committed. */
+  /**
+   * Callbacks registered at this level, to run once the outermost transaction
+   * has committed.
+   *
+   * **One list per level, not one shared.** A savepoint hands its list to its
+   * parent when it is released and drops it when it rolls back, so a callback
+   * registered for work that was rolled back to a savepoint never runs — even
+   * though the transaction around it goes on to commit. A shared list ran it:
+   * the email for an account whose creation was undone, sent anyway.
+   */
   readonly afterCommit: Array<() => void | Promise<void>>;
+  /**
+   * Whether this module commits the transaction, and so knows when to run the
+   * callbacks. False for one bound from outside with `bindTransactionManager`,
+   * which the code that opened it commits.
+   */
+  readonly commitsHere: boolean;
 }
 
 const storage = new AsyncLocalStorage<TransactionScope>();
@@ -99,6 +114,7 @@ export async function runInTransaction<T>(
     queryRunner,
     depth: 0,
     afterCommit: [],
+    commitsHere: true,
   };
 
   try {
@@ -139,16 +155,19 @@ async function runInSavepoint<T>(
     manager: parent.manager,
     queryRunner,
     depth: parent.depth + 1,
-    // Nested callbacks land on the outermost list, so they fire once, after
-    // the transaction that actually commits.
-    afterCommit: parent.afterCommit,
+    afterCommit: [],
+    commitsHere: parent.commitsHere,
   };
 
   try {
     const result = await storage.run(scope, () => work(parent.manager));
     await queryRunner.query(`RELEASE SAVEPOINT "${name}"`);
+    // Its work is now the parent's, and so are its callbacks: they run once,
+    // after the transaction that actually commits, in the order registered.
+    parent.afterCommit.push(...scope.afterCommit);
     return result;
   } catch (error) {
+    // Its work is undone, and what was to follow that work goes with it.
     await queryRunner.query(`ROLLBACK TO SAVEPOINT "${name}"`);
     throw error;
   }
@@ -161,12 +180,28 @@ async function runInSavepoint<T>(
  * back: sending a confirmation, enqueuing a job, invalidating a cache. If no
  * transaction is active the callback runs immediately, so callers do not need
  * to branch.
+ *
+ * Registered inside a savepoint, it runs only if that savepoint is released as
+ * well as the transaction committed: work rolled back to a savepoint takes its
+ * callbacks with it.
+ *
+ * **Refused inside `bindTransactionManager`.** That transaction is committed
+ * by the code that opened it, which this module never sees, so the callback
+ * would never run — and a side effect silently dropped is the failure this
+ * function exists to prevent. Register it where that transaction is committed.
  */
 export async function afterCommit(callback: () => void | Promise<void>): Promise<void> {
   const scope = storage.getStore();
   if (!scope) {
     await callback();
     return;
+  }
+  if (!scope.commitsHere) {
+    throw new Error(
+      'afterCommit() cannot run inside a transaction bound with bindTransactionManager(): ' +
+        'that transaction is committed by the code that opened it, so the callback would ' +
+        'never run. Register the side effect where that transaction is committed.',
+    );
   }
   scope.afterCommit.push(callback);
 }
@@ -177,6 +212,10 @@ export async function afterCommit(callback: () => void | Promise<void>): Promise
  * The bridge for code that already has a manager — a TypeORM subscriber, or an
  * application using `dataSource.transaction()` directly — so mortar writes
  * inside it still join that transaction.
+ *
+ * `afterCommit` is refused inside it: the transaction is committed by the code
+ * that opened it, out of this module's sight, so a callback registered here
+ * could never be run.
  */
 export async function bindTransactionManager<T>(
   manager: EntityManager,
@@ -191,5 +230,5 @@ export async function bindTransactionManager<T>(
       'bindTransactionManager() requires a transactional EntityManager (one with a queryRunner).',
     );
   }
-  return storage.run({ manager, queryRunner, depth: 0, afterCommit: [] }, work);
+  return storage.run({ manager, queryRunner, depth: 0, afterCommit: [], commitsHere: false }, work);
 }

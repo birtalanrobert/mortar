@@ -95,6 +95,15 @@ standalone and as part of a larger transaction without two code paths.
 the outer one rolling back — recording that an external call was attempted, for
 instance.
 
+`afterCommit(callback)` is where side effects go: an email, an enqueued job, a
+cache invalidation. The callback runs once the outermost transaction commits,
+and at once when there is no transaction. **A callback registered inside a
+savepoint runs only if that savepoint is released too**, so work rolled back to
+a savepoint takes its side effects with it. `bindTransactionManager` binds a
+transaction that application code commits, out of this package's sight, so
+`afterCommit` is refused inside one rather than accepting a callback that would
+never run.
+
 **In a multi-tenant application use `runInTenantTransaction` from
 `@birtalanrobert/tenancy` instead.** It does everything this does and binds the
 tenant for row-level security; an unbound read on a protected table returns
