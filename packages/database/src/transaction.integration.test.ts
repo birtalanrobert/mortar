@@ -5,6 +5,7 @@ import {
   bindTransactionManager,
   getTransactionManager,
   isInTransaction,
+  joinCommits,
   resolveManager,
   runInTransaction,
   transactionDepth,
@@ -289,6 +290,114 @@ describe('bindTransactionManager', () => {
     await expect(bindTransactionManager(dataSource.manager, async () => undefined)).rejects.toThrow(
       /requires a transactional EntityManager/,
     );
+  });
+});
+
+describe('joinCommits', () => {
+  /** A participant that writes `marker` in each transaction it joins, and notes when that commits. */
+  const participant = (marker: string, seen: string[]) => async (manager: EntityManager) => {
+    await insert(manager, `${marker}-${seen.length}`);
+    seen.push('joined');
+    return () => void seen.push('committed');
+  };
+  const markers = async (marker: string) =>
+    (await dataSource.getRepository(TxTestRow).find())
+      .map((row) => row.id)
+      .filter((id) => id.startsWith(marker));
+
+  it('writes inside the transaction, just before it commits: with the work, or not at all', async () => {
+    const seen: string[] = [];
+    await joinCommits(participant('mark', seen), () =>
+      runInTransaction(dataSource, async (manager) => {
+        await insert(manager, 'work');
+        // Not yet: it joins as the transaction's last work.
+        expect(seen).toEqual([]);
+      }),
+    );
+
+    expect(seen).toEqual(['joined', 'committed']);
+    expect(await markers('mark')).toEqual(['mark-0']);
+    expect(await countRows()).toBe(2);
+  });
+
+  it('is never called for work that fails, which rolls back without it', async () => {
+    const seen: string[] = [];
+    await expect(
+      joinCommits(participant('mark', seen), () =>
+        runInTransaction(dataSource, async (manager) => {
+          await insert(manager, 'work');
+          throw new Error('refused');
+        }),
+      ),
+    ).rejects.toThrow('refused');
+
+    expect(seen).toEqual([]);
+    expect(await countRows()).toBe(0);
+  });
+
+  it('takes the work down with it when it throws', async () => {
+    await expect(
+      joinCommits(
+        async () => {
+          throw new Error('participant failed');
+        },
+        () => runInTransaction(dataSource, (manager) => insert(manager, 'work')),
+      ),
+    ).rejects.toThrow('participant failed');
+
+    expect(await countRows()).toBe(0);
+  });
+
+  it('joins the transaction that commits, never a savepoint inside it', async () => {
+    const seen: string[] = [];
+    await joinCommits(participant('mark', seen), () =>
+      runInTransaction(dataSource, async (manager) => {
+        await insert(manager, 'outer');
+        await runInTransaction(dataSource, (inner) => insert(inner, 'inner'));
+      }),
+    );
+
+    expect(seen).toEqual(['joined', 'committed']);
+  });
+
+  it('joins every transaction committed inside it, in any continuation, and none outside', async () => {
+    const seen: string[] = [];
+    await joinCommits(participant('mark', seen), async () => {
+      await runInTransaction(dataSource, (manager) => insert(manager, 'first'));
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      await runInTransaction(dataSource, (manager) => insert(manager, 'second'), {
+        independent: true,
+      });
+    });
+    await runInTransaction(dataSource, (manager) => insert(manager, 'after'));
+
+    expect(seen).toEqual(['joined', 'committed', 'joined', 'committed']);
+    expect(await markers('mark')).toHaveLength(2);
+  });
+
+  it('runs its callback only once the commit is visible from outside', async () => {
+    let visible: number | undefined;
+    await joinCommits(
+      async () => async () => {
+        visible = await dataSource.getRepository(TxTestRow).countBy({ id: 'work' });
+      },
+      () => runInTransaction(dataSource, (manager) => insert(manager, 'work')),
+    );
+    // The callback is not awaited by the commit; give it its turn.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(visible).toBe(1);
+  });
+
+  it('is not joined to a transaction the application commits', async () => {
+    const seen: string[] = [];
+    await joinCommits(participant('mark', seen), () =>
+      dataSource.transaction((manager) =>
+        bindTransactionManager(manager, () => insert(manager, 'bound')),
+      ),
+    );
+
+    expect(seen).toEqual([]);
   });
 });
 

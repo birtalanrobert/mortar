@@ -26,9 +26,11 @@ export {
   bindTransactionManager,
   getTransactionManager,
   isInTransaction,
+  joinCommits,
   resolveManager,
   runInTransaction,
   transactionDepth,
+  type CommitParticipant,
   type TransactionOptions,
 } from './transaction';
 export {

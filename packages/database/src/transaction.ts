@@ -37,6 +37,31 @@ interface TransactionScope {
 
 const storage = new AsyncLocalStorage<TransactionScope>();
 
+/**
+ * Work that joins every transaction committed while it is in force: called
+ * inside each outermost transaction, with its manager, just before it
+ * commits — so what it writes commits with that transaction's own work, or not
+ * at all. It may answer with a callback, run once that transaction has
+ * committed.
+ *
+ * This is how a claim can stand for work it cannot see: an idempotency key is
+ * marked done in the very transaction that did what it stands for, however
+ * deep in the handler that transaction was opened.
+ */
+export type CommitParticipant = (manager: EntityManager) => Promise<(() => void) | void>;
+
+const participants = new AsyncLocalStorage<readonly CommitParticipant[]>();
+
+/**
+ * Runs `work` with `participant` joining every outermost transaction that
+ * commits inside it, in whatever async continuation it is opened. Savepoints
+ * are not transactions of their own and are not joined; nor is one bound with
+ * `bindTransactionManager`, which the code that opened it commits.
+ */
+export function joinCommits<T>(participant: CommitParticipant, work: () => T): T {
+  return participants.run([...(participants.getStore() ?? []), participant], work);
+}
+
 /** The active transaction's EntityManager, or undefined outside a transaction. */
 export function getTransactionManager(): EntityManager | undefined {
   return storage.getStore()?.manager;
@@ -121,7 +146,15 @@ export async function runInTransaction<T>(
     if (options.onBegin) await options.onBegin(queryRunner);
 
     const result = await storage.run(scope, () => work(queryRunner.manager));
+    // Inside the transaction, as its last work: a participant that throws
+    // rolls back everything with it.
+    const onCommitted: Array<() => void> = [];
+    for (const participant of participants.getStore() ?? []) {
+      const then = await storage.run(scope, () => participant(queryRunner.manager));
+      if (then) onCommitted.push(then);
+    }
     await queryRunner.commitTransaction();
+    for (const then of onCommitted) then();
 
     // After commit, never before: a callback that sends an email or enqueues a
     // job must not fire for work that then rolled back. Failures here are

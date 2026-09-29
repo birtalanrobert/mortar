@@ -104,6 +104,16 @@ transaction that application code commits, out of this package's sight, so
 `afterCommit` is refused inside one rather than accepting a callback that would
 never run.
 
+`joinCommits(participant, work)` makes `participant` part of every outermost
+transaction committed while `work` runs, however deep in it that transaction
+is opened: it is called inside each one, with its manager, just before the
+commit, so what it writes commits with that transaction's work or not at all,
+and it may answer with a callback to run once the commit has happened. Savepoints
+are not joined — they commit nothing of their own — and neither is a
+transaction bound with `bindTransactionManager`. It is how an idempotency key is
+marked done in the transaction that did the work
+(`@birtalanrobert/idempotency`).
+
 **In a multi-tenant application use `runInTenantTransaction` from
 `@birtalanrobert/tenancy` instead.** It does everything this does and binds the
 tenant for row-level security; an unbound read on a protected table returns

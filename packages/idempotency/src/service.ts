@@ -166,6 +166,25 @@ export class IdempotencyService {
   }
 
   /**
+   * Marks the claim done inside the transaction that did the work, before
+   * there is a response to store: the key and the work then commit together,
+   * or neither does. `complete()` stores the response once there is one; a
+   * repeat in between — or after a crash that never stored it — replays the
+   * status with no body, rather than doing the work twice.
+   */
+  async markDone(
+    record: IdempotencyRecord,
+    responseStatus: number,
+    manager: EntityManager,
+  ): Promise<void> {
+    await manager.update(
+      IdempotencyRecord,
+      { id: record.id, status: 'in_progress' },
+      { status: 'completed', responseStatus, responseBody: null, completedAt: new Date() },
+    );
+  }
+
+  /**
    * Marks the claim completed and stores the response.
    *
    * Deliberately joins the caller's transaction: work and completion commit

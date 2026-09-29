@@ -4,6 +4,69 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## idempotency 1.2.0
+
+### Fixed
+
+- **A refused request held its key for five minutes.** The interceptor claimed
+  the key, completed it when the handler answered, and did nothing when the
+  handler threw: `release()` existed, documented as "called when the work
+  failed", and nothing called it. A command refused for a reason the caller
+  could fix — not enough of something, a validation error — left the key
+  `in_progress`, and the retry under it was answered "already in progress"
+  until the lock timed out. A handler that fails before committing a write now
+  frees its key.
+
+  Freeing it on _every_ failure would have been wrong, and is why this is more
+  than one line: a handler can fail after its work has committed — a callback
+  run after the commit, failing — and a key freed then lets the retry do the
+  work twice.
+
+- **The key was not marked done with the work.** The README said the
+  completion commits in the handler's own transaction; it committed after the
+  handler had answered, in a statement of its own, so a crash between the two
+  left the work done and the key free to do it again once the claim was taken
+  for abandoned. While the handler runs, the claim now joins every transaction
+  that commits (`joinCommits`, database 1.2.0), and the first to commit a write
+  marks the key done as its last statement. A transaction that wrote nothing
+  does not count: Postgres gives one an id only when it writes. The response is
+  stored once the handler answers; a repeat before that, or after a crash that
+  never stored it, is answered with the route's status and no body.
+- **The status recorded was the response's default, not the route's.** Nest
+  sets a response's status after every interceptor has finished, so a `201` or
+  a `204` route was recorded as `200`. It is now read from the route's
+  `@HttpCode`, or Nest's default for the method.
+- **`@nestjs/core` is declared** as an optional peer dependency. The
+  interceptor has always imported it; it resolved through hoisting.
+
+### Changed
+
+- **A route's parameters are part of the request a key stands for.** The scope
+  is the route's pattern, so one key sent to `DELETE /orders/a` and then to
+  `DELETE /orders/b` had the second answered with the first's response. The
+  parameters are now fingerprinted with the body, and the second is refused as
+  a key reused for a different request. A route without parameters is
+  fingerprinted by its body alone, as before; a key claimed on a route with
+  parameters before upgrading, and retried after, is refused rather than
+  replayed.
+- **Needs Postgres 13 or later.**
+
+### Added
+
+- `IdempotencyService.markDone(record, status, manager)`: marks a claim done
+  inside the given transaction, before its response is known.
+
+## database 1.2.0
+
+### Added
+
+- **`joinCommits(participant, work)`**: `participant` joins every outermost
+  transaction committed while `work` runs — called inside each, with its
+  manager, just before the commit — so what it writes commits with that work or
+  not at all; it may answer with a callback run once the commit has happened.
+  Savepoints and transactions bound with `bindTransactionManager` are not
+  joined. `CommitParticipant` is its type.
+
 ## jobs 1.2.0
 
 ### Fixed

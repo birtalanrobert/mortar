@@ -5,9 +5,12 @@ import {
   NestInterceptor,
   SetMetadata,
 } from '@nestjs/common';
+import { HTTP_CODE_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
+import { joinCommits } from '@birtalanrobert/database';
 import { BadRequestError } from '@birtalanrobert/http';
-import { Observable, from, of, switchMap } from 'rxjs';
+import { Observable, catchError, from, of, switchMap, throwError } from 'rxjs';
+import { ClaimInFlight } from './claim-in-flight';
 import { IdempotencyService } from './service';
 
 export const IDEMPOTENT_KEY = 'mortar:idempotent';
@@ -38,6 +41,7 @@ interface RequestLike {
   method?: string;
   route?: { path?: string };
   url?: string;
+  params?: Record<string, string>;
   body?: unknown;
   headers?: Record<string, string | string[] | undefined>;
 }
@@ -45,8 +49,11 @@ interface RequestLike {
 /**
  * Applies idempotency to handlers marked with `@Idempotent()`.
  *
- * Replays the stored response on a repeat, and completes the claim inside the
- * handler's own transaction so work and completion commit together.
+ * Replays the stored response on a repeat. Otherwise the claim joins every
+ * transaction the handler commits, and is marked done inside the first that
+ * writes, so the work and the key commit together wherever in the handler
+ * that transaction was opened (`ClaimInFlight`). A handler that fails before
+ * committing anything releases the key for the caller's retry.
  */
 @Injectable()
 export class IdempotencyInterceptor implements NestInterceptor {
@@ -77,20 +84,38 @@ export class IdempotencyInterceptor implements NestInterceptor {
     const scope =
       options.scope ?? `${request.method ?? 'POST'} ${request.route?.path ?? request.url ?? ''}`;
 
-    return from(this.service.begin(key, scope, request.body)).pipe(
+    return from(this.service.begin(key, scope, payloadOf(request))).pipe(
       switchMap((result) => {
         if (result.outcome === 'replay') return of(result.body);
 
-        return next.handle().pipe(
-          switchMap((body: unknown) =>
-            from(
-              // Runs inside the handler's transaction when one is open, so the
-              // completion is durable exactly when the work is.
-              this.service.complete(result.record, statusOf(context), body).then(() => body),
-            ),
+        const claim = new ClaimInFlight(
+          this.service,
+          result.record,
+          this.declaredStatus(context, request),
+        );
+        // Subscribed inside `joinCommits`, so every continuation of the
+        // handler — and each transaction it opens — carries the claim.
+        return new Observable<unknown>((subscriber) =>
+          joinCommits(claim.participant, () => next.handle().subscribe(subscriber)),
+        ).pipe(
+          catchError((error: unknown) =>
+            from(claim.failed()).pipe(switchMap(() => throwError(() => error))),
           ),
+          switchMap((body: unknown) => from(claim.succeeded(body).then(() => body))),
         );
       }),
+    );
+  }
+
+  /**
+   * The status the handler answers with: its `@HttpCode`, or Nest's default
+   * for the method. Read from the route rather than the response, which Nest
+   * sets only after every interceptor has finished.
+   */
+  private declaredStatus(context: ExecutionContext, request: RequestLike): number {
+    return (
+      this.reflector.get<number | undefined>(HTTP_CODE_METADATA, context.getHandler()) ??
+      (request.method === 'POST' ? 201 : 200)
     );
   }
 }
@@ -100,7 +125,15 @@ function headerValue(request: RequestLike, name: string): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function statusOf(context: ExecutionContext): number {
-  const response = context.switchToHttp().getResponse<{ statusCode?: number }>();
-  return response?.statusCode ?? 200;
+/**
+ * What a key must repeat to be the same request: its body, and the route's
+ * parameters — the scope is the route's pattern, so without them one key sent
+ * to two queue items, or two villages, would have the second answered with
+ * the first's response. A route with no parameters is identified by its body
+ * alone, as before, so keys claimed before this version still match their
+ * retries.
+ */
+function payloadOf(request: RequestLike): unknown {
+  const params = request.params ?? {};
+  return Object.keys(params).length === 0 ? request.body : { params, body: request.body };
 }
