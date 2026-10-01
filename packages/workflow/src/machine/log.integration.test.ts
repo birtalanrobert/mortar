@@ -483,3 +483,102 @@ describe('a table with a redactable column', () => {
     );
   });
 });
+
+/**
+ * A recipient's marks beside an append-only record.
+ *
+ * A report delivered to somebody is evidence of what happened and must not
+ * be rewritten, while when its recipient read it is their own bookkeeping and
+ * changes. `mutable` narrows the trigger to the record — and the tests worth
+ * having are the ones showing the record stayed guarded, alone or beside a
+ * redactable column.
+ */
+describe('a table with mutable columns', () => {
+  const TABLE = 'test_delivered_reports';
+  const REPORT = '55555555-5555-4555-8555-555555555555';
+
+  beforeEach(async () => {
+    await dataSource.query(`DROP TABLE IF EXISTS "${TABLE}"`);
+    await dataSource.query(`
+      CREATE TABLE "${TABLE}" (
+        "id" uuid NOT NULL,
+        "recipient" varchar(60) NOT NULL,
+        "content" jsonb NOT NULL,
+        "source_ip" varchar(45),
+        "read_at" timestamptz,
+        CONSTRAINT "pk_${TABLE}" PRIMARY KEY ("id")
+      )
+    `);
+    for (const statement of appendOnlySql(TABLE, {
+      mutable: ['read_at'],
+      redactable: ['source_ip'],
+    })) {
+      await dataSource.query(statement);
+    }
+    await dataSource.query(
+      `INSERT INTO "${TABLE}" ("id", "recipient", "content", "source_ip")
+       VALUES ($1, 'ana', '{"outcome": "won"}', '203.0.113.7')`,
+      [REPORT],
+    );
+  });
+
+  const row = async () =>
+    (
+      await dataSource.query<
+        Array<{ content: unknown; source_ip: string | null; read_at: Date | null }>
+      >(`SELECT "content", "source_ip", "read_at" FROM "${TABLE}" WHERE "id" = $1`, [REPORT])
+    )[0];
+  const update = (set: string) =>
+    dataSource.query(`UPDATE "${TABLE}" SET ${set} WHERE "id" = $1`, [REPORT]);
+
+  it('lets a mark change, and change again, beside the redactable column left as it was', async () => {
+    await update(`"read_at" = now()`);
+    expect((await row())!.read_at).toBeInstanceOf(Date);
+    await update(`"read_at" = NULL`);
+    expect(await row()).toEqual({
+      content: { outcome: 'won' },
+      source_ip: '203.0.113.7',
+      read_at: null,
+    });
+  });
+
+  it('refuses a mark smuggling a rewrite of the record alongside it', async () => {
+    await expect(update(`"read_at" = now(), "content" = '{"outcome": "lost"}'`)).rejects.toThrow(
+      /append-only/,
+    );
+    expect((await row())!.read_at).toBeNull();
+  });
+
+  it('still refuses an ordinary rewrite of the record', async () => {
+    await expect(update(`"recipient" = 'somebody else'`)).rejects.toThrow(/append-only/);
+  });
+
+  it('keeps the redactable column’s own rule: erased, never written', async () => {
+    await update(`"source_ip" = NULL, "read_at" = now()`);
+    expect((await row())!.source_ip).toBeNull();
+    await expect(update(`"source_ip" = '198.51.100.1'`)).rejects.toThrow(
+      /may be erased but not written/,
+    );
+  });
+
+  it('says so when it names a column the table does not have, rather than blaming the record', async () => {
+    await dataSource.query(`DROP TABLE IF EXISTS "${TABLE}"`);
+    await dataSource.query(
+      `CREATE TABLE "${TABLE}" ("id" uuid PRIMARY KEY, "read_at" timestamptz)`,
+    );
+    for (const statement of appendOnlySql(TABLE, { mutable: ['raed_at'] })) {
+      await dataSource.query(statement);
+    }
+    await dataSource.query(`INSERT INTO "${TABLE}" ("id") VALUES ($1)`, [REPORT]);
+    await expect(update(`"read_at" = now()`)).rejects.toThrow(/has no column raed_at/);
+  });
+
+  it('refuses a column both mutable and redactable, and anything that is not a column name', () => {
+    expect(() => appendOnlySql(TABLE, { mutable: ['read_at'], redactable: ['read_at'] })).toThrow(
+      /either redactable or mutable/,
+    );
+    expect(() => appendOnlySql(TABLE, { mutable: ['read_at; DROP TABLE x'] })).toThrow(
+      /Not a column name/,
+    );
+  });
+});

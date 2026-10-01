@@ -220,6 +220,22 @@ erasure could not be honoured without dropping the trigger on production, under
 pressure, sometimes without putting it back. What must not happen is history
 being _rewritten_.
 
+Two options narrow it rather than remove it. `redactable` names columns a
+retention sweep may erase, and nothing else may be written into them.
+`mutable` names columns that are not the record but somebody's marks on it,
+such as when its recipient read it, which may change freely while every other
+column stays byte-for-byte what it was:
+
+```ts
+for (const statement of appendOnlySql('reports', { mutable: ['read_at'] })) {
+  await runner.query(statement);
+}
+```
+
+A column is one or the other, never both. A name the table does not have is
+refused when the trigger runs, naming the column, rather than leaving its real
+namesake guarded and every update blamed on the record.
+
 ## Links that have to be short
 
 `signLink` below carries its claims inside the token, and pays for it in length:

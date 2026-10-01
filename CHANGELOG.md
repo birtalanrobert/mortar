@@ -4,6 +4,28 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## workflow 1.6.0
+
+### Added
+
+- **`appendOnlySql(table, { mutable })`: columns that are somebody's marks on
+  a record rather than the record.** A delivered report is evidence and must
+  not be rewritten, while when its recipient read it changes, and so do the
+  labels they give it. Until now the marks had to move to a table of their own,
+  joined on every list and every unread count, or the trigger had to go. An
+  update is now permitted when every column outside `mutable`, and outside
+  `redactable`, which keeps its own rule, is byte-for-byte what it was.
+
+  Beside a mutable column a redactable one may stay as it was or be erased,
+  where alone it must be erased by every update. That is the only way a mark
+  can change on a row whose redactable column still holds its value. A table
+  with only redactable columns, or none, keeps exactly the function it had.
+
+  A column named both ways is refused as the SQL is made. A name the table
+  does not have is refused when the trigger runs, naming the column, instead of
+  leaving its real namesake guarded and every update to it blamed on the
+  record.
+
 ## idempotency 1.2.0
 
 ### Fixed

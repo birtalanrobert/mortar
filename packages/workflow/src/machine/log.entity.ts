@@ -123,6 +123,23 @@ export interface AppendOnlyOptions {
    * allowed, so a sweep that runs twice is not an error.
    */
   readonly redactable?: readonly string[];
+
+  /**
+   * Columns that are not the record but somebody's marks on it, which may
+   * change freely: when its recipient read it, the labels they gave it,
+   * whether they archived it.
+   *
+   * A delivered notice, a report, a receipt is evidence and must not be
+   * rewritten, while its reader's own bookkeeping beside it changes all the
+   * time. Without this the marks have to move to a table of their own, or the
+   * trigger has to go — and the first is a join on every list and every
+   * unread count for a promise the trigger could have kept by itself.
+   *
+   * So the protection is narrowed to the record. An update is permitted when
+   * every column outside `mutable` — and outside `redactable`, which keeps its
+   * own rule — is byte-for-byte what it was. A column cannot be both.
+   */
+  readonly mutable?: readonly string[];
 }
 
 /**
@@ -146,8 +163,9 @@ export interface AppendOnlyOptions {
  * requires to work, and it leaves no misleading record behind — which a
  * silently edited actor or reason does.
  *
- * `redactable` is the same argument applied to one column rather than one row;
- * see {@link AppendOnlyOptions}.
+ * `redactable` is the same argument applied to one column rather than one row,
+ * and `mutable` keeps the record append-only while its reader's marks beside
+ * it change; see {@link AppendOnlyOptions}.
  *
  * **A DELETE is permitted, and that is the whole of what "append-only" means
  * here.** It has to be: these tables carry a foreign key to their subject with
@@ -164,6 +182,7 @@ export interface AppendOnlyOptions {
 export function appendOnlySql(table: string, options: AppendOnlyOptions = {}): string[] {
   const guard = `${table}_immutable`;
   const redactable = options.redactable ?? [];
+  const mutable = options.mutable ?? [];
 
   /*
    * Checked here rather than left to Postgres, because the failure is otherwise
@@ -171,29 +190,78 @@ export function appendOnlySql(table: string, options: AppendOnlyOptions = {}): s
    * answer SQL NULL, the guard refuses every update including the redaction it
    * was added for, and the message names append-only rather than the typo.
    */
-  for (const column of redactable) {
-    if (!/^[a-z_][a-z0-9_]*$/i.test(column)) {
-      throw new Error(
-        `Not a column name: '${column}'. Redactable columns are unquoted identifiers.`,
-      );
+  for (const [kind, columns] of [
+    ['Redactable', redactable],
+    ['Mutable', mutable],
+  ] as const) {
+    for (const column of columns) {
+      if (!/^[a-z_][a-z0-9_]*$/i.test(column)) {
+        throw new Error(
+          `Not a column name: '${column}'. ${kind} columns are unquoted identifiers.`,
+        );
+      }
     }
+  }
+  const both = mutable.filter((column) => redactable.includes(column));
+  if (both.length > 0) {
+    throw new Error(
+      `A column is either redactable or mutable, not both: ${both.join(', ')}. ` +
+        'A mutable column may be erased already; naming it redactable too would forbid writing it.',
+    );
   }
 
   const refuse = `RAISE EXCEPTION '${table} is append-only; % is not permitted', TG_OP
           USING ERRCODE = 'restrict_violation';`;
 
+  const list = (columns: readonly string[]) =>
+    `ARRAY[${columns.map((column) => `'${column}'`).join(', ')}]::text[]`;
+
   /*
-   * Two shapes rather than one general one, so a table with nothing redactable
-   * keeps exactly the function it had. The general form permits an update that
-   * changes nothing at all — harmless, but a difference, and a table protecting
-   * evidence is the wrong place to introduce one nobody asked for.
+   * Three shapes rather than one general one, so a table with nothing
+   * redactable or mutable, or only redactable columns, keeps exactly the
+   * function it had. The general form permits an update that changes nothing
+   * at all — harmless, but a difference, and a table protecting evidence is the
+   * wrong place to introduce one nobody asked for.
    */
   const body =
-    redactable.length === 0
-      ? `BEGIN
+    mutable.length > 0
+      ? `DECLARE
+        redactable constant text[] := ${list(redactable)};
+        mutable constant text[] := ${list(mutable)};
+        named text;
+      BEGIN
+        -- A column named here that the table does not have would leave its
+        -- real namesake guarded and every update to it refused as append-only,
+        -- blaming the record rather than the typo: said here instead.
+        FOREACH named IN ARRAY redactable || mutable LOOP
+          IF NOT (to_jsonb(NEW) ? named) THEN
+            RAISE EXCEPTION '${table} has no column %, which its guard names', named
+              USING ERRCODE = 'undefined_column';
+          END IF;
+        END LOOP;
+
+        -- The record first: everything outside the marks and the erasable.
+        IF TG_OP = 'UPDATE'
+           AND (to_jsonb(NEW) - redactable - mutable) = (to_jsonb(OLD) - redactable - mutable) THEN
+          -- A redactable column may stay as it was, or be erased; never written.
+          FOREACH named IN ARRAY redactable LOOP
+            IF (to_jsonb(NEW) -> named) IS DISTINCT FROM (to_jsonb(OLD) -> named)
+               AND (to_jsonb(NEW) -> named) IS DISTINCT FROM 'null'::jsonb THEN
+              RAISE EXCEPTION '${table}.% may be erased but not written', named
+                USING ERRCODE = 'restrict_violation';
+            END IF;
+          END LOOP;
+
+          RETURN NEW;
+        END IF;
+
         ${refuse}
       END;`
-      : `DECLARE
+      : redactable.length === 0
+        ? `BEGIN
+        ${refuse}
+      END;`
+        : `DECLARE
         redactable constant text[] := ARRAY[${redactable.map((column) => `'${column}'`).join(', ')}];
         erased text;
       BEGIN
