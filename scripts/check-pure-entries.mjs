@@ -36,6 +36,7 @@ const BROWSER_IMPORTED = new Set([
   '@birtalanrobert/calendars',
   '@birtalanrobert/commerce',
   '@birtalanrobert/config',
+  '@birtalanrobert/game-economy',
   '@birtalanrobert/http',
   '@birtalanrobert/messaging',
   '@birtalanrobert/money',

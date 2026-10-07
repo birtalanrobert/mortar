@@ -4,6 +4,22 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## game-economy 1.0.0
+
+### Added
+
+- **A game's premium currency as an append-only ledger.** Every purchase,
+  grant, spend and refund is an entry with the balance it left; the balance is
+  a cache behind `CHECK (balance >= 0)`, and `reconcile` says whether it, the
+  entries and the credits still agree. Each credit is a lot that debits draw
+  on in the game's own `spendOrder` — required, never assumed — so whether a
+  purchase is still whole, and so refundable, is a fact. Writes join the
+  caller's transaction, take turns per holder and currency, and are
+  idempotent by key: the same key answers with its entry, and the same key for
+  a different entry is refused (`ledger_key_reused`). Entries and draws refuse
+  updates and deletes alike. Designed against projects 14, 15, 16 and 17;
+  first consumed by Holdfast's quest rewards.
+
 ## workflow 1.6.0
 
 ### Added
