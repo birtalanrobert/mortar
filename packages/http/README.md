@@ -163,4 +163,9 @@ try {
 ```
 
 `toProblemDetails` is total: a `MortarError`, a Nest `HttpException`, a plain
-`Error` or a thrown string all become the same document.
+`Error` or a thrown string all become the same document. An error the HTTP
+stack raised about the client's own request before any handler ran — a body
+past the parser's limit, a charset it cannot read — keeps its own status
+(`payload_too_large`, `unsupported_media_type`, …) and its message, because
+body-parser marks it `expose: true`; anything not so marked is a 500 that says
+nothing.

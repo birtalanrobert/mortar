@@ -38,6 +38,10 @@ export function toProblemDetails(thrown: unknown, options: SerializeOptions = {}
     return fromHttpException(thrown, options);
   }
 
+  if (isClientHttpError(thrown)) {
+    return fromClientHttpError(thrown, options);
+  }
+
   // Anything else is unexpected, and therefore ours.
   const problem: ProblemDetails = {
     type: problemType('internal_error', baseUri),
@@ -134,6 +138,56 @@ function fromHttpException(
     else if (typeof body.error === 'string') problem.detail = body.error;
   }
 
+  return problem;
+}
+
+/**
+ * An error a Node HTTP library raised about the client's own request — the
+ * `http-errors` shape body-parser and raw-body throw before any handler runs:
+ * a body larger than the limit (413), JSON that does not parse (400), a
+ * charset or an encoding nothing reads (415). It carries its status and
+ * `expose: true`, the library's own word that its message was written for the
+ * client.
+ *
+ * Recognised by that shape, as an HttpException is, and only in the 4xx range.
+ * Nest turns body-parser's `SyntaxError` into a 400 of its own before a filter
+ * sees it, and nothing turned the rest: a body too large, a charset nobody
+ * reads, and outside Nest every one of them, was a 500 — "an unexpected error
+ * occurred" for a request the client could fix. An error not marked for
+ * exposure stays ours, whatever status it carries.
+ */
+interface ClientHttpErrorLike {
+  readonly status: number;
+  readonly expose: true;
+  readonly message: string;
+}
+
+function isClientHttpError(value: unknown): value is ClientHttpErrorLike {
+  if (!(value instanceof Error)) return false;
+  const { status, expose } = value as Error & { status?: unknown; expose?: unknown };
+  return (
+    expose === true &&
+    typeof status === 'number' &&
+    Number.isInteger(status) &&
+    status >= 400 &&
+    status < 500
+  );
+}
+
+function fromClientHttpError(
+  error: ClientHttpErrorLike,
+  options: SerializeOptions,
+): ProblemDetails {
+  const code = statusToCode(error.status);
+  const problem: ProblemDetails = {
+    type: problemType(code, options.baseUri),
+    title: titleForStatus(error.status),
+    status: error.status,
+    code,
+    detail: error.message,
+  };
+  if (options.instance) problem.instance = options.instance;
+  if (options.requestId) problem.requestId = options.requestId;
   return problem;
 }
 

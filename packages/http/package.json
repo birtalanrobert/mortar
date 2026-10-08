@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/http",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Error taxonomy, problem-details, request context and health checks",
   "license": "AGPL-3.0-only",
   "type": "commonjs",

@@ -4,6 +4,21 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## http 2.0.1
+
+### Fixed
+
+- **A request the client could fix was answered "an unexpected error
+  occurred".** body-parser and raw-body throw `http-errors` before any handler
+  runs — a body past the limit (413), a charset or an encoding nothing reads
+  (415), and JSON that does not parse (400), which Nest alone turns into a 400
+  of its own — and `toProblemDetails` knew neither their class nor their
+  shape, so the rest became a 500 and were logged as the service's own
+  failure. An `Error` carrying a 4xx `status` and `expose: true`, the
+  library's word that its message was written for the client, now keeps its
+  status, its code and its message; one not so marked is a 500 that says
+  nothing, as before.
+
 ## idempotency 1.2.1
 
 ### Fixed

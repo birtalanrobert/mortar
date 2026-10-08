@@ -49,6 +49,55 @@ describe('Nest HttpException', () => {
   });
 });
 
+describe('an error the HTTP stack raised about the client’s request', () => {
+  /** What body-parser raises through `http-errors`: its status, and its word that the message is the client's. */
+  const raised = (error: Error, status: number, type: string) =>
+    Object.assign(error, { status, statusCode: status, expose: true, type });
+
+  it('answers a body too large, JSON that does not parse and a charset nothing reads with their own status', () => {
+    expect(
+      toProblemDetails(raised(new Error('request entity too large'), 413, 'entity.too.large'), {
+        instance: '/upload',
+        requestId: 'r1',
+      }),
+    ).toMatchObject({
+      status: 413,
+      code: 'payload_too_large',
+      title: 'Payload too large',
+      detail: 'request entity too large',
+      instance: '/upload',
+      requestId: 'r1',
+    });
+    expect(
+      toProblemDetails(
+        raised(
+          new SyntaxError('Unexpected token } in JSON at position 9'),
+          400,
+          'entity.parse.failed',
+        ),
+      ),
+    ).toMatchObject({ status: 400, code: 'bad_request', title: 'Bad request' });
+    expect(
+      toProblemDetails(
+        raised(new Error('unsupported charset "UTF-7"'), 415, 'charset.unsupported'),
+      ),
+    ).toMatchObject({ status: 415, code: 'unsupported_media_type' });
+  });
+
+  it('keeps one not marked for the client, or not the client’s fault, an internal error that says nothing', () => {
+    const hidden = Object.assign(new Error('secret detail'), { status: 400, expose: false });
+    const upstream = Object.assign(new Error('secret detail'), { status: 503, expose: true });
+    const claimed = Object.assign(new Error('secret detail'), { status: 413, expose: 'true' });
+    for (const error of [hidden, upstream, claimed]) {
+      const problem = toProblemDetails(error);
+      expect(problem).toMatchObject({ status: 500, code: 'internal_error' });
+      expect(problem.detail).not.toContain('secret');
+    }
+    // A plain object with the shape is not an error anything raised.
+    expect(toProblemDetails({ status: 413, expose: true, message: 'x' }).status).toBe(500);
+  });
+});
+
 describe('unexpected throwables', () => {
   it('never leaks the message in production mode', () => {
     const problem = toProblemDetails(new Error('connection to postgres://user:pw@host failed'));
