@@ -46,6 +46,17 @@ export function fingerprint(payload: unknown): string {
 
 function stableStringify(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
+  /*
+   * A raw body — an image sent as itself, parsed into a Buffer — stands for
+   * its bytes' digest. Walked as an object it is one entry per byte, each
+   * keyed by its index and sorted as text: a two-megabyte upload became four
+   * million strings to fingerprint a request. The prefix is one no JSON value
+   * can begin with, so no JSON body ever fingerprints as a binary one.
+   */
+  if (ArrayBuffer.isView(value)) {
+    const bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+    return `bytes:${createHash('sha256').update(bytes).digest('hex')}`;
+  }
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
   const entries = Object.entries(value as Record<string, unknown>)
     .filter(([, v]) => v !== undefined)

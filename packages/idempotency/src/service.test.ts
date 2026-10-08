@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { fingerprint } from './service';
 
@@ -38,6 +39,36 @@ describe('fingerprint', () => {
     expect(fingerprint(undefined)).toBe(fingerprint(undefined));
     expect(fingerprint(null)).not.toBe(fingerprint(0));
     expect(fingerprint('')).not.toBe(fingerprint(null));
+  });
+
+  it('fingerprints a raw body by its bytes, alone or beside the route’s parameters', () => {
+    const image = Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+    expect(fingerprint(image)).toBe(fingerprint(Buffer.from(image)));
+    expect(fingerprint(image)).not.toBe(
+      fingerprint(Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 4])),
+    );
+    // The same bytes in any view of them are the same body.
+    expect(fingerprint(new Uint8Array(image))).toBe(fingerprint(image));
+    expect(fingerprint({ params: { id: '1' }, body: image })).not.toBe(
+      fingerprint({ params: { id: '2' }, body: image }),
+    );
+  });
+
+  it('never fingerprints a JSON body as a binary one', () => {
+    // An object keyed as a Buffer's bytes are, which walking the Buffer used to produce.
+    expect(fingerprint({ 0: 97, 1: 32 })).not.toBe(fingerprint(Buffer.from('a ')));
+    // The bytes' digest itself, sent as a JSON string.
+    const image = Buffer.from('a picture');
+    const digest = createHash('sha256').update(image).digest('hex');
+    expect(fingerprint(`bytes:${digest}`)).not.toBe(fingerprint(image));
+  });
+
+  it('fingerprints megabytes as quickly as they can be hashed', () => {
+    // Four megabytes walked byte by byte as an object took longer than the test allows.
+    const upload = Buffer.alloc(4 * 1024 * 1024, 7);
+    const started = Date.now();
+    expect(fingerprint(upload)).toMatch(/^[0-9a-f]{64}$/);
+    expect(Date.now() - started).toBeLessThan(1_000);
   });
 
   it('produces a sha256 hex digest', () => {

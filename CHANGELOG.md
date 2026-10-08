@@ -4,6 +4,19 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## idempotency 1.2.1
+
+### Fixed
+
+- **A raw body was fingerprinted one byte at a time.** A request whose body is
+  bytes rather than JSON — an image sent as itself, which Express's raw parser
+  hands over as a `Buffer` — was walked as an object: one entry per byte, each
+  keyed by its index and sorted as text, so a two-megabyte upload became four
+  million strings before the key could be claimed. A body that is any view of
+  bytes now stands for their SHA-256, behind a prefix no JSON value can begin
+  with, so the same bytes are the same request and no JSON body can pass for a
+  binary one.
+
 ## game-economy 1.0.0
 
 ### Added
