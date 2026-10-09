@@ -68,6 +68,16 @@ export class StripeBilling implements BillingProvider {
     return { externalId: created.id, email: created.email };
   }
 
+  async deleteCustomer(externalId: string): Promise<void> {
+    try {
+      await this.stripe.customers.del(externalId);
+    } catch (error) {
+      // Gone already, or never this account's: forgotten all the same.
+      if ((error as { code?: unknown }).code === 'resource_missing') return;
+      throw error;
+    }
+  }
+
   async checkout(request: CheckoutRequest): Promise<HostedSession> {
     if (typeof request.price !== 'string' && request.mode !== 'payment') {
       // A recurring price given inline would need its interval and its

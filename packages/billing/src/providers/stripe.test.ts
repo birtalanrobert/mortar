@@ -226,6 +226,28 @@ describe('reading Stripe’s answers', () => {
     });
   });
 
+  describe('deleting a customer', () => {
+    it('asks the provider to forget them', async () => {
+      const del = vi.fn().mockResolvedValue({ id: 'cus_1', deleted: true });
+
+      await billing({ customers: { del } }).deleteCustomer('cus_1');
+
+      expect(del).toHaveBeenCalledWith('cus_1');
+    });
+
+    it('takes one the provider no longer has as forgotten, and throws on anything else', async () => {
+      const missing = Object.assign(new Error('No such customer'), { code: 'resource_missing' });
+      await expect(
+        billing({ customers: { del: vi.fn().mockRejectedValue(missing) } }).deleteCustomer('cus_1'),
+      ).resolves.toBeUndefined();
+
+      const down = Object.assign(new Error('Service unavailable'), { code: 'api_error' });
+      await expect(
+        billing({ customers: { del: vi.fn().mockRejectedValue(down) } }).deleteCustomer('cus_1'),
+      ).rejects.toBe(down);
+    });
+  });
+
   describe('changing how many are being paid for', () => {
     it('prorates onto the next invoice rather than charging separately', async () => {
       const update = vi.fn().mockResolvedValue(subscription({ status: 'active' }));

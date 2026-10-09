@@ -141,6 +141,7 @@ someone asks for an erasure.
 ```ts
 await comms.sentTo(tenantId, 'ana@example.com'); // everything ever written to them
 await comms.forget(tenantId, 'ana@example.com'); // the row stays, the address goes
+await comms.forget(null, 'ana@example.com'); // what was sent with no tenant
 await comms.purge(new Date('2025-01-01')); // past its retention: deleted
 ```
 
@@ -150,7 +151,9 @@ subject id can answer the first.
 
 `forget` keeps the row and empties it, for the same reason `FilesService.erase`
 does: a record saying a message was delivered on a date is worth more than a gap
-where it used to be. **Suppressions are untouched** — an address that said
+where it used to be. The provider's word on a failure goes with the address,
+being free text that can repeat it; a `null` tenant is the mail a product sends
+the person as such — a verification, a receipt — rather than for a business. **Suppressions are untouched** — an address that said
 "stop" has to keep being refused, and forgetting that is how an erased person is
 emailed again the next time a business imports a list.
 

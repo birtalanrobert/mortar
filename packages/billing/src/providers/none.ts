@@ -26,6 +26,15 @@ export class NoBilling implements BillingProvider {
     return { externalId: externalId ?? '', email };
   }
 
+  /**
+   * Refused like everything else here, rather than answered: a customer to
+   * delete was made by a provider this deployment no longer has, and saying it
+   * was forgotten would be saying something untrue about a person's data.
+   */
+  async deleteCustomer(_externalId: string): Promise<void> {
+    throw new Error('This deployment has no billing provider configured.');
+  }
+
   async checkout(_request: CheckoutRequest): Promise<HostedSession> {
     throw new Error('This deployment has no billing provider configured.');
   }

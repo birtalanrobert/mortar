@@ -566,6 +566,33 @@ describe('forgetting one address', () => {
     expect((await rows())[0]!.address).toBe('ana@example.com');
   });
 
+  it('forgets what was sent with no tenant, and nobody’s with one', async () => {
+    const comms = service({ email: new NoopMessagePort('email') });
+
+    await comms.send({ channel: 'email', to: 'ana@example.com', text: 'x' });
+    await comms.send({ channel: 'email', to: 'ana@example.com', text: 'y' }, { tenantId: TENANT });
+
+    expect(await comms.forget(null, 'ana@example.com')).toBe(1);
+
+    expect((await rows()).map((log) => [log.tenantId, log.address])).toEqual([
+      [null, 'erased@invalid'],
+      [TENANT, 'ana@example.com'],
+    ]);
+  });
+
+  it('takes the provider’s word on a failure with it, which may repeat the address', async () => {
+    const comms = service({ email: new NoopMessagePort('email') });
+    await comms.send({ channel: 'email', to: 'ana@example.com', text: 'x' }, { tenantId: TENANT });
+    await dataSource.query(
+      `UPDATE "mortar_message_log" SET "state" = 'failed',
+              "detail" = '550 <ana@example.com>: mailbox unavailable'`,
+    );
+
+    await comms.forget(TENANT, 'ana@example.com');
+
+    expect((await rows())[0]).toMatchObject({ address: 'erased@invalid', detail: null });
+  });
+
   /**
    * The address stays on the suppression list, and that is the decision.
    *

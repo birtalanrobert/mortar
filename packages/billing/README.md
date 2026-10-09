@@ -70,6 +70,8 @@ await provider.checkout({
 });
 
 await provider.refund({ payment: 'pi_…', reference: 'refund-…' });
+
+await provider.deleteCustomer('cus_…'); // for an erasure: the payments stay
 ```
 
 - **The amount is the one the product shows.** A pack whose price an operator
@@ -87,6 +89,12 @@ await provider.refund({ payment: 'pi_…', reference: 'refund-…' });
   won.
 - **`eventId` is the same on every delivery**, which is what a product keys on
   to act on a webhook delivered twice once.
+- **An erasure deletes the customer**, and with it the address and name the
+  provider was given; the payments stay, as accounting law requires. One
+  already deleted is forgotten all the same, so an erasure retried after a
+  timeout does not fail on its first attempt. `NoBilling` refuses, as it
+  refuses everything: a customer made by a provider the deployment no longer
+  has cannot be said to be forgotten.
 
 ## Using it in a NestJS application
 

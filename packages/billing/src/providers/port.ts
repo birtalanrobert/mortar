@@ -168,6 +168,17 @@ export interface BillingProvider {
   /** Finds or creates the customer this business is billed as. */
   customer(externalId: string | null, email: string, name: string): Promise<ProviderCustomer>;
 
+  /**
+   * Deletes a customer, for a person's erasure: the provider forgets who they
+   * were — the address and the name it was given — and keeps the payments they
+   * made, which accounting law holds it to.
+   *
+   * One already deleted, or one the provider never had, is not an error: the
+   * answer to "forget this person" is the same either way, and an erasure
+   * retried after a timeout must not fail on its own first attempt.
+   */
+  deleteCustomer(externalId: string): Promise<void>;
+
   /** A hosted page to start a subscription or take a single payment. */
   checkout(request: CheckoutRequest): Promise<HostedSession>;
 

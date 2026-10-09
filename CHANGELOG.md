@@ -4,6 +4,43 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## billing 5.0.0
+
+An erasure's half that the payment provider holds: the address and the name it
+was given at a first purchase. First consumed by Holdfast's account erasure.
+
+### Breaking
+
+- **`BillingProvider` has `deleteCustomer`.** An implementation of the port — a
+  test double, another provider — needs it.
+
+### Added
+
+- **`deleteCustomer(externalId)`**: the provider forgets the customer, the
+  payments they made staying, as accounting law requires. One already deleted,
+  or never the account's, is forgotten all the same — Stripe's
+  `resource_missing` — so an erasure retried after a timeout does not fail on
+  its own first attempt; anything else is thrown. `NoBilling` refuses, as it
+  refuses everything else: a customer made by a provider the deployment no
+  longer has cannot truthfully be said to be forgotten.
+
+### Migrating from 4.x
+
+Add `deleteCustomer` to any implementation of `BillingProvider`.
+
+## comms 1.11.0
+
+### Added
+
+- **`forget(null, address)`** forgets what was sent with no tenant: the mail a
+  product sends the person as such — a verification, a receipt — rather than
+  for a business, which `forget` could not reach.
+
+### Changed
+
+- **`forget` empties the provider's word on a failure too** (`detail`): free
+  text that can repeat the address it failed at.
+
 ## game-economy 2.0.0
 
 ### Breaking

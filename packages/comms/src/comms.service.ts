@@ -1,5 +1,5 @@
 import { resolveManager } from '@birtalanrobert/database';
-import type { DataSource, EntityManager } from 'typeorm';
+import { IsNull, type DataSource, type EntityManager } from 'typeorm';
 import { InboundAddress, type InboundAddressOptions } from './address';
 import type { InboundMessage } from './inbound/message';
 import { MessageLog } from './message-log.entity';
@@ -441,10 +441,15 @@ export class CommsService {
    * up emailed again the next time a venue imports a list. It is the one piece
    * of a person a business has a continuing obligation to hold.
    *
+   * `tenantId` null forgets what was sent with no tenant: the mail a product
+   * sends to the person as such — a verification, a receipt — rather than on a
+   * business's behalf. The provider's word on a failure goes too, being free
+   * text that can repeat the address it failed at.
+   *
    * Returns how many rows were changed, so a caller can record the number in
    * its own audit trail rather than the address.
    */
-  async forget(tenantId: string, address: string, manager?: EntityManager): Promise<number> {
+  async forget(tenantId: string | null, address: string, manager?: EntityManager): Promise<number> {
     const repository = this.manager(manager).getRepository(MessageLog);
 
     /*
@@ -453,8 +458,8 @@ export class CommsService {
      * an empty string — which looks like a bug rather than a decision.
      */
     const result = await repository.update(
-      { tenantId, address },
-      { address: 'erased@invalid', heading: null },
+      { tenantId: tenantId === null ? IsNull() : tenantId, address },
+      { address: 'erased@invalid', heading: null, detail: null },
     );
 
     return result.affected ?? 0;
