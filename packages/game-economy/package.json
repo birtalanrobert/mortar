@@ -1,6 +1,6 @@
 {
   "name": "@birtalanrobert/game-economy",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "A game's premium currency as an append-only ledger: every purchase, grant, spend and refund, reconcilable to the last unit",
   "license": "AGPL-3.0-only",
   "repository": {

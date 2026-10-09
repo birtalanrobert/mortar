@@ -257,6 +257,136 @@ describe('refunding', () => {
   });
 });
 
+describe('reversing', () => {
+  const reverse = (purchaseId: string, idempotencyKey = key(), holder = HOLDER) =>
+    economy.reverse(holder, { purchaseId, reason: 'stripe.dispute', idempotencyKey });
+
+  it('takes back a purchase none of whose currency is spent, all of it, so it cannot be refunded too', async () => {
+    await grant(10);
+    const bought = await buy(260);
+    const reversed = await reverse(bought.id);
+
+    expect(reversed).toEqual({
+      entry: expect.objectContaining({
+        kind: 'reversal',
+        amount: 260,
+        balanceAfter: 10,
+        refundOf: bought.id,
+        reason: 'stripe.dispute',
+      }),
+      taken: 260,
+      spent: 0,
+      earlier: null,
+    });
+    await expect(
+      economy.refund(HOLDER, {
+        purchaseId: bought.id,
+        reason: 'stripe.refund',
+        idempotencyKey: key(),
+      }),
+    ).rejects.toBeInstanceOf(NotRefundableError);
+    expect(await economy.reconcile(HOLDER, SILVER)).toEqual(
+      expect.objectContaining({ balance: 10, agrees: true }),
+    );
+  });
+
+  it('takes back what is left of one partly spent, and says how much of it was spent', async () => {
+    await grant(10);
+    const bought = await buy(100);
+    // The grant first, then five of the purchase.
+    await spend(15);
+    const reversed = await reverse(bought.id);
+
+    expect(reversed).toEqual(expect.objectContaining({ taken: 95, spent: 5, earlier: null }));
+    expect(reversed.entry).toEqual(expect.objectContaining({ amount: 95, balanceAfter: 0 }));
+    expect(await economy.reconcile(HOLDER, SILVER)).toEqual(
+      expect.objectContaining({ balance: 0, ledger: 0, lots: 0, agrees: true }),
+    );
+  });
+
+  it('takes nothing from one wholly spent, writes nothing, and says it was spent — the same again', async () => {
+    const bought = await buy(100);
+    await spend(100);
+    const idempotencyKey = key();
+    const answer = { entry: null, taken: 0, spent: 100, earlier: null };
+
+    expect(await reverse(bought.id, idempotencyKey)).toEqual(answer);
+    expect(await reverse(bought.id, idempotencyKey)).toEqual(answer);
+    expect((await economy.history(HOLDER, SILVER)).entries.map((entry) => entry.kind)).toEqual([
+      'spend',
+      'purchase',
+    ]);
+  });
+
+  it('takes nothing more from one refunded or reversed already, naming what gave it back', async () => {
+    const refundedOne = await buy(100);
+    const refund = await economy.refund(HOLDER, {
+      purchaseId: refundedOne.id,
+      reason: 'stripe.refund',
+      idempotencyKey: key(),
+    });
+    expect(await reverse(refundedOne.id)).toEqual({
+      entry: null,
+      taken: 0,
+      spent: 0,
+      earlier: refund,
+    });
+
+    const reversedOne = await buy(50);
+    const first = await reverse(reversedOne.id);
+    expect(await reverse(reversedOne.id)).toEqual({
+      entry: null,
+      taken: 0,
+      spent: 0,
+      earlier: first.entry,
+    });
+    expect(await economy.balance(HOLDER, SILVER)).toBe(0);
+  });
+
+  it('answers the same key as it did, and refuses a key written for anything else', async () => {
+    const bought = await buy(100);
+    const idempotencyKey = key();
+    const first = await reverse(bought.id, idempotencyKey);
+    expect(await reverse(bought.id, idempotencyKey)).toEqual(first);
+
+    const other = await buy(40);
+    await expect(reverse(other.id, idempotencyKey)).rejects.toBeInstanceOf(LedgerKeyReusedError);
+    const grantKey = key();
+    await grant(5, grantKey);
+    await expect(reverse(other.id, grantKey)).rejects.toBeInstanceOf(LedgerKeyReusedError);
+  });
+
+  it('refuses a grant, another holder’s purchase and a name that is no id', async () => {
+    const bought = await buy(100);
+    const given = await grant(10);
+    await expect(reverse(given.id)).rejects.toBeInstanceOf(NotFoundError);
+    await expect(reverse(bought.id, key(), 'account-bea')).rejects.toBeInstanceOf(NotFoundError);
+    await expect(reverse('purchase-1')).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it('gives a purchase back once when a refund and a reversal of it come at once', async () => {
+    const bought = await buy(100);
+    const answers = await Promise.allSettled([
+      economy.refund(HOLDER, {
+        purchaseId: bought.id,
+        reason: 'stripe.refund',
+        idempotencyKey: key(),
+      }),
+      reverse(bought.id),
+    ]);
+    const givenBack = (await economy.history(HOLDER, SILVER)).entries.filter(
+      (entry) => entry.refundOf === bought.id,
+    );
+    expect(givenBack).toHaveLength(1);
+    expect(answers.filter((answer) => answer.status === 'fulfilled').length).toBeGreaterThanOrEqual(
+      1,
+    );
+    expect(await economy.reconcile(HOLDER, SILVER)).toEqual(
+      expect.objectContaining({ balance: 0, agrees: true }),
+    );
+  });
+});
+
 describe('idempotency', () => {
   it('answers the same key with the entry it wrote, once credited', async () => {
     const shared = key();
@@ -326,6 +456,16 @@ describe('the database', () => {
     ]) {
       await expect(dataSource.query(statement)).rejects.toThrow(/append-only/);
     }
+  });
+
+  it('refuses a reversal that names no purchase, whatever the application does', async () => {
+    await expect(
+      dataSource.query(
+        `INSERT INTO "mortar_economy_entries"
+           ("holder_id", "currency", "kind", "amount", "balance_after", "reason", "idempotency_key")
+         VALUES ('account-ada', 'silver', 'reversal', 1, 0, 'stripe.dispute', 'k')`,
+      ),
+    ).rejects.toThrow(/ck_economy_entries_refund/);
   });
 
   it('refuses a balance below zero and a credit with more left than it was, whatever the application does', async () => {

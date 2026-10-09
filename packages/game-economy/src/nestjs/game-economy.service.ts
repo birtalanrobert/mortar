@@ -9,7 +9,7 @@ import type { CreditKind, EntryKind } from '../kinds';
 import { isSpendOrder } from '../spend-order';
 import type { Draw, Lot } from '../types';
 import { checkRequest } from './check-request';
-import type { EntryView, LotView, Reconciliation } from './economy-views';
+import type { EntryView, LotView, Reconciliation, Reversal } from './economy-views';
 import { ENTRY_COLUMNS, entryViewOf, type EntryRow } from './entry-view-of';
 import type { GameEconomyOptions } from './game-economy-options.types';
 import type { MovementRequest, RefundRequest } from './movement-request.types';
@@ -151,6 +151,66 @@ export class GameEconomyService {
       await this.draw(manager, entry.id, [{ lotId: lot.entry_id, amount }]);
       await this.setBalance(manager, holderId, lot.currency, entry.balanceAfter);
       return entry;
+    });
+  }
+
+  /**
+   * A purchase reversed: its money gone back another way — a refund made at
+   * the payment provider, a chargeback — and whatever of its currency is left
+   * taken back, which may be less than all of it, or nothing. Answers with
+   * what was taken and what the holder had spent of it already, which nothing
+   * takes back; the game decides what that costs them.
+   *
+   * A purchase given back before — refunded, or reversed under another key —
+   * takes nothing more, and the answer names that entry instead. The same key
+   * again answers as it did the first time. `not_found` for a purchase not the
+   * holder's.
+   */
+  async reverse(holderId: string, request: RefundRequest): Promise<Reversal> {
+    checkRequest(holderId, request);
+    if (!UUID.test(request.purchaseId)) throw new NotFoundError('Purchase', request.purchaseId);
+    return runInTransaction(this.dataSource, async (manager) => {
+      const found = await this.lotOf(manager, holderId, request.purchaseId);
+      if (!found || found.kind !== 'purchase') {
+        throw new NotFoundError('Purchase', request.purchaseId);
+      }
+      const balance = await this.lock(manager, holderId, found.currency);
+      const amount = toAmount(found.amount);
+
+      const [keyed] = (await manager.query(
+        `SELECT ${ENTRY_COLUMNS} FROM "mortar_economy_entries"
+          WHERE "holder_id" = $1 AND "idempotency_key" = $2`,
+        [holderId, request.idempotencyKey],
+      )) as EntryRow[];
+      if (keyed) {
+        const entry = entryViewOf(keyed);
+        if (entry.kind !== 'reversal' || entry.refundOf !== found.entry_id) {
+          throw new LedgerKeyReusedError(request.idempotencyKey);
+        }
+        return { entry, taken: entry.amount, spent: amount - entry.amount, earlier: null };
+      }
+
+      const [given] = (await manager.query(
+        `SELECT ${ENTRY_COLUMNS} FROM "mortar_economy_entries" WHERE "refund_of" = $1`,
+        [found.entry_id],
+      )) as EntryRow[];
+      if (given) return { entry: null, taken: 0, spent: 0, earlier: entryViewOf(given) };
+
+      // Read again under the lock: a spend may have drawn on it meanwhile.
+      const lot = (await this.lotOf(manager, holderId, request.purchaseId))!;
+      const remaining = toAmount(lot.remaining);
+      if (remaining === 0) return { entry: null, taken: 0, spent: amount, earlier: null };
+      const entry = await this.insert(
+        manager,
+        holderId,
+        'reversal',
+        { ...request, currency: lot.currency, amount: remaining },
+        balance - remaining,
+        lot.entry_id,
+      );
+      await this.draw(manager, entry.id, [{ lotId: lot.entry_id, amount: remaining }]);
+      await this.setBalance(manager, holderId, lot.currency, entry.balanceAfter);
+      return { entry, taken: remaining, spent: amount - remaining, earlier: null };
     });
   }
 

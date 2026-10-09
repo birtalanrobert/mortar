@@ -98,6 +98,24 @@ any of it is spent or it was refunded already, and `not_found` for one that is
 not the holder's purchase. Whether it is still within a refund window, and the
 money's own return, are the game's and its payment provider's.
 
+`reverse` is for money that went back another way — a refund made at the
+payment provider, a chargeback. It takes whatever of the purchase is left,
+which may be less than all of it, or nothing, and answers with what it took
+and what the holder had spent already:
+
+```ts
+const { entry, taken, spent, earlier } = await economy.reverse(holderId, {
+  purchaseId,
+  reason: 'stripe.dispute',
+  idempotencyKey: `dispute:${eventId}`,
+});
+// spent > 0: currency the holder used that nothing took back — the game decides what that costs them.
+```
+
+A purchase is given back once, by a refund or a reversal, whichever comes
+first: a reversal of one given back already takes nothing and names the entry
+that did (`earlier`), and two at once leave one of them standing.
+
 ## Two things it deliberately does not do
 
 - **Move currency between holders.** A gift between players is a transfer

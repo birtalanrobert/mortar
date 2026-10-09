@@ -12,7 +12,7 @@ export interface EntryView {
   readonly balanceAfter: number;
   readonly reason: string;
   readonly reference: string | null;
-  /** For a refund, the purchase it gives back. */
+  /** For a refund or a reversal, the purchase it gives back. */
   readonly refundOf: string | null;
   readonly metadata: Record<string, unknown> | null;
   readonly occurredAt: Date;
@@ -37,4 +37,20 @@ export interface Reconciliation {
   /** What is left of every credit. */
   readonly lots: number;
   readonly agrees: boolean;
+}
+
+/**
+ * A purchase reversed: the entry that took back what was left of it — none
+ * when nothing was — how much that was, and how much of the purchase the
+ * holder had spent already, which nothing can take back.
+ */
+export interface Reversal {
+  readonly entry: EntryView | null;
+  readonly taken: number;
+  readonly spent: number;
+  /**
+   * The refund or reversal that had given the purchase back before, under
+   * another key: nothing more is taken, and nothing is newly spent.
+   */
+  readonly earlier: EntryView | null;
 }

@@ -4,6 +4,34 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## game-economy 2.0.0
+
+### Breaking
+
+- **`EntryKind` has `reversal`, a debit.** A reader that switches over the
+  kinds exhaustively, or keeps a record keyed by them, has one more.
+
+### Added
+
+- **`reverse`: a purchase's currency taken back because its money went back
+  another way** — a refund made at the payment provider, a chargeback.
+  `refund` gives back only a whole purchase, which is right for a buyer asking
+  and wrong for money already gone: a reversal takes whatever of the purchase is
+  left, which may be less than all of it, or nothing, and answers with what it
+  took and what the holder had spent already — what nothing can take back, for
+  the game to decide what it costs them. A purchase is given back once, by a
+  refund or a reversal, whichever comes first: a reversal of one given back
+  already takes nothing and names the entry that did. Idempotent by key, as
+  every write is. Designed against Holdfast's Silver, whose chargebacks take
+  back what is unspent and flag what was spent.
+- **The migration `AddReversals1791548064129`**, in `gameEconomyMigrations`:
+  the kind, and the check that a reversal, like a refund, names its purchase.
+
+### Migrating from 1.x
+
+Run the new migration. A product that only credits, spends, refunds and reads
+needs nothing else.
+
 ## billing 4.0.0
 
 Selling a pack — a premium currency, a ticket — as a single payment, rather
