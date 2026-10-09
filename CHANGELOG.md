@@ -4,6 +4,58 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## billing 4.0.0
+
+Selling a pack — a premium currency, a ticket — as a single payment, rather
+than a plan by the month: what four of the seventeen specifications sell.
+First consumed by Holdfast's Silver.
+
+### Breaking
+
+- **`BillingProvider` has `refund`.** An implementation of the port — a test
+  fake among them — needs one; `NoBilling`'s refuses, as everything else of
+  its does.
+- **`BillingEvent` has `eventId`, and two more kinds.** The event's own
+  identifier, the same on every delivery, is what makes a webhook delivered
+  twice recognisable as one. `kind` may now also be `refund` and `dispute`:
+  a reader that switches over it exhaustively has two more cases, and a fake
+  that builds events needs the id.
+- **`CheckoutRequest.price` may be an `InlinePrice`.** A provider reading it
+  as a string must handle the other shape.
+
+### Added
+
+- **A single payment priced by its amount** (`InlinePrice`): the amount in
+  minor units, the currency, the name the buyer reads, whether the tax is
+  inside the amount, and the provider's tax code. A pack whose price an
+  operator edits in the product's own settings is charged as written, with no
+  price in the provider's dashboard to drift from it. For `payment` mode only;
+  a subscription is still priced by its plan's identifier.
+- **`CheckoutRequest.metadata` and `locale`.** The caller's own keys travel
+  with `subject` onto the session and, for a single payment, onto the payment
+  itself — which a refund or a dispute names, never the session. The payment
+  page opens in the buyer's language.
+- **`refund({ payment, amount?, reference })`**, idempotent on the reference,
+  answering with the refund's status: `pending` until the payment method
+  confirms, `succeeded`, or `failed`.
+- **Events for a single payment's life.** A checkout event carries the
+  payment, the tax the provider worked out and the caller's metadata, and is
+  paid only when the money arrived — a session completed with a bank debit
+  still clearing is not, and `checkout.session.async_payment_succeeded` and
+  `…_failed` say what became of it. `charge.refunded` is a `refund` event with
+  how much has gone back so far, every refund together — the only way a
+  product hears of one made in the provider's dashboard. `charge.dispute
+.funds_withdrawn` and `…_reinstated` are `dispute` events, with whether the
+  money left or came back; an inquiry that moves nothing raises neither.
+- **`StripeBillingOptions.apiUrl`**: the provider's API somewhere other than
+  Stripe's own — stripe-mock in a pipeline, a suite's stub vendor.
+
+### Migrating from 3.x
+
+Add `refund` to any implementation of `BillingProvider`, and `eventId` to any
+`BillingEvent` a test builds. A product that only reads events, starts
+subscriptions and calls `NoBilling` or `StripeBilling` needs nothing else.
+
 ## http 2.0.1
 
 ### Fixed

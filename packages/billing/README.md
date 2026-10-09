@@ -1,6 +1,6 @@
 # @birtalanrobert/billing
 
-What a business pays **us**.
+What a customer pays **us**: a business for its plan, or a player for a pack.
 
 Not to be confused with [`@birtalanrobert/commerce`](../commerce), which is the
 other direction: a business taking money from its own customers through Stripe
@@ -43,6 +43,50 @@ charged on a schedule, a plan code written beside it makes our screen and their
 invoice disagree. Changing _how many_ is `setQuantity`, which tells the
 provider. Who assigned it and why is the caller's to record — this package knows
 nothing about operators.
+
+## Selling a pack, rather than a plan
+
+A premium currency in packs, a ticket, a wedding: one payment, through the same
+hosted checkout, priced by its amount rather than by a price kept in the
+provider's dashboard.
+
+```ts
+await provider.checkout({
+  mode: 'payment',
+  customer: 'cus_…',
+  price: {
+    amount: 999, // €9.99, the tax inside it
+    currency: 'EUR',
+    name: 'A purse: 260 Silver',
+    taxBehavior: 'inclusive',
+    taxCode: 'txcd_…',
+  },
+  subject: 'account:…',
+  metadata: { purchase: '…' },
+  locale: 'ro',
+  reference: '…', // the provider's idempotency key
+  successUrl: '…',
+  cancelUrl: '…',
+});
+
+await provider.refund({ payment: 'pi_…', reference: 'refund-…' });
+```
+
+- **The amount is the one the product shows.** A pack whose price an operator
+  edits in the product's settings is charged as written; a price id in the
+  dashboard would be a second copy of the figure, and the two drift the first
+  time somebody edits one of them.
+- **Metadata rides on the payment as well as the session**, because a refund
+  or a dispute names the payment and never the session.
+- **A completed checkout is not always a paid one.** A bank debit completes
+  the session days before the money arrives; `paid` says which, and its own
+  event says when it did.
+- **Every refund is heard, ours or not.** `charge.refunded` arrives for one made
+  in the provider's dashboard too, with how much has gone back altogether, and
+  a dispute is read by the money it moves — withdrawn, or reinstated when it is
+  won.
+- **`eventId` is the same on every delivery**, which is what a product keys on
+  to act on a webhook delivered twice once.
 
 ## Using it in a NestJS application
 

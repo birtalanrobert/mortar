@@ -1,3 +1,5 @@
+import { createServer, type IncomingMessage } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { describe, expect, it, vi } from 'vitest';
 import type Stripe from 'stripe';
 import { StripeBilling } from './stripe';
@@ -109,6 +111,118 @@ describe('reading Stripe’s answers', () => {
       });
 
       expect(options.idempotencyKey).toBe('checkout-abc');
+    });
+  });
+
+  describe('selling a single payment by its amount', () => {
+    const pack = {
+      customer: 'cus_1',
+      mode: 'payment' as const,
+      price: {
+        amount: 999,
+        currency: 'EUR',
+        name: 'A purse: 260 Silver',
+        taxBehavior: 'inclusive' as const,
+        taxCode: 'txcd_10000000',
+      },
+      successUrl: 'https://game.test/silver?bought',
+      cancelUrl: 'https://game.test/silver',
+      subject: 'account:abc',
+      reference: 'checkout-1',
+      metadata: { purchase: 'p-1', package: 'purse' },
+      locale: 'hu',
+    };
+
+    it('charges the amount the product shows, the tax inside it, as the payment page says', async () => {
+      const create = vi.fn().mockResolvedValue({ id: 'cs_1', url: 'https://pay.test/cs_1' });
+
+      expect(await billing({ checkout: { sessions: { create } } }).checkout(pack)).toEqual({
+        url: 'https://pay.test/cs_1',
+        externalId: 'cs_1',
+      });
+      const [body, options] = create.mock.calls[0] as [
+        Record<string, unknown>,
+        { idempotencyKey: string },
+      ];
+
+      /*
+       * A price an operator edits in the product's settings is charged as
+       * written: no price in the provider's dashboard to drift from it. A
+       * consumer price already holds its VAT, which the provider works out.
+       */
+      expect(body.line_items).toEqual([
+        {
+          price_data: {
+            currency: 'eur',
+            unit_amount: 999,
+            tax_behavior: 'inclusive',
+            product_data: { name: 'A purse: 260 Silver', tax_code: 'txcd_10000000' },
+          },
+          quantity: 1,
+        },
+      ]);
+      expect(body.automatic_tax).toEqual({ enabled: true });
+      expect(body.locale).toBe('hu');
+      expect(options.idempotencyKey).toBe('checkout-1');
+    });
+
+    it('carries the caller’s own metadata onto the payment too, which a refund or a dispute names', async () => {
+      const create = vi.fn().mockResolvedValue({ id: 'cs_1', url: 'https://pay.test/cs_1' });
+
+      await billing({ checkout: { sessions: { create } } }).checkout(pack);
+      const [body] = create.mock.calls[0] as [Record<string, unknown>];
+
+      const metadata = { purchase: 'p-1', package: 'purse', subject: 'account:abc' };
+      expect(body.metadata).toEqual(metadata);
+      expect(body.payment_intent_data).toEqual({ metadata });
+      expect(body.subscription_data).toBeUndefined();
+    });
+
+    it('refuses an amount for a subscription, whose recurring price is the plan’s own', async () => {
+      const create = vi.fn();
+
+      await expect(
+        billing({ checkout: { sessions: { create } } }).checkout({ ...pack, mode: 'subscription' }),
+      ).rejects.toThrow(RangeError);
+      expect(create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('refunding a single payment', () => {
+    const refundOf = (status: string) =>
+      billing({
+        refunds: { create: vi.fn().mockResolvedValue({ id: 're_1', status, amount: 999 }) },
+      }).refund({ payment: 'pi_1', reference: 'refund-p-1' });
+
+    it('returns the payment’s money under a reference the provider holds it to', async () => {
+      const create = vi.fn().mockResolvedValue({ id: 're_1', status: 'succeeded', amount: 400 });
+
+      expect(
+        await billing({ refunds: { create } }).refund({
+          payment: 'pi_1',
+          amount: 400,
+          reference: 'refund-p-1',
+        }),
+      ).toEqual({ externalId: 're_1', status: 'succeeded', amount: 400 });
+      // Asked again after a timeout, the money is returned once.
+      expect(create).toHaveBeenCalledWith(
+        { payment_intent: 'pi_1', amount: 400 },
+        { idempotencyKey: 'refund-p-1' },
+      );
+    });
+
+    it('returns all of it when no amount is given', async () => {
+      const create = vi.fn().mockResolvedValue({ id: 're_1', status: 'pending', amount: 999 });
+
+      await billing({ refunds: { create } }).refund({ payment: 'pi_1', reference: 'r' });
+      expect(create.mock.calls[0]?.[0]).toEqual({ payment_intent: 'pi_1' });
+    });
+
+    it('reads a refund waiting on the buyer’s bank as on its way, and a cancelled one as failed', async () => {
+      expect((await refundOf('requires_action')).status).toBe('pending');
+      expect((await refundOf('pending')).status).toBe('pending');
+      expect((await refundOf('canceled')).status).toBe('failed');
+      expect((await refundOf('failed')).status).toBe('failed');
     });
   });
 
@@ -299,9 +413,157 @@ describe('reading Stripe’s answers', () => {
        * drifts. Treating an unknown one as an error means retries and an alert
        * for something that was never any of our business.
        */
-      const client = withSecret({ id: 'evt_2', type: 'charge.refunded', data: { object: {} } });
+      const client = withSecret({ id: 'evt_2', type: 'customer.created', data: { object: {} } });
 
-      expect(client.verify('{}', 'v1=ok')?.kind).toBe('other');
+      expect(client.verify('{}', 'v1=ok')).toEqual({
+        kind: 'other',
+        eventId: 'evt_2',
+        externalId: 'evt_2',
+      });
+    });
+
+    const session = (fields: Record<string, unknown>) => ({
+      id: 'cs_1',
+      customer: 'cus_1',
+      metadata: { subject: 'account:abc', purchase: 'p-1' },
+      payment_status: 'paid',
+      payment_intent: 'pi_1',
+      amount_total: 999,
+      currency: 'eur',
+      total_details: { amount_tax: 159 },
+      ...fields,
+    });
+
+    it('reads a paid checkout with its payment, its tax and the caller’s metadata, under the event’s own id', () => {
+      const client = withSecret({
+        id: 'evt_10',
+        type: 'checkout.session.completed',
+        data: { object: session({}) },
+      });
+
+      // The event's id is what a second delivery of it shares with the first.
+      expect(client.verify('{}', 'v1=ok')).toEqual({
+        kind: 'checkout',
+        eventId: 'evt_10',
+        externalId: 'cs_1',
+        customer: 'cus_1',
+        subject: 'account:abc',
+        metadata: { subject: 'account:abc', purchase: 'p-1' },
+        paid: true,
+        payment: 'pi_1',
+        amount: 999,
+        currency: 'EUR',
+        tax: 159,
+      });
+    });
+
+    it('reads a checkout completed with its money still clearing as unpaid, until its own event says it paid', () => {
+      /*
+       * A bank debit completes the session days before the money arrives.
+       * Crediting at completion would deliver what was never paid for.
+       */
+      const read = (type: string, payment_status: string) =>
+        withSecret({
+          id: 'evt_11',
+          type,
+          data: { object: session({ payment_status, payment_intent: { id: 'pi_2' } }) },
+        }).verify('{}', 'v1=ok');
+
+      expect(read('checkout.session.completed', 'unpaid')).toMatchObject({
+        kind: 'checkout',
+        paid: false,
+        payment: 'pi_2',
+      });
+      expect(read('checkout.session.async_payment_succeeded', 'paid')?.paid).toBe(true);
+      expect(read('checkout.session.async_payment_failed', 'unpaid')?.paid).toBe(false);
+    });
+
+    it('reads every refund of a payment, the provider’s dashboard’s among them, by how much has gone back', () => {
+      const client = withSecret({
+        id: 'evt_12',
+        type: 'charge.refunded',
+        data: {
+          object: {
+            id: 'ch_1',
+            customer: 'cus_1',
+            payment_intent: 'pi_1',
+            metadata: {},
+            amount: 999,
+            amount_refunded: 500,
+            currency: 'eur',
+          },
+        },
+      });
+
+      expect(client.verify('{}', 'v1=ok')).toEqual({
+        kind: 'refund',
+        eventId: 'evt_12',
+        externalId: 'ch_1',
+        customer: 'cus_1',
+        payment: 'pi_1',
+        amount: 999,
+        amountRefunded: 500,
+        currency: 'EUR',
+      });
+    });
+
+    it('reads a dispute by the money it moves: withdrawn, and reinstated when it is won', () => {
+      const read = (type: string) =>
+        withSecret({
+          id: 'evt_13',
+          type,
+          data: { object: { id: 'dp_1', payment_intent: 'pi_1', amount: 999, currency: 'eur' } },
+        }).verify('{}', 'v1=ok');
+
+      expect(read('charge.dispute.funds_withdrawn')).toEqual({
+        kind: 'dispute',
+        eventId: 'evt_13',
+        externalId: 'dp_1',
+        payment: 'pi_1',
+        amount: 999,
+        currency: 'EUR',
+        fundsWithdrawn: true,
+      });
+      expect(read('charge.dispute.funds_reinstated')?.fundsWithdrawn).toBe(false);
+      // An inquiry moves no money, and is none of the product's business yet.
+      expect(read('charge.dispute.created')?.kind).toBe('other');
+    });
+  });
+
+  describe('an API somewhere else', () => {
+    it('sends every call there, as stripe-mock or a suite’s stub vendor answers them', async () => {
+      const received: Array<{ method?: string; url?: string; key?: string; body: string }> = [];
+      const server = createServer((incoming: IncomingMessage, answer) => {
+        let body = '';
+        incoming.on('data', (chunk: Buffer) => (body += chunk.toString()));
+        incoming.on('end', () => {
+          received.push({
+            method: incoming.method,
+            url: incoming.url,
+            key: incoming.headers['idempotency-key'] as string | undefined,
+            body,
+          });
+          answer.writeHead(200, { 'content-type': 'application/json' });
+          answer.end(
+            JSON.stringify({ id: 're_9', object: 'refund', status: 'succeeded', amount: 999 }),
+          );
+        });
+      });
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+      try {
+        const { port } = server.address() as AddressInfo;
+        const refund = await new StripeBilling({
+          secretKey: 'sk_test_stub',
+          apiUrl: `http://127.0.0.1:${port}`,
+        }).refund({ payment: 'pi_1', reference: 'refund-p-1' });
+
+        expect(refund).toEqual({ externalId: 're_9', status: 'succeeded', amount: 999 });
+        expect(received).toEqual([
+          { method: 'POST', url: '/v1/refunds', key: 'refund-p-1', body: 'payment_intent=pi_1' },
+        ]);
+      } finally {
+        await new Promise((resolve) => server.close(resolve));
+      }
     });
   });
 });

@@ -45,6 +45,8 @@ export type {
   BillingProvider,
   CheckoutRequest,
   HostedSession,
+  InlinePrice,
   ProviderCustomer,
+  ProviderRefund,
   ProviderSubscription,
 } from './providers/port';

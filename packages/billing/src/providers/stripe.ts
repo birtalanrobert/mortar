@@ -5,6 +5,7 @@ import type {
   CheckoutRequest,
   HostedSession,
   ProviderCustomer,
+  ProviderRefund,
   ProviderSubscription,
 } from './port';
 
@@ -12,6 +13,11 @@ export interface StripeBillingOptions {
   readonly secretKey: string;
   /** Without it every webhook is refused, which is the correct default. */
   readonly webhookSecret?: string;
+  /**
+   * Where the provider's API answers, when it is not Stripe's own: stripe-mock
+   * in a pipeline, or a suite's stub vendor. Absent everywhere else.
+   */
+  readonly apiUrl?: string;
   /** Injected in tests. Nothing else should pass one. */
   readonly client?: Stripe;
 }
@@ -36,7 +42,7 @@ export class StripeBilling implements BillingProvider {
   private readonly stripe: Stripe;
 
   constructor(private readonly options: StripeBillingOptions) {
-    this.stripe = options.client ?? new Stripe(options.secretKey);
+    this.stripe = options.client ?? new Stripe(options.secretKey, apiAt(options.apiUrl));
   }
 
   async customer(
@@ -63,27 +69,52 @@ export class StripeBilling implements BillingProvider {
   }
 
   async checkout(request: CheckoutRequest): Promise<HostedSession> {
+    if (typeof request.price !== 'string' && request.mode !== 'payment') {
+      // A recurring price given inline would need its interval and its
+      // product kept somewhere, which is exactly what a plan's price id is.
+      throw new RangeError('A price given by its amount is for a single payment only.');
+    }
+    const metadata = { ...request.metadata, subject: request.subject };
     const session = await this.stripe.checkout.sessions.create(
       {
         mode: request.mode,
         customer: request.customer,
-        line_items: [{ price: request.price, quantity: request.quantity ?? 1 }],
+        line_items: [
+          typeof request.price === 'string'
+            ? { price: request.price, quantity: request.quantity ?? 1 }
+            : {
+                price_data: {
+                  currency: request.price.currency.toLowerCase(),
+                  unit_amount: request.price.amount,
+                  tax_behavior: request.price.taxBehavior,
+                  product_data: {
+                    name: request.price.name,
+                    ...(request.price.taxCode ? { tax_code: request.price.taxCode } : {}),
+                  },
+                },
+                quantity: request.quantity ?? 1,
+              },
+        ],
         success_url: request.successUrl,
         cancel_url: request.cancelUrl,
+        ...(request.locale
+          ? { locale: request.locale as Stripe.Checkout.SessionCreateParams.Locale }
+          : {}),
         /*
          * Carried through so a webhook can be matched back without a lookup
-         * table of our own — and on the subscription too, because the
-         * session's metadata does not survive onto what it creates.
+         * table of our own — and onto what the session creates too, because
+         * the session's metadata survives onto neither: the subscription, or
+         * the payment that a refund or a dispute will later name.
          */
-        metadata: { subject: request.subject },
+        metadata,
         ...(request.mode === 'subscription'
           ? {
               subscription_data: {
-                metadata: { subject: request.subject },
+                metadata,
                 ...(request.trialDays ? { trial_period_days: request.trialDays } : {}),
               },
             }
-          : {}),
+          : { payment_intent_data: { metadata } }),
         /*
          * VAT worked out by the provider, for the same reason the card is.
          * Both markets tax a digital subscription by where the customer is, and
@@ -181,6 +212,34 @@ export class StripeBilling implements BillingProvider {
     );
   }
 
+  async refund(input: {
+    payment: string;
+    amount?: number;
+    reference: string;
+  }): Promise<ProviderRefund> {
+    const refund = await this.stripe.refunds.create(
+      {
+        payment_intent: input.payment,
+        ...(input.amount === undefined ? {} : { amount: input.amount }),
+      },
+      { idempotencyKey: input.reference },
+    );
+    return {
+      externalId: refund.id,
+      /*
+       * `requires_action` is a refund waiting on the buyer's bank details, and
+       * still on its way; a cancelled one returns nothing, as a failed one does.
+       */
+      status:
+        refund.status === 'succeeded'
+          ? 'succeeded'
+          : refund.status === 'failed' || refund.status === 'canceled'
+            ? 'failed'
+            : 'pending',
+      amount: refund.amount,
+    };
+  }
+
   verify(payload: string | Buffer, signature: string | undefined): BillingEvent | undefined {
     if (!signature || !this.options.webhookSecret) return undefined;
 
@@ -231,6 +290,7 @@ function interpret(subscription: Stripe.Subscription): ProviderSubscription {
 }
 
 function interpretEvent(event: Stripe.Event): BillingEvent {
+  const eventId = event.id;
   switch (event.type) {
     case 'customer.subscription.created':
     case 'customer.subscription.updated':
@@ -240,11 +300,10 @@ function interpretEvent(event: Stripe.Event): BillingEvent {
 
       return {
         kind: 'subscription',
+        eventId,
         externalId: read.externalId,
         subscription: read,
-        ...(customerOf(subscription.customer)
-          ? { customer: customerOf(subscription.customer)! }
-          : {}),
+        ...(idOf(subscription.customer) ? { customer: idOf(subscription.customer)! } : {}),
         ...(subscription.metadata?.subject ? { subject: subscription.metadata.subject } : {}),
       };
     }
@@ -268,9 +327,10 @@ function interpretEvent(event: Stripe.Event): BillingEvent {
 
       return {
         kind: 'invoice',
+        eventId,
         externalId: invoice.id ?? '',
         ...(details?.metadata?.subject ? { subject: details.metadata.subject } : {}),
-        ...(customerOf(invoice.customer) ? { customer: customerOf(invoice.customer)! } : {}),
+        ...(idOf(invoice.customer) ? { customer: idOf(invoice.customer)! } : {}),
         paid: event.type === 'invoice.paid',
         amount: invoice.amount_due,
         currency: invoice.currency.toUpperCase(),
@@ -278,17 +338,78 @@ function interpretEvent(event: Stripe.Event): BillingEvent {
       };
     }
 
-    case 'checkout.session.completed': {
+    case 'checkout.session.completed':
+    case 'checkout.session.async_payment_succeeded':
+    case 'checkout.session.async_payment_failed': {
       const session = event.data.object as Stripe.Checkout.Session;
 
       return {
         kind: 'checkout',
+        eventId,
         externalId: session.id,
-        ...(customerOf(session.customer) ? { customer: customerOf(session.customer)! } : {}),
+        ...(idOf(session.customer) ? { customer: idOf(session.customer)! } : {}),
         ...(session.metadata?.subject ? { subject: session.metadata.subject } : {}),
-        paid: session.payment_status === 'paid',
+        ...(session.metadata ? { metadata: { ...session.metadata } } : {}),
+        /*
+         * A session completes before a slow payment method has paid — a bank
+         * debit clears in days — so completing is not paying. Its own event
+         * says when it did, or that it never will.
+         */
+        paid:
+          event.type === 'checkout.session.async_payment_succeeded' ||
+          (event.type === 'checkout.session.completed' &&
+            (session.payment_status === 'paid' ||
+              session.payment_status === 'no_payment_required')),
+        ...(idOf(session.payment_intent) ? { payment: idOf(session.payment_intent)! } : {}),
         ...(session.amount_total === null ? {} : { amount: session.amount_total }),
         ...(session.currency ? { currency: session.currency.toUpperCase() } : {}),
+        ...(typeof session.total_details?.amount_tax === 'number'
+          ? { tax: session.total_details.amount_tax }
+          : {}),
+      };
+    }
+
+    case 'charge.refunded': {
+      const charge = event.data.object as Stripe.Charge;
+
+      /*
+       * Every refund of the payment, ours or one made in the provider's own
+       * dashboard, arrives here — the only place a product hears of the
+       * second kind. What has been returned is cumulative, so an event
+       * delivered late or twice still says how things stand.
+       */
+      return {
+        kind: 'refund',
+        eventId,
+        externalId: charge.id,
+        ...(idOf(charge.customer) ? { customer: idOf(charge.customer)! } : {}),
+        ...(idOf(charge.payment_intent) ? { payment: idOf(charge.payment_intent)! } : {}),
+        ...(charge.metadata && Object.keys(charge.metadata).length > 0
+          ? { metadata: { ...charge.metadata } }
+          : {}),
+        amount: charge.amount,
+        amountRefunded: charge.amount_refunded,
+        currency: charge.currency.toUpperCase(),
+      };
+    }
+
+    case 'charge.dispute.funds_withdrawn':
+    case 'charge.dispute.funds_reinstated': {
+      const dispute = event.data.object as Stripe.Dispute;
+
+      /*
+       * The money moving, rather than the dispute's paperwork: an inquiry
+       * that never takes anything raises neither, and a dispute is answered
+       * by what it took or gave back.
+       */
+      return {
+        kind: 'dispute',
+        eventId,
+        externalId: dispute.id,
+        ...(idOf(dispute.payment_intent) ? { payment: idOf(dispute.payment_intent)! } : {}),
+        amount: dispute.amount,
+        currency: dispute.currency.toUpperCase(),
+        fundsWithdrawn: event.type === 'charge.dispute.funds_withdrawn',
       };
     }
 
@@ -298,21 +419,37 @@ function interpretEvent(event: Stripe.Event): BillingEvent {
        * drifts. Treating an unknown one as an error means retries and an alert
        * for something that was never any of our business.
        */
-      return { kind: 'other', externalId: event.id };
+      return { kind: 'other', eventId, externalId: event.id };
   }
 }
 
 /**
- * The customer's identifier, however the vendor chose to send it.
+ * An identifier — a customer's, a payment's — however the vendor chose to
+ * send it.
  *
  * Expanded objects and bare strings both appear on the same field depending on
  * the event and the API version, and a reader that assumes one of them silently
  * finds nothing on half the traffic.
  */
-function customerOf(customer: unknown): string | undefined {
-  if (typeof customer === 'string') return customer;
-  if (customer && typeof customer === 'object' && 'id' in customer) {
-    return String((customer as { id: unknown }).id);
+function idOf(field: unknown): string | undefined {
+  if (typeof field === 'string') return field;
+  if (field && typeof field === 'object' && 'id' in field) {
+    return String((field as { id: unknown }).id);
   }
   return undefined;
+}
+
+/**
+ * The client's options for an API somewhere other than Stripe's own: its
+ * host, port and protocol, which is how the SDK is told.
+ */
+function apiAt(apiUrl: string | undefined): Stripe.StripeConfig | undefined {
+  if (!apiUrl) return undefined;
+  const url = new URL(apiUrl);
+  const protocol = url.protocol === 'http:' ? 'http' : 'https';
+  return {
+    host: url.hostname,
+    port: url.port === '' ? (protocol === 'http' ? 80 : 443) : Number(url.port),
+    protocol,
+  };
 }

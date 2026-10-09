@@ -3,6 +3,7 @@ import type {
   CheckoutRequest,
   HostedSession,
   ProviderCustomer,
+  ProviderRefund,
   ProviderSubscription,
 } from './port';
 
@@ -46,6 +47,10 @@ export class NoBilling implements BillingProvider {
   }
 
   async cancel(): Promise<ProviderSubscription> {
+    throw new Error('This deployment has no billing provider configured.');
+  }
+
+  async refund(): Promise<ProviderRefund> {
     throw new Error('This deployment has no billing provider configured.');
   }
 
