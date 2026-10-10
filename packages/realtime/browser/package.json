@@ -1,0 +1,5 @@
+{
+  "main": "../dist/browser/index.js",
+  "types": "../dist/browser/index.d.ts",
+  "sideEffects": false
+}

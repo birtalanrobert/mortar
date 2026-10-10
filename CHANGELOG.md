@@ -4,6 +4,24 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## realtime 2.3.0
+
+A browser's import of its own. First consumed by Holdfast's game client.
+
+### Added
+
+- **`@birtalanrobert/realtime/browser`**: the wire format, the gap logic and
+  `RealtimeClient`, and nothing of the server. The package is CommonJS, which a
+  bundler cannot tree-shake, so a client importing the root shipped the
+  server's backlog, publisher and resume to every browser — about 0.6 KB gzip
+  of a game's first load. A test walks the entry's imports and fails if one
+  reaches `server/` or `nestjs/`.
+
+### Migrating from 2.2
+
+Nothing breaks: the root still exports everything. A browser bundle should
+import `@birtalanrobert/realtime/browser` instead of the root.
+
 ## billing 5.0.0
 
 An erasure's half that the payment provider holds: the address and the name it

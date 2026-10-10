@@ -19,10 +19,21 @@ dependencies — four browser bundles import it. The server lives in the same
 entry today because it is equally dependency-free; anything that needs Redis or
 Nest arrives behind a subpath.
 
+## In a browser, import `/browser`
+
+`@birtalanrobert/realtime/browser` is the root's browser half alone: the wire
+format, the gap logic and the client. **A browser bundle imports this, not the
+root.** The package is CommonJS, which a bundler cannot tree-shake, so the
+root's server half — the backlog, the publisher, resume — rides along into
+every bundle that imports it: dependency-free, and still bytes nobody runs. A
+game client found it as most of a kilobyte of its first-load budget. The
+package's own test walks this entry's imports and fails if one reaches the
+server or Nest.
+
 ## The client
 
 ```ts
-import { RealtimeClient } from '@birtalanrobert/realtime';
+import { RealtimeClient } from '@birtalanrobert/realtime/browser';
 
 const client = new RealtimeClient({
   url: 'wss://api.example.com/realtime',
