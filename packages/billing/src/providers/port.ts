@@ -107,8 +107,13 @@ export interface PaymentRequest {
    */
   readonly confirmationToken: string;
   /**
-   * Holds the payment to once: the same reference asked again — a retry after
-   * a timeout — is answered with the payment already made, never a second one.
+   * Holds the payment to once: the same request asked again under it — a
+   * retry after a timeout, or after the provider failed — is answered with the
+   * payment already made, never a second one; and one asked with another
+   * token, while the first may have been made, is refused rather than charged.
+   * One reference is one payment: another card after a refusal is a payment of
+   * its own, under a reference of its own. An address corrected after
+   * `PaymentLocationError` keeps it, nothing having been asked under it yet.
    */
   readonly reference: string;
   /** The caller's own, carried onto the payment, which a refund or a dispute will name. */
@@ -133,7 +138,7 @@ export interface ProviderPayment {
    * clears; `requires_action` while the buyer must still do something in the
    * page — a 3-D Secure check — which `clientSecret` lets the page finish;
    * `failed` when it was refused, `failure` saying why, the buyer free to try
-   * again; `canceled` when it never will be taken.
+   * again under a new reference; `canceled` when it never will be taken.
    */
   readonly status: 'succeeded' | 'processing' | 'requires_action' | 'failed' | 'canceled';
   /** In the currency's minor units: what is charged, the tax inside it or on top. */

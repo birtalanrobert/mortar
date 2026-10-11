@@ -283,7 +283,8 @@ describe('reading Stripe’s answers', () => {
           address_source: 'billing',
         },
       });
-      expect(taxOptions.idempotencyKey).toBe('purchase-p-1:tax');
+      // Keyed by the payment and what the buyer gave: a retry is the same calculation.
+      expect(taxOptions.idempotencyKey).toMatch(/^purchase-p-1:tax:[\w-]{22}$/);
       const [body, options] = create.mock.calls[0] as [
         Record<string, unknown>,
         { idempotencyKey: string },
@@ -358,7 +359,28 @@ describe('reading Stripe’s answers', () => {
       expect(refused.create).not.toHaveBeenCalled();
     });
 
-    it('throws anything else, for the caller to say nothing was charged', async () => {
+    it('keys the calculation by what the buyer gave: a retry the same one, an address corrected a new one', async () => {
+      const { billing: provider, calculate } = client();
+      await provider.pay(request);
+      await provider.pay(request);
+      await provider.pay({ ...request, confirmationToken: 'ctoken_2' });
+      // As long a reference and token as Stripe allows ids: still inside a key's 255 characters.
+      await provider.pay({
+        ...request,
+        reference: 'r'.repeat(200),
+        confirmationToken: `ctoken_${'x'.repeat(248)}`,
+      });
+
+      const keys = calculate.mock.calls.map(
+        ([, options]) => (options as { idempotencyKey: string }).idempotencyKey,
+      );
+      expect(keys[1]).toBe(keys[0]);
+      expect(keys[2]).toMatch(/^purchase-p-1:tax:[\w-]{22}$/);
+      expect(keys[2]).not.toBe(keys[0]);
+      expect(keys[3]!.length).toBeLessThanOrEqual(255);
+    });
+
+    it('throws anything else: what was asked may have been done regardless, which the payment’s own event says', async () => {
       const broken = client({
         create: vi
           .fn()
@@ -1004,7 +1026,11 @@ describe('reading Stripe’s answers', () => {
           received.map(({ method, url, key }) => ({ method, url: url?.split('?')[0], key })),
         ).toEqual([
           { method: 'GET', url: '/v1/confirmation_tokens/ctoken_1', key: undefined },
-          { method: 'POST', url: '/v1/tax/calculations', key: 'purchase-p-1:tax' },
+          {
+            method: 'POST',
+            url: '/v1/tax/calculations',
+            key: expect.stringMatching(/^purchase-p-1:tax:[\w-]{22}$/),
+          },
           { method: 'POST', url: '/v1/payment_intents', key: 'purchase-p-1' },
         ]);
         expect(received[2]!.body).toContain('hooks[inputs][tax][calculation]=taxcalc_1');

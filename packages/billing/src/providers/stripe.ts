@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import Stripe from 'stripe';
 import { PaymentLocationError } from './payment-location-error';
 import type {
@@ -185,7 +186,7 @@ export class StripeBilling implements BillingProvider {
             address_source: 'billing',
           },
         },
-        { idempotencyKey: `${request.reference}:tax` },
+        { idempotencyKey: calculationKey(request) },
       );
     } catch (error) {
       if ((error as { code?: unknown }).code === 'customer_tax_location_invalid') {
@@ -680,6 +681,24 @@ function callerMetadata(metadata: Stripe.Metadata | null | undefined): Record<st
 }
 
 /** The tax a calculation worked out: inside the amount for an inclusive price, on top for an exclusive one. */
+/*
+ * A calculation's idempotency key: the payment's reference and what the buyer
+ * gave. The same request retried is answered with the same calculation, so
+ * the PaymentIntent asked again is the same request too — which Stripe answers
+ * with the payment already made, never a second. An address corrected after
+ * `PaymentLocationError` is a new token, and a new calculation: under the
+ * reference alone, Stripe would refuse it as the first request's key reused
+ * with other parameters. The token is digested to keep the key inside the 255
+ * characters Stripe allows one.
+ */
+function calculationKey(request: PaymentRequest): string {
+  const token = createHash('sha256')
+    .update(request.confirmationToken)
+    .digest('base64url')
+    .slice(0, 22);
+  return `${request.reference}:tax:${token}`;
+}
+
 function taxIn(calculation: Stripe.Tax.Calculation): number {
   return calculation.tax_amount_inclusive + calculation.tax_amount_exclusive;
 }

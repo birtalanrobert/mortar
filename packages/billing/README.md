@@ -133,7 +133,17 @@ await provider.payment('pi_…'); // asked again when the page says it is done
   has answered.
 - **A card refused is an answer, not an error.** It comes back `failed` with
   Stripe's code, the issuer's reason and Stripe's sentence; the buyer tries
-  another card. Anything else is thrown.
+  another card, as a payment of its own under a reference of its own.
+  Anything else is thrown.
+- **One reference is one payment.** Asked again under it — a retry after a
+  timeout, or after Stripe failed — `pay` is answered with the payment already
+  made, never a second; asked with another card while the first may have been
+  made, Stripe refuses it rather than charging twice. A failure thrown is not a
+  payment refused: what was asked may have been done all the same, which the
+  payment's own event then says — so the caller retries under the same
+  reference, never a new one. An address corrected after `PaymentLocationError`
+  keeps it, nothing having been asked under it yet: the tax calculation is
+  keyed by what the buyer gave as well.
 - **`requires_action` carries a client secret**, for the page to finish a 3-D
   Secure check with `stripe.handleNextAction` — and is the only status that
   does.
