@@ -96,6 +96,50 @@ await provider.deleteCustomer('cus_…'); // for an erasure: the payments stay
   refuses everything: a customer made by a provider the deployment no longer
   has cannot be said to be forgotten.
 
+## Taking the payment in the product's own page
+
+When buyers should not leave the product to pay, the card form is Stripe's
+Payment Element, mounted in the product's page with no intent yet. On submit
+the page makes a ConfirmationToken of what the buyer gave and hands it to the
+server, which decides the amount and confirms:
+
+```ts
+const paid = await provider.pay({
+  customer: 'cus_…',
+  price: {
+    amount: 999, // €9.99, the tax inside it
+    currency: 'EUR',
+    name: 'A purse: 260 Silver',
+    taxBehavior: 'inclusive',
+    taxCode: 'txcd_…',
+  },
+  confirmationToken: 'ctoken_…', // from stripe.createConfirmationToken in the page
+  reference: '…', // the payment's idempotency key
+  metadata: { purchase: '…' },
+});
+// paid.status: 'succeeded' | 'processing' | 'requires_action' | 'failed' | 'canceled'
+
+await provider.payment('pi_…'); // asked again when the page says it is done
+```
+
+- **The tax is still Stripe's.** `pay` works out the VAT from the billing
+  address in the token — a country is all VAT asks of a buyer outside the
+  United States and Canada — and attaches the calculation to the
+  PaymentIntent, so Stripe records the tax transaction when the payment
+  succeeds and reverses it on a refund, made here or in its dashboard. An
+  address it cannot place is thrown as `PaymentLocationError`, before anything
+  is charged.
+- **A card refused is an answer, not an error.** It comes back `failed` with
+  Stripe's code, the issuer's reason and Stripe's sentence; the buyer tries
+  another card. Anything else is thrown.
+- **`requires_action` carries a client secret**, for the page to finish a 3-D
+  Secure check with `stripe.handleNextAction` — and is the only status that
+  does.
+- **A payment's own events** — `payment_intent.succeeded`, `processing`,
+  `payment_failed`, `canceled` — read as `kind: 'payment'`, `paid` only on
+  success and `failed` on a refusal or a cancellation, with the metadata the
+  payment carried.
+
 ## Using it in a NestJS application
 
 ```ts

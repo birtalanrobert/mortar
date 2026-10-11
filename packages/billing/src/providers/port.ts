@@ -85,6 +85,74 @@ export interface CheckoutRequest {
   readonly locale?: string;
 }
 
+/**
+ * A single payment taken in the product's own page — the provider's payment
+ * form mounted there, such as Stripe's Payment Element — and confirmed from the
+ * server, where the amount is decided.
+ *
+ * For a product whose buyers should not be sent to another site to pay. The
+ * tax is still the provider's to work out, from where the buyer said they are
+ * in that form: `pay` calculates it, attaches the calculation to the payment,
+ * and the provider records the tax transaction when the payment succeeds and
+ * reverses it when it is refunded.
+ */
+export interface PaymentRequest {
+  readonly customer: string;
+  /** What is charged, by its amount — the tax inside it or on top, as `taxBehavior` says. */
+  readonly price: InlinePrice;
+  /**
+   * The provider's token for what the buyer gave in the form: how they pay,
+   * and the billing address the tax is worked out from — Stripe's
+   * ConfirmationToken, created in the page.
+   */
+  readonly confirmationToken: string;
+  /**
+   * Holds the payment to once: the same reference asked again — a retry after
+   * a timeout — is answered with the payment already made, never a second one.
+   */
+  readonly reference: string;
+  /** The caller's own, carried onto the payment, which a refund or a dispute will name. */
+  readonly metadata?: Readonly<Record<string, string>>;
+}
+
+/** Why the provider refused a payment, in its own codes, for the page to say. */
+export interface PaymentFailure {
+  /** The provider's error code: `card_declined`, `expired_card`, `incorrect_cvc`… */
+  readonly code: string;
+  /** The issuer's reason, for a card it declined: `insufficient_funds`, `lost_card`… */
+  readonly declineCode?: string;
+  /** The provider's own sentence, in English. */
+  readonly message: string;
+}
+
+/** A single payment, as the provider has it. */
+export interface ProviderPayment {
+  readonly externalId: string;
+  /**
+   * `succeeded` once the money is taken; `processing` while a slow method
+   * clears; `requires_action` while the buyer must still do something in the
+   * page — a 3-D Secure check — which `clientSecret` lets the page finish;
+   * `failed` when it was refused, `failure` saying why, the buyer free to try
+   * again; `canceled` when it never will be taken.
+   */
+  readonly status: 'succeeded' | 'processing' | 'requires_action' | 'failed' | 'canceled';
+  /** In the currency's minor units: what is charged, the tax inside it or on top. */
+  readonly amount: number;
+  /** ISO 4217, upper case. */
+  readonly currency: string;
+  /**
+   * The tax the provider worked out for the payment — inside `amount` for an
+   * inclusive price — known when `pay` calculated it; absent when the payment
+   * is only read back.
+   */
+  readonly tax?: number;
+  /** Handed to the page, to finish what `requires_action` asks of the buyer there. */
+  readonly clientSecret?: string;
+  readonly failure?: PaymentFailure;
+  /** What `PaymentRequest.metadata` carried. */
+  readonly metadata: Readonly<Record<string, string>>;
+}
+
 /** Money returned, as the provider has it. */
 export interface ProviderRefund {
   readonly externalId: string;
@@ -109,7 +177,8 @@ export interface ProviderSubscription {
 
 /** What a provider's webhook turned out to be about. */
 export interface BillingEvent {
-  readonly kind: 'subscription' | 'invoice' | 'checkout' | 'refund' | 'dispute' | 'other';
+  readonly kind:
+    'subscription' | 'invoice' | 'checkout' | 'payment' | 'refund' | 'dispute' | 'other';
   /**
    * The event's own identifier: the same on every delivery of it, which is
    * what makes a webhook delivered twice recognisable as one.
@@ -129,11 +198,17 @@ export interface BillingEvent {
   readonly customer?: string;
   readonly subscription?: ProviderSubscription;
   /**
-   * Set on an invoice or a checkout event: whether the money arrived. A
-   * checkout completed with a payment still clearing — a bank debit, a
-   * voucher — is not paid; its own event says so when it is.
+   * Set on an invoice, a checkout or a payment event: whether the money
+   * arrived. A checkout completed, or a payment confirmed, with the money still
+   * clearing — a bank debit, a voucher — is not paid; its own event says so
+   * when it is.
    */
   readonly paid?: boolean;
+  /**
+   * Set on a payment event: `true` when the payment was refused or given up,
+   * and nothing was taken — the buyer may try again with another payment.
+   */
+  readonly failed?: boolean;
   /**
    * What an invoice came to, what a checkout charged, what a refunded payment
    * was for, or what a dispute questions — in minor units.
@@ -144,7 +219,7 @@ export interface BillingEvent {
   readonly subject?: string;
   /** What `CheckoutRequest.metadata` carried, as the event brought it back. */
   readonly metadata?: Readonly<Record<string, string>>;
-  /** The single payment a checkout made, a refund returned money from or a dispute questions. */
+  /** The single payment a checkout made or an event is about, a refund returned money from or a dispute questions. */
   readonly payment?: string;
   /** Set on a checkout event: the tax within `amount`, as the provider worked it out. */
   readonly tax?: number;
@@ -181,6 +256,24 @@ export interface BillingProvider {
 
   /** A hosted page to start a subscription or take a single payment. */
   checkout(request: CheckoutRequest): Promise<HostedSession>;
+
+  /**
+   * Takes a single payment the buyer gave in the product's own page, confirmed
+   * here with its tax worked out from where they are (`PaymentRequest`).
+   *
+   * A payment the provider refuses — a card declined — is answered as
+   * `failed`, not thrown: it is an outcome for the page to say. An address the
+   * provider cannot place for its tax is thrown as `PaymentLocationError`,
+   * before anything is charged; anything else is thrown.
+   */
+  pay(request: PaymentRequest): Promise<ProviderPayment>;
+
+  /**
+   * A single payment as the provider has it now, asked rather than
+   * remembered — when the buyer's page says it is done, before a webhook has
+   * said so. Undefined for one the provider does not have.
+   */
+  payment(externalId: string): Promise<ProviderPayment | undefined>;
 
   /**
    * The provider's own account screen.

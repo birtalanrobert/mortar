@@ -1,10 +1,13 @@
 import Stripe from 'stripe';
+import { PaymentLocationError } from './payment-location-error';
 import type {
   BillingEvent,
   BillingProvider,
   CheckoutRequest,
   HostedSession,
+  PaymentRequest,
   ProviderCustomer,
+  ProviderPayment,
   ProviderRefund,
   ProviderSubscription,
 } from './port';
@@ -27,7 +30,10 @@ export interface StripeBillingOptions {
  *
  * **Hosted wherever hosting is possible.** Checkout collects the card and
  * calculates VAT; the customer portal changes a card, downloads an invoice and
- * cancels. Both are things Stripe already does to a standard we would not
+ * cancels. A product that takes a single payment in its own page — Stripe's
+ * Payment Element — still leaves the card to Stripe's form and the VAT to
+ * Stripe Tax: `pay` confirms it from the server with the tax worked out and
+ * attached, so Stripe keeps the tax records as Checkout would. Both are things Stripe already does to a standard we would not
  * match, in two tax jurisdictions whose invoice rules we would have to learn
  * and then keep up with. What stays ours is what a plan costs, what it
  * permits, and what the product does when nobody has paid — none of which
@@ -138,6 +144,108 @@ export class StripeBilling implements BillingProvider {
     );
 
     return { url: session.url ?? '', externalId: session.id };
+  }
+
+  async pay(request: PaymentRequest): Promise<ProviderPayment> {
+    /*
+     * Where the buyer is, from what they gave in the form: the billing
+     * address the Payment Element collected — a country at least, which is all
+     * VAT asks of a buyer outside the United States and Canada.
+     */
+    const token = await this.stripe.confirmationTokens.retrieve(request.confirmationToken);
+    const address = token.payment_method_preview?.billing_details?.address;
+    if (!address?.country) throw new PaymentLocationError();
+
+    let calculation: Stripe.Tax.Calculation;
+    try {
+      calculation = await this.stripe.tax.calculations.create(
+        {
+          currency: request.price.currency.toLowerCase(),
+          line_items: [
+            {
+              amount: request.price.amount,
+              reference: request.reference,
+              tax_behavior: request.price.taxBehavior,
+              ...(request.price.taxCode ? { tax_code: request.price.taxCode } : {}),
+            },
+          ],
+          customer_details: {
+            address: {
+              country: address.country,
+              ...(address.postal_code ? { postal_code: address.postal_code } : {}),
+              ...(address.state ? { state: address.state } : {}),
+              ...(address.city ? { city: address.city } : {}),
+              ...(address.line1 ? { line1: address.line1 } : {}),
+              ...(address.line2 ? { line2: address.line2 } : {}),
+            },
+            address_source: 'billing',
+          },
+        },
+        { idempotencyKey: `${request.reference}:tax` },
+      );
+    } catch (error) {
+      if ((error as { code?: unknown }).code === 'customer_tax_location_invalid') {
+        throw new PaymentLocationError();
+      }
+      throw error;
+    }
+
+    const metadata = { ...request.metadata };
+    try {
+      const intent = await this.stripe.paymentIntents.create(
+        {
+          /*
+           * The calculation's total: the price itself when the tax is inside
+           * it, as a price shown to a consumer in the EU is.
+           */
+          amount: calculation.amount_total,
+          currency: request.price.currency.toLowerCase(),
+          customer: request.customer,
+          description: request.price.name,
+          confirm: true,
+          confirmation_token: request.confirmationToken,
+          automatic_payment_methods: { enabled: true },
+          metadata,
+          /*
+           * The calculation attached: the provider records the tax transaction
+           * when the payment succeeds and reverses it on a refund, made here or
+           * in its dashboard — nothing for us to keep in step.
+           */
+          hooks: { inputs: { tax: { calculation: calculation.id } } },
+        },
+        { idempotencyKey: request.reference },
+      );
+      return { ...paymentOf(intent), tax: taxIn(calculation) };
+    } catch (error) {
+      /*
+       * A card refused is an answer, not a fault: the payment exists, refused,
+       * and the buyer may try another card.
+       */
+      const refused = error as Stripe.errors.StripeError;
+      if (refused.type === 'StripeCardError' && refused.payment_intent) {
+        return {
+          ...paymentOf(refused.payment_intent),
+          status: 'failed',
+          tax: taxIn(calculation),
+          failure: {
+            code: refused.code ?? 'card_declined',
+            ...(refused.decline_code ? { declineCode: refused.decline_code } : {}),
+            message: refused.message,
+          },
+        };
+      }
+      throw error;
+    }
+  }
+
+  async payment(externalId: string): Promise<ProviderPayment | undefined> {
+    try {
+      return paymentOf(await this.stripe.paymentIntents.retrieve(externalId));
+    } catch (error) {
+      // Gone, or belonging to another environment sharing the account.
+      if ((error as { code?: unknown }).code === 'resource_missing') return undefined;
+      throw error;
+    }
   }
 
   async portal(customer: string, returnUrl: string): Promise<HostedSession> {
@@ -379,6 +487,36 @@ function interpretEvent(event: Stripe.Event): BillingEvent {
       };
     }
 
+    case 'payment_intent.succeeded':
+    case 'payment_intent.processing':
+    case 'payment_intent.payment_failed':
+    case 'payment_intent.canceled': {
+      const intent = event.data.object as Stripe.PaymentIntent;
+
+      /*
+       * A payment taken in the product's own page. Confirming it is not
+       * paying it — a bank debit clears in days — so only its own success
+       * says the money arrived; a refusal or a cancellation says it never will
+       * under this payment.
+       */
+      return {
+        kind: 'payment',
+        eventId,
+        externalId: intent.id,
+        payment: intent.id,
+        ...(idOf(intent.customer) ? { customer: idOf(intent.customer)! } : {}),
+        ...(intent.metadata && Object.keys(intent.metadata).length > 0
+          ? { metadata: { ...intent.metadata } }
+          : {}),
+        paid: event.type === 'payment_intent.succeeded',
+        failed:
+          event.type === 'payment_intent.payment_failed' ||
+          event.type === 'payment_intent.canceled',
+        amount: intent.amount,
+        currency: intent.currency.toUpperCase(),
+      };
+    }
+
     case 'charge.refunded': {
       const charge = event.data.object as Stripe.Charge;
 
@@ -431,6 +569,50 @@ function interpretEvent(event: Stripe.Event): BillingEvent {
        */
       return { kind: 'other', eventId, externalId: event.id };
   }
+}
+
+/**
+ * A PaymentIntent in this package's words. `requires_payment_method` after a
+ * confirmation is a refusal — the buyer may try again — and anything not yet
+ * succeeded, refused or given up is still on its way.
+ */
+function paymentOf(intent: Stripe.PaymentIntent): ProviderPayment {
+  const status: ProviderPayment['status'] =
+    intent.status === 'succeeded'
+      ? 'succeeded'
+      : intent.status === 'requires_action'
+        ? 'requires_action'
+        : intent.status === 'requires_payment_method'
+          ? 'failed'
+          : intent.status === 'canceled'
+            ? 'canceled'
+            : 'processing';
+  const error = intent.last_payment_error;
+
+  return {
+    externalId: intent.id,
+    status,
+    amount: intent.amount,
+    currency: intent.currency.toUpperCase(),
+    ...(status === 'requires_action' && intent.client_secret
+      ? { clientSecret: intent.client_secret }
+      : {}),
+    ...(status === 'failed' && error
+      ? {
+          failure: {
+            code: error.code ?? 'payment_failed',
+            ...(error.decline_code ? { declineCode: error.decline_code } : {}),
+            message: error.message ?? 'The payment was refused.',
+          },
+        }
+      : {}),
+    metadata: { ...intent.metadata },
+  };
+}
+
+/** The tax a calculation worked out: inside the amount for an inclusive price, on top for an exclusive one. */
+function taxIn(calculation: Stripe.Tax.Calculation): number {
+  return calculation.tax_amount_inclusive + calculation.tax_amount_exclusive;
 }
 
 /**

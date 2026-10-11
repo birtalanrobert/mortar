@@ -39,6 +39,7 @@ export {
 export { mayUse, usageCost, type OverageBehaviour, type UsageRate } from './usage';
 
 export { NoBilling } from './providers/none';
+export { PaymentLocationError } from './providers/payment-location-error';
 
 export type {
   BillingEvent,
@@ -46,7 +47,10 @@ export type {
   CheckoutRequest,
   HostedSession,
   InlinePrice,
+  PaymentFailure,
+  PaymentRequest,
   ProviderCustomer,
+  ProviderPayment,
   ProviderRefund,
   ProviderSubscription,
 } from './providers/port';

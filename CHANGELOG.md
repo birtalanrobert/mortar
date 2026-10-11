@@ -4,6 +4,39 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## billing 6.0.0
+
+A single payment taken in the product's own page — Stripe's Payment Element —
+confirmed from the server with its VAT worked out and attached. First consumed
+by Holdfast's Silver.
+
+### Breaking
+
+- **`BillingProvider` has `pay` and `payment`.** An implementation of the port
+  — a test double, another provider — needs both.
+
+### Added
+
+- **`pay(request)`**: reads the billing address from the page's
+  ConfirmationToken, has Stripe Tax calculate the tax on the price — inside it
+  for an inclusive one — and creates and confirms the PaymentIntent for the
+  calculation's total with the calculation attached
+  (`hooks.inputs.tax.calculation`), so Stripe records the tax transaction on
+  success and reverses it on a refund. Idempotent on `reference`, the
+  calculation under `<reference>:tax`. A card refused answers `failed` with
+  its codes and Stripe's sentence; `requires_action` carries the client secret
+  for the page's 3-D Secure; an address Stripe Tax cannot place throws
+  `PaymentLocationError` before anything is charged. `NoBilling` refuses.
+- **`payment(externalId)`**: a PaymentIntent as it stands, in the same words;
+  undefined for one Stripe does not have.
+- **Payment events**: `payment_intent.succeeded`, `processing`,
+  `payment_failed` and `canceled` read as `kind: 'payment'`, with `paid`,
+  `failed`, the amount, the customer and the metadata.
+
+### Migrating from 5.x
+
+Add `pay` and `payment` to any implementation of `BillingProvider`.
+
 ## realtime 2.3.0
 
 A browser's import of its own. First consumed by Holdfast's game client.

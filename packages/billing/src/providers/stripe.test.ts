@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { describe, expect, it, vi } from 'vitest';
 import type Stripe from 'stripe';
+import { PaymentLocationError } from './payment-location-error';
 import { StripeBilling } from './stripe';
 
 /**
@@ -185,6 +186,236 @@ describe('reading Stripe’s answers', () => {
         billing({ checkout: { sessions: { create } } }).checkout({ ...pack, mode: 'subscription' }),
       ).rejects.toThrow(RangeError);
       expect(create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('taking a payment in the product’s own page', () => {
+    const request = {
+      customer: 'cus_1',
+      price: {
+        amount: 999,
+        currency: 'EUR',
+        name: 'A purse: 260 Silver',
+        taxBehavior: 'inclusive' as const,
+        taxCode: 'txcd_10000000',
+      },
+      confirmationToken: 'ctoken_1',
+      reference: 'purchase-p-1',
+      metadata: { purchase: 'p-1' },
+    };
+    const token = (address: Record<string, unknown> | null) => ({
+      id: 'ctoken_1',
+      payment_method_preview: { billing_details: { address } },
+    });
+    const calculation = {
+      id: 'taxcalc_1',
+      amount_total: 999,
+      tax_amount_inclusive: 159,
+      tax_amount_exclusive: 0,
+    };
+    const intent = (fields: Record<string, unknown>) => ({
+      id: 'pi_1',
+      status: 'succeeded',
+      amount: 999,
+      currency: 'eur',
+      client_secret: 'pi_1_secret_x',
+      last_payment_error: null,
+      metadata: { purchase: 'p-1' },
+      ...fields,
+    });
+    const client = (
+      fields: {
+        address?: Record<string, unknown> | null;
+        create?: ReturnType<typeof vi.fn>;
+        calculate?: ReturnType<typeof vi.fn>;
+      } = {},
+    ) => {
+      const create = fields.create ?? vi.fn().mockResolvedValue(intent({}));
+      const calculate = fields.calculate ?? vi.fn().mockResolvedValue(calculation);
+      return {
+        create,
+        calculate,
+        billing: billing({
+          confirmationTokens: {
+            retrieve: vi
+              .fn()
+              .mockResolvedValue(
+                token(
+                  fields.address === undefined
+                    ? { country: 'RO', postal_code: '400001' }
+                    : fields.address,
+                ),
+              ),
+          },
+          tax: { calculations: { create: calculate } },
+          paymentIntents: { create },
+        }),
+      };
+    };
+
+    it('works out the tax from where the buyer is, attaches it, and confirms the amount it comes to', async () => {
+      const { billing: provider, calculate, create } = client();
+
+      expect(await provider.pay(request)).toEqual({
+        externalId: 'pi_1',
+        status: 'succeeded',
+        amount: 999,
+        currency: 'EUR',
+        tax: 159,
+        metadata: { purchase: 'p-1' },
+      });
+      const [taxBody, taxOptions] = calculate.mock.calls[0] as [
+        Record<string, unknown>,
+        { idempotencyKey: string },
+      ];
+      expect(taxBody).toEqual({
+        currency: 'eur',
+        line_items: [
+          {
+            amount: 999,
+            reference: 'purchase-p-1',
+            tax_behavior: 'inclusive',
+            tax_code: 'txcd_10000000',
+          },
+        ],
+        customer_details: {
+          address: { country: 'RO', postal_code: '400001' },
+          address_source: 'billing',
+        },
+      });
+      expect(taxOptions.idempotencyKey).toBe('purchase-p-1:tax');
+      const [body, options] = create.mock.calls[0] as [
+        Record<string, unknown>,
+        { idempotencyKey: string },
+      ];
+      expect(body).toEqual({
+        amount: 999,
+        currency: 'eur',
+        customer: 'cus_1',
+        description: 'A purse: 260 Silver',
+        confirm: true,
+        confirmation_token: 'ctoken_1',
+        automatic_payment_methods: { enabled: true },
+        metadata: { purchase: 'p-1' },
+        // Stripe records the tax transaction on success, and reverses it on a refund.
+        hooks: { inputs: { tax: { calculation: 'taxcalc_1' } } },
+      });
+      // A retry after a timeout is the same payment, never a second.
+      expect(options.idempotencyKey).toBe('purchase-p-1');
+    });
+
+    it('hands the page what it needs to finish a 3-D Secure check, and nothing else', async () => {
+      const { billing: provider } = client({
+        create: vi.fn().mockResolvedValue(intent({ status: 'requires_action' })),
+      });
+      expect(await provider.pay(request)).toMatchObject({
+        status: 'requires_action',
+        clientSecret: 'pi_1_secret_x',
+      });
+      const succeeded = await client().billing.pay(request);
+      expect(succeeded).not.toHaveProperty('clientSecret');
+    });
+
+    it('answers a card refused as a failed payment, saying why, rather than throwing', async () => {
+      const declined = Object.assign(new Error('Your card has insufficient funds.'), {
+        type: 'StripeCardError',
+        code: 'card_declined',
+        decline_code: 'insufficient_funds',
+        payment_intent: intent({ status: 'requires_payment_method' }),
+      });
+      const { billing: provider } = client({ create: vi.fn().mockRejectedValue(declined) });
+
+      expect(await provider.pay(request)).toEqual({
+        externalId: 'pi_1',
+        status: 'failed',
+        amount: 999,
+        currency: 'EUR',
+        tax: 159,
+        metadata: { purchase: 'p-1' },
+        failure: {
+          code: 'card_declined',
+          declineCode: 'insufficient_funds',
+          message: 'Your card has insufficient funds.',
+        },
+      });
+    });
+
+    it('charges nothing when the buyer cannot be placed for the tax: no country, or one Stripe Tax refuses', async () => {
+      const noCountry = client({ address: { postal_code: '400001' } });
+      await expect(noCountry.billing.pay(request)).rejects.toBeInstanceOf(PaymentLocationError);
+      expect(noCountry.calculate).not.toHaveBeenCalled();
+      expect(noCountry.create).not.toHaveBeenCalled();
+
+      const refused = client({
+        calculate: vi
+          .fn()
+          .mockRejectedValue(
+            Object.assign(new Error('x'), { code: 'customer_tax_location_invalid' }),
+          ),
+      });
+      await expect(refused.billing.pay(request)).rejects.toBeInstanceOf(PaymentLocationError);
+      expect(refused.create).not.toHaveBeenCalled();
+    });
+
+    it('throws anything else, for the caller to say nothing was charged', async () => {
+      const broken = client({
+        create: vi
+          .fn()
+          .mockRejectedValue(Object.assign(new Error('down'), { type: 'StripeAPIError' })),
+      });
+      await expect(broken.billing.pay(request)).rejects.toThrow('down');
+    });
+  });
+
+  describe('reading a payment back', () => {
+    const read = (fields: Record<string, unknown>) =>
+      billing({
+        paymentIntents: {
+          retrieve: vi.fn().mockResolvedValue({
+            id: 'pi_1',
+            amount: 999,
+            currency: 'eur',
+            client_secret: 'pi_1_secret_x',
+            last_payment_error: null,
+            metadata: { purchase: 'p-1' },
+            ...fields,
+          }),
+        },
+      }).payment('pi_1');
+
+    it('says where it stands, in this package’s words', async () => {
+      expect((await read({ status: 'succeeded' }))?.status).toBe('succeeded');
+      expect((await read({ status: 'processing' }))?.status).toBe('processing');
+      expect((await read({ status: 'requires_confirmation' }))?.status).toBe('processing');
+      expect((await read({ status: 'canceled' }))?.status).toBe('canceled');
+      expect(
+        await read({
+          status: 'requires_payment_method',
+          last_payment_error: { code: 'card_declined', message: 'Declined.' },
+        }),
+      ).toEqual({
+        externalId: 'pi_1',
+        status: 'failed',
+        amount: 999,
+        currency: 'EUR',
+        failure: { code: 'card_declined', message: 'Declined.' },
+        metadata: { purchase: 'p-1' },
+      });
+    });
+
+    it('reports nothing for one the provider does not have, and throws anything else', async () => {
+      const missing = billing({
+        paymentIntents: {
+          retrieve: vi
+            .fn()
+            .mockRejectedValue(Object.assign(new Error('No such'), { code: 'resource_missing' })),
+        },
+      });
+      expect(await missing.payment('pi_gone')).toBeUndefined();
+      const down = billing({
+        paymentIntents: { retrieve: vi.fn().mockRejectedValue(new Error('down')) },
+      });
+      await expect(down.payment('pi_1')).rejects.toThrow('down');
     });
   });
 
@@ -500,6 +731,39 @@ describe('reading Stripe’s answers', () => {
       expect(read('checkout.session.async_payment_failed', 'unpaid')?.paid).toBe(false);
     });
 
+    it('reads a payment taken in the product’s page: paid only when it succeeded, failed when refused or given up', () => {
+      const read = (type: string) =>
+        withSecret({
+          id: 'evt_20',
+          type,
+          data: {
+            object: {
+              id: 'pi_1',
+              customer: 'cus_1',
+              amount: 999,
+              currency: 'eur',
+              metadata: { purchase: 'p-1' },
+            },
+          },
+        }).verify('{}', 'v1=ok');
+
+      expect(read('payment_intent.succeeded')).toEqual({
+        kind: 'payment',
+        eventId: 'evt_20',
+        externalId: 'pi_1',
+        payment: 'pi_1',
+        customer: 'cus_1',
+        metadata: { purchase: 'p-1' },
+        paid: true,
+        failed: false,
+        amount: 999,
+        currency: 'EUR',
+      });
+      expect(read('payment_intent.processing')).toMatchObject({ paid: false, failed: false });
+      expect(read('payment_intent.payment_failed')).toMatchObject({ paid: false, failed: true });
+      expect(read('payment_intent.canceled')).toMatchObject({ paid: false, failed: true });
+    });
+
     it('reads every refund of a payment, the provider’s dashboard’s among them, by how much has gone back', () => {
       const client = withSecret({
         id: 'evt_12',
@@ -583,6 +847,73 @@ describe('reading Stripe’s answers', () => {
         expect(received).toEqual([
           { method: 'POST', url: '/v1/refunds', key: 'refund-p-1', body: 'payment_intent=pi_1' },
         ]);
+      } finally {
+        await new Promise((resolve) => server.close(resolve));
+      }
+    });
+
+    it('asks for the token, the tax and the payment in turn, the calculation attached as Stripe reads it', async () => {
+      const received: Array<{ method?: string; url?: string; key?: string; body: string }> = [];
+      const answers: Record<string, object> = {
+        '/v1/confirmation_tokens/ctoken_1': {
+          id: 'ctoken_1',
+          object: 'confirmation_token',
+          payment_method_preview: { billing_details: { address: { country: 'HU' } } },
+        },
+        '/v1/tax/calculations': {
+          id: 'taxcalc_1',
+          object: 'tax.calculation',
+          amount_total: 999,
+          tax_amount_inclusive: 212,
+          tax_amount_exclusive: 0,
+        },
+        '/v1/payment_intents': {
+          id: 'pi_1',
+          object: 'payment_intent',
+          status: 'succeeded',
+          amount: 999,
+          currency: 'eur',
+          metadata: {},
+        },
+      };
+      const server = createServer((incoming: IncomingMessage, answer) => {
+        let body = '';
+        incoming.on('data', (chunk: Buffer) => (body += chunk.toString()));
+        incoming.on('end', () => {
+          received.push({
+            method: incoming.method,
+            url: incoming.url,
+            key: incoming.headers['idempotency-key'] as string | undefined,
+            body: decodeURIComponent(body),
+          });
+          answer.writeHead(200, { 'content-type': 'application/json' });
+          answer.end(JSON.stringify(answers[(incoming.url ?? '').split('?')[0]!]));
+        });
+      });
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+      try {
+        const { port } = server.address() as AddressInfo;
+        const paid = await new StripeBilling({
+          secretKey: 'sk_test_stub',
+          apiUrl: `http://127.0.0.1:${port}`,
+        }).pay({
+          customer: 'cus_1',
+          price: { amount: 999, currency: 'EUR', name: 'A purse', taxBehavior: 'inclusive' },
+          confirmationToken: 'ctoken_1',
+          reference: 'purchase-p-1',
+        });
+
+        expect(paid).toMatchObject({ externalId: 'pi_1', status: 'succeeded', tax: 212 });
+        expect(
+          received.map(({ method, url, key }) => ({ method, url: url?.split('?')[0], key })),
+        ).toEqual([
+          { method: 'GET', url: '/v1/confirmation_tokens/ctoken_1', key: undefined },
+          { method: 'POST', url: '/v1/tax/calculations', key: 'purchase-p-1:tax' },
+          { method: 'POST', url: '/v1/payment_intents', key: 'purchase-p-1' },
+        ]);
+        expect(received[2]!.body).toContain('hooks[inputs][tax][calculation]=taxcalc_1');
+        expect(received[2]!.body).toContain('confirmation_token=ctoken_1');
+        expect(received[2]!.body).toContain('confirm=true');
       } finally {
         await new Promise((resolve) => server.close(resolve));
       }

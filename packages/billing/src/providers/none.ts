@@ -2,7 +2,9 @@ import type {
   BillingProvider,
   CheckoutRequest,
   HostedSession,
+  PaymentRequest,
   ProviderCustomer,
+  ProviderPayment,
   ProviderRefund,
   ProviderSubscription,
 } from './port';
@@ -37,6 +39,15 @@ export class NoBilling implements BillingProvider {
 
   async checkout(_request: CheckoutRequest): Promise<HostedSession> {
     throw new Error('This deployment has no billing provider configured.');
+  }
+
+  async pay(_request: PaymentRequest): Promise<ProviderPayment> {
+    throw new Error('This deployment has no billing provider configured.');
+  }
+
+  /** A deployment with no provider took no payment, so there is none to read. */
+  async payment(_externalId: string): Promise<ProviderPayment | undefined> {
+    return undefined;
   }
 
   async portal(_customer: string): Promise<HostedSession> {
