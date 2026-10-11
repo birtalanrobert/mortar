@@ -10,6 +10,7 @@ import type {
   ProviderPayment,
   ProviderRefund,
   ProviderSubscription,
+  ProviderTaxReversal,
 } from './port';
 
 export interface StripeBillingOptions {
@@ -356,6 +357,52 @@ export class StripeBilling implements BillingProvider {
             : 'pending',
       amount: refund.amount,
     };
+  }
+
+  async reverseTax(input: {
+    payment: string;
+    amount: number;
+    reference: string;
+  }): Promise<ProviderTaxReversal | undefined> {
+    /*
+     * The sale's tax transaction, as Stripe committed it from the calculation
+     * `pay` attached: the association names it, by the payment it came from.
+     */
+    let association: Stripe.Tax.Association;
+    try {
+      association = await this.stripe.tax.associations.find({ payment_intent: input.payment });
+    } catch (error) {
+      if ((error as { code?: unknown }).code === 'resource_missing') return undefined;
+      throw error;
+    }
+    const sale = association.tax_transaction_attempts?.find(
+      (attempt) => attempt.source === input.payment && attempt.status === 'committed',
+    )?.committed?.transaction;
+    if (!sale) return undefined;
+
+    /*
+     * Partial, by a flat amount, rather than full: a reversal Stripe can
+     * itself undo by reversing it in full, which is what `restoreTax` does
+     * when the money comes back.
+     */
+    const reversal = await this.stripe.tax.transactions.createReversal(
+      {
+        mode: 'partial',
+        original_transaction: sale,
+        reference: input.reference,
+        flat_amount: -input.amount,
+      },
+      { idempotencyKey: input.reference },
+    );
+    return { externalId: reversal.id };
+  }
+
+  async restoreTax(input: { reversal: string; reference: string }): Promise<ProviderTaxReversal> {
+    const restored = await this.stripe.tax.transactions.createReversal(
+      { mode: 'full', original_transaction: input.reversal, reference: input.reference },
+      { idempotencyKey: input.reference },
+    );
+    return { externalId: restored.id };
   }
 
   verify(payload: string | Buffer, signature: string | undefined): BillingEvent | undefined {

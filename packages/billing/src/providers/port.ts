@@ -153,6 +153,11 @@ export interface ProviderPayment {
   readonly metadata: Readonly<Record<string, string>>;
 }
 
+/** A tax record reversed, as the provider keeps it: its own transaction. */
+export interface ProviderTaxReversal {
+  readonly externalId: string;
+}
+
 /** Money returned, as the provider has it. */
 export interface ProviderRefund {
   readonly externalId: string;
@@ -323,6 +328,30 @@ export interface BillingProvider {
     readonly amount?: number;
     readonly reference: string;
   }): Promise<ProviderRefund>;
+
+  /**
+   * Reverses `amount` — tax included — of the tax a payment taken by `pay`
+   * recorded, for money gone back where the provider reverses nothing by
+   * itself: a dispute that withdrew it. A refund needs none: the provider
+   * reverses its tax as it refunds.
+   *
+   * Undefined when the payment recorded no tax to reverse — none was
+   * attached, or none committed. Idempotent on `reference`.
+   */
+  reverseTax(input: {
+    readonly payment: string;
+    readonly amount: number;
+    readonly reference: string;
+  }): Promise<ProviderTaxReversal | undefined>;
+
+  /**
+   * Undoes a reversal `reverseTax` made — the money came back, a dispute
+   * won — so the sale is recorded again. Idempotent on `reference`.
+   */
+  restoreTax(input: {
+    readonly reversal: string;
+    readonly reference: string;
+  }): Promise<ProviderTaxReversal>;
 
   /**
    * Whether a webhook really came from the provider, and what it says.

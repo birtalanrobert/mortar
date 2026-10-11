@@ -53,4 +53,5 @@ export type {
   ProviderPayment,
   ProviderRefund,
   ProviderSubscription,
+  ProviderTaxReversal,
 } from './providers/port';

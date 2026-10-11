@@ -135,6 +135,12 @@ await provider.payment('pi_…'); // asked again when the page says it is done
 - **`requires_action` carries a client secret**, for the page to finish a 3-D
   Secure check with `stripe.handleNextAction` — and is the only status that
   does.
+- **A dispute's tax is the product's to reverse.** Stripe reverses a
+  refund's tax by itself, never a dispute's: `reverseTax` reverses the tax of
+  the money a dispute withdrew — a partial reversal, by that amount — and
+  `restoreTax` undoes it when the dispute is won, by reversing that reversal
+  in full, as Stripe undoes a reversal. A payment that recorded no tax has
+  nothing to reverse.
 - **A payment's own events** — `payment_intent.succeeded`, `processing`,
   `payment_failed`, `canceled` — read as `kind: 'payment'`, `paid` only on
   success and `failed` on a refusal or a cancellation, with the metadata the

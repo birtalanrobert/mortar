@@ -4,6 +4,32 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## billing 7.0.0
+
+A dispute's tax, which Stripe does not reverse by itself. First consumed by
+Holdfast's Silver.
+
+### Breaking
+
+- **`BillingProvider` has `reverseTax` and `restoreTax`.** An implementation of
+  the port needs both.
+
+### Added
+
+- **`reverseTax({ payment, amount, reference })`**: finds the tax transaction
+  Stripe committed for a payment taken by `pay` (its tax association) and
+  reverses `amount` of it, tax included — a partial reversal by a flat amount,
+  so it can be undone. Undefined when the payment recorded no tax.
+- **`restoreTax({ reversal, reference })`**: reverses such a reversal in full,
+  recording the sale again — for a dispute won.
+
+Both are idempotent on `reference`. `NoBilling` has no tax to reverse, and
+refuses to restore any.
+
+### Migrating from 6.x
+
+Add `reverseTax` and `restoreTax` to any implementation of `BillingProvider`.
+
 ## billing 6.0.0
 
 A single payment taken in the product's own page — Stripe's Payment Element —

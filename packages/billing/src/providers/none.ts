@@ -7,6 +7,7 @@ import type {
   ProviderPayment,
   ProviderRefund,
   ProviderSubscription,
+  ProviderTaxReversal,
 } from './port';
 
 /**
@@ -71,6 +72,15 @@ export class NoBilling implements BillingProvider {
   }
 
   async refund(): Promise<ProviderRefund> {
+    throw new Error('This deployment has no billing provider configured.');
+  }
+
+  /** A deployment with no provider took no payment, so it recorded no tax to reverse. */
+  async reverseTax(): Promise<ProviderTaxReversal | undefined> {
+    return undefined;
+  }
+
+  async restoreTax(): Promise<ProviderTaxReversal> {
     throw new Error('This deployment has no billing provider configured.');
   }
 

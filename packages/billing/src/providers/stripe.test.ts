@@ -419,6 +419,86 @@ describe('reading Stripe’s answers', () => {
     });
   });
 
+  describe('the tax of a payment whose money a dispute took', () => {
+    const association = (attempts: unknown[]) => ({
+      id: 'taxa_1',
+      calculation: 'taxcalc_1',
+      payment_intent: 'pi_1',
+      tax_transaction_attempts: attempts,
+    });
+    const committed = (source: string, transaction: string) => ({
+      source,
+      status: 'committed',
+      committed: { transaction },
+    });
+
+    it('reverses the sale’s tax by the amount taken, partially, so it can be undone', async () => {
+      const createReversal = vi.fn().mockResolvedValue({ id: 'tax_rev_1' });
+      const provider = billing({
+        tax: {
+          associations: {
+            find: vi
+              .fn()
+              .mockResolvedValue(
+                association([committed('pi_1', 'tax_sale_1'), committed('re_1', 'tax_refund_1')]),
+              ),
+          },
+          transactions: { createReversal },
+        },
+      });
+
+      expect(
+        await provider.reverseTax({ payment: 'pi_1', amount: 999, reference: 'dispute-dp_1' }),
+      ).toEqual({ externalId: 'tax_rev_1' });
+      expect(createReversal).toHaveBeenCalledWith(
+        {
+          mode: 'partial',
+          original_transaction: 'tax_sale_1',
+          reference: 'dispute-dp_1',
+          flat_amount: -999,
+        },
+        { idempotencyKey: 'dispute-dp_1' },
+      );
+    });
+
+    it('reverses nothing for a payment that recorded no tax, and throws anything else', async () => {
+      const createReversal = vi.fn();
+      const none = (find: ReturnType<typeof vi.fn>) =>
+        billing({ tax: { associations: { find }, transactions: { createReversal } } });
+      const input = { payment: 'pi_1', amount: 999, reference: 'dispute-dp_1' };
+
+      expect(
+        await none(
+          vi.fn().mockRejectedValue(Object.assign(new Error('x'), { code: 'resource_missing' })),
+        ).reverseTax(input),
+      ).toBeUndefined();
+      expect(
+        await none(
+          vi.fn().mockResolvedValue(association([{ source: 'pi_1', status: 'errored' }])),
+        ).reverseTax(input),
+      ).toBeUndefined();
+      expect(createReversal).not.toHaveBeenCalled();
+      await expect(
+        none(vi.fn().mockRejectedValue(new Error('down'))).reverseTax(input),
+      ).rejects.toThrow('down');
+    });
+
+    it('records the sale again when the money comes back, by reversing the reversal in full', async () => {
+      const createReversal = vi.fn().mockResolvedValue({ id: 'tax_rev_2' });
+      const provider = billing({ tax: { transactions: { createReversal } } });
+
+      expect(
+        await provider.restoreTax({ reversal: 'tax_rev_1', reference: 'dispute-dp_1-won' }),
+      ).toEqual({
+        externalId: 'tax_rev_2',
+      });
+      expect(createReversal).toHaveBeenCalledWith(
+        { mode: 'full', original_transaction: 'tax_rev_1', reference: 'dispute-dp_1-won' },
+        { idempotencyKey: 'dispute-dp_1-won' },
+      );
+    });
+  });
+
   describe('refunding a single payment', () => {
     const refundOf = (status: string) =>
       billing({
