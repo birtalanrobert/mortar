@@ -13,6 +13,9 @@ import type {
   ProviderTaxReversal,
 } from './port';
 
+/** Where `pay` writes the tax it worked out, on the payment's metadata. */
+const TAX_METADATA = 'billing_tax';
+
 export interface StripeBillingOptions {
   readonly secretKey: string;
   /** Without it every webhook is refused, which is the correct default. */
@@ -191,7 +194,12 @@ export class StripeBilling implements BillingProvider {
       throw error;
     }
 
-    const metadata = { ...request.metadata };
+    /*
+     * The tax worked out, carried on the payment beside the caller's own: an
+     * event about it, or the payment read back, then says what the receipt
+     * needs even when it arrives before the caller has heard from `pay`.
+     */
+    const metadata = { ...request.metadata, [TAX_METADATA]: String(taxIn(calculation)) };
     try {
       const intent = await this.stripe.paymentIntents.create(
         {
@@ -552,9 +560,10 @@ function interpretEvent(event: Stripe.Event): BillingEvent {
         externalId: intent.id,
         payment: intent.id,
         ...(idOf(intent.customer) ? { customer: idOf(intent.customer)! } : {}),
-        ...(intent.metadata && Object.keys(intent.metadata).length > 0
-          ? { metadata: { ...intent.metadata } }
+        ...(Object.keys(callerMetadata(intent.metadata)).length > 0
+          ? { metadata: callerMetadata(intent.metadata) }
           : {}),
+        ...(taxOf(intent.metadata) === undefined ? {} : { tax: taxOf(intent.metadata)! }),
         paid: event.type === 'payment_intent.succeeded',
         failed:
           event.type === 'payment_intent.payment_failed' ||
@@ -653,8 +662,21 @@ function paymentOf(intent: Stripe.PaymentIntent): ProviderPayment {
           },
         }
       : {}),
-    metadata: { ...intent.metadata },
+    ...(taxOf(intent.metadata) === undefined ? {} : { tax: taxOf(intent.metadata)! }),
+    metadata: callerMetadata(intent.metadata),
   };
+}
+
+/** The tax `pay` carried on a payment, or undefined for one it did not take. */
+function taxOf(metadata: Stripe.Metadata | null | undefined): number | undefined {
+  const written = metadata?.[TAX_METADATA];
+  return written !== undefined && /^\d+$/.test(written) ? Number(written) : undefined;
+}
+
+/** A payment's metadata as the caller gave it, without what this package carries beside it. */
+function callerMetadata(metadata: Stripe.Metadata | null | undefined): Record<string, string> {
+  const { [TAX_METADATA]: _tax, ...caller } = metadata ?? {};
+  return caller;
 }
 
 /** The tax a calculation worked out: inside the amount for an inclusive price, on top for an exclusive one. */

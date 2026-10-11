@@ -4,6 +4,16 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## billing 7.1.0
+
+### Added
+
+- **The tax a payment carries.** `pay` writes the tax it worked out on the
+  PaymentIntent (`billing_tax` in its metadata), so `payment(id)` and the
+  payment's own events say it too (`tax`) — what a receipt needs when Stripe's
+  `payment_intent.succeeded` arrives before the caller has heard back from
+  `pay`. The key is kept out of the metadata handed back to the caller.
+
 ## billing 7.0.0
 
 A dispute's tax, which Stripe does not reverse by itself. First consumed by

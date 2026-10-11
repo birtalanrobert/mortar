@@ -142,8 +142,8 @@ export interface ProviderPayment {
   readonly currency: string;
   /**
    * The tax the provider worked out for the payment — inside `amount` for an
-   * inclusive price — known when `pay` calculated it; absent when the payment
-   * is only read back.
+   * inclusive price — for one `pay` took, whether answered by it or read
+   * back; absent for one it did not take.
    */
   readonly tax?: number;
   /** Handed to the page, to finish what `requires_action` asks of the buyer there. */
@@ -226,7 +226,7 @@ export interface BillingEvent {
   readonly metadata?: Readonly<Record<string, string>>;
   /** The single payment a checkout made or an event is about, a refund returned money from or a dispute questions. */
   readonly payment?: string;
-  /** Set on a checkout event: the tax within `amount`, as the provider worked it out. */
+  /** Set on a checkout event, and a payment event for one `pay` took: the tax within `amount`, as the provider worked it out. */
   readonly tax?: number;
   /**
    * Set on a refund event: how much of the payment has been returned so far,

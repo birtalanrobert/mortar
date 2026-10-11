@@ -128,7 +128,9 @@ await provider.payment('pi_…'); // asked again when the page says it is done
   PaymentIntent, so Stripe records the tax transaction when the payment
   succeeds and reverses it on a refund, made here or in its dashboard. An
   address it cannot place is thrown as `PaymentLocationError`, before anything
-  is charged.
+  is charged. The tax worked out rides on the payment, so the payment read
+  back and its events say it too — for a webhook that arrives before `pay`
+  has answered.
 - **A card refused is an answer, not an error.** It comes back `failed` with
   Stripe's code, the issuer's reason and Stripe's sentence; the buyer tries
   another card. Anything else is thrown.

@@ -296,7 +296,8 @@ describe('reading Stripe’s answers', () => {
         confirm: true,
         confirmation_token: 'ctoken_1',
         automatic_payment_methods: { enabled: true },
-        metadata: { purchase: 'p-1' },
+        // The tax rides on the payment, for an event that arrives before `pay` answers.
+        metadata: { purchase: 'p-1', billing_tax: '159' },
         // Stripe records the tax transaction on success, and reverses it on a refund.
         hooks: { inputs: { tax: { calculation: 'taxcalc_1' } } },
       });
@@ -382,6 +383,19 @@ describe('reading Stripe’s answers', () => {
           }),
         },
       }).payment('pi_1');
+
+    it('says the tax `pay` carried on it, and keeps it out of the caller’s metadata', async () => {
+      expect(
+        await read({ status: 'succeeded', metadata: { purchase: 'p-1', billing_tax: '159' } }),
+      ).toEqual({
+        externalId: 'pi_1',
+        status: 'succeeded',
+        amount: 999,
+        currency: 'EUR',
+        tax: 159,
+        metadata: { purchase: 'p-1' },
+      });
+    });
 
     it('says where it stands, in this package’s words', async () => {
       expect((await read({ status: 'succeeded' }))?.status).toBe('succeeded');
@@ -822,7 +836,7 @@ describe('reading Stripe’s answers', () => {
               customer: 'cus_1',
               amount: 999,
               currency: 'eur',
-              metadata: { purchase: 'p-1' },
+              metadata: { purchase: 'p-1', billing_tax: '159' },
             },
           },
         }).verify('{}', 'v1=ok');
@@ -834,6 +848,8 @@ describe('reading Stripe’s answers', () => {
         payment: 'pi_1',
         customer: 'cus_1',
         metadata: { purchase: 'p-1' },
+        // What the receipt needs, should this arrive before the caller heard from `pay`.
+        tax: 159,
         paid: true,
         failed: false,
         amount: 999,
