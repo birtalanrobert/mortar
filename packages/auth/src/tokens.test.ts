@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_TTL } from './services/token.service';
 import { generateNumericCode, generateToken, hashToken, issueToken, verifyToken } from './tokens';
 
 describe('generateToken', () => {
@@ -87,5 +88,14 @@ describe('generateNumericCode', () => {
   it('refuses lengths outside a sensible range', () => {
     expect(() => generateNumericCode(3)).toThrow();
     expect(() => generateNumericCode(11)).toThrow();
+  });
+});
+
+describe('DEFAULT_TTL', () => {
+  it('gives every purpose a lifetime of its own, a new address the day a verification has', () => {
+    expect(DEFAULT_TTL.email_change).toBe(24 * 60 * 60 * 1000);
+    expect(DEFAULT_TTL.email_change).toBe(DEFAULT_TTL.email_verification);
+    // A reset grants the account, so it lives shortest of the links that do.
+    expect(DEFAULT_TTL.password_reset).toBeLessThan(DEFAULT_TTL.email_change);
   });
 });

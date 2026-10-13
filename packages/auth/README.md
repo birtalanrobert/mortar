@@ -252,3 +252,13 @@ a failure that was not their fault.
 Issuing a new token supersedes any outstanding one of the same type. Two live
 reset links means the older still works after the user asked for a fresh one —
 precisely when they feared the first had been seen.
+
+Five purposes, each with its own lifetime (`DEFAULT_TTL`): `email_verification`
+and `email_change` a day, because an email sits unread overnight;
+`password_reset` an hour, because it grants the account; `invitation` two
+weeks; `magic_link` fifteen minutes. A link for one purpose is refused for any
+other. `email_change` is issued to the **new** address an account asked to move
+to, so following it proves that address before the account takes it — the
+product keeps the pending address itself and checks the token's `email`
+against it when the token is spent, which also makes a later request supersede
+an earlier one even though they name different addresses.

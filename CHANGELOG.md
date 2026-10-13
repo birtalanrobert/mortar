@@ -4,6 +4,19 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## auth 1.4.0
+
+### Added
+
+- **`email_change`, a token type for an address an account asks to move to.**
+  Issued to the new address and spent when its owner follows the link, so the
+  account takes an address only once that address has proved it is reachable —
+  never on the word of whoever holds the session. A day's lifetime, as a
+  verification link has, because both are emails that sit unread overnight. A
+  link for any other purpose is refused for it, and it for them. The product
+  keeps the pending address itself and checks the token's `email` against it
+  as it is spent. First consumed by Holdfast's account settings.
+
 ## billing 7.1.0
 
 ### Added

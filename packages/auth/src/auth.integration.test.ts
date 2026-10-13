@@ -252,6 +252,24 @@ describe('single-use tokens', () => {
     await expect(tokens.consume(token, 'password_reset')).rejects.toThrow(InvalidTokenError);
   });
 
+  it('confirms a new address with a link of its own, which nothing else accepts', async () => {
+    // Issued to the address an account asked to move to; a verification link
+    // for the same address must not move the account, nor this one verify it.
+    const change = await tokens.issue({ type: 'email_change', email: 'new@example.com' });
+    const verification = await tokens.issue({
+      type: 'email_verification',
+      email: 'new@example.com',
+    });
+    await expect(tokens.consume(change.token, 'email_verification')).rejects.toThrow(
+      InvalidTokenError,
+    );
+    await expect(tokens.consume(verification.token, 'email_change')).rejects.toThrow(
+      InvalidTokenError,
+    );
+    const spent = await tokens.consume(change.token, 'email_change');
+    expect(spent.email).toBe('new@example.com');
+  });
+
   it('refuses an expired token', async () => {
     const { token } = await tokens.issue({
       type: 'password_reset',

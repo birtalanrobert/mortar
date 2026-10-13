@@ -11,6 +11,9 @@ import { hashToken, issueToken } from '../tokens';
 export const DEFAULT_TTL: Record<AuthTokenType, number> = {
   // Long enough to survive an email sitting unread overnight.
   email_verification: 24 * 60 * 60 * 1000,
+  // The same: it proves a new address, sent to that address, and moves nothing
+  // the signed-in owner did not already ask for.
+  email_change: 24 * 60 * 60 * 1000,
   // Short: it grants account takeover, so its window should be small.
   password_reset: 60 * 60 * 1000,
   // Long: an invitation may wait for someone to come back from leave.
