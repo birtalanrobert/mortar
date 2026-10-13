@@ -1,4 +1,5 @@
 import { createTransport, type SMTPSentMessageInfo, type Transporter } from 'nodemailer';
+import { emailHeaders } from './email-headers';
 import {
   MAX_ATTACHMENT_BYTES,
   type MessagePort,
@@ -129,6 +130,8 @@ export class SmtpMessagePort implements MessagePort {
       );
     }
 
+    // Built before the connection, so a link Gmail would refuse never leaves.
+    const headers = emailHeaders(message);
     let accepted: SMTPSentMessageInfo;
 
     try {
@@ -149,14 +152,12 @@ export class SmtpMessagePort implements MessagePort {
             }
           : {}),
         /**
-         * Our own reference travels in a header.
-         *
-         * The same header the Resend port uses, so a receipt is matched the
-         * same way whichever transport sent it — and a server that returns a
-         * bounce quotes the original headers back, which is where support
-         * looks.
+         * Our reference, the way out and the mark of automation travel in
+         * headers — the same ones the Resend port writes, so a receipt is
+         * matched the same way whichever transport sent it, and a server that
+         * returns a bounce quotes them back, which is where support looks.
          */
-        ...(message.reference ? { headers: { 'X-Entity-Ref-ID': message.reference } } : {}),
+        ...(headers ? { headers } : {}),
       });
     } catch (error) {
       // The server's own words, and never the URL — which carries a password.

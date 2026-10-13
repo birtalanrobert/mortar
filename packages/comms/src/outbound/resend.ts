@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import { emailHeaders } from './email-headers';
 import {
   MAX_ATTACHMENT_BYTES,
   type MessagePort,
@@ -89,6 +90,8 @@ export class ResendMessagePort implements MessagePort {
       );
     }
 
+    // Built before the request, so a link Gmail would refuse never leaves.
+    const headers = emailHeaders(message);
     const { data, error } = await this.within(
       this.resend.emails.send({
         from: message.from ?? this.options.from,
@@ -107,13 +110,12 @@ export class ResendMessagePort implements MessagePort {
             }
           : {}),
         /**
-         * Our own reference travels in a header.
-         *
-         * Resend echoes headers back on the delivery webhook, which is how a
-         * receipt is matched to the message that caused it without keeping a
-         * second table of correlations.
+         * Our reference, the way out and the mark of automation travel in
+         * headers. Resend echoes them back on the delivery webhook, which is
+         * how a receipt is matched to the message that caused it without
+         * keeping a second table of correlations.
          */
-        ...(message.reference ? { headers: { 'X-Entity-Ref-ID': message.reference } } : {}),
+        ...(headers ? { headers } : {}),
       }),
     );
 
