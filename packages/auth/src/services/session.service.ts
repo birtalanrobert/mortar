@@ -178,7 +178,12 @@ export class SessionService {
     });
   }
 
-  /** Deletes expired and revoked sessions. Safe to run on a schedule. */
+  /**
+   * Deletes the sessions past their expiry, revoked or not. A session revoked
+   * earlier is kept until then — its address, its browser, and when and why
+   * it ended stay readable as a sign-in's history — so a session is held no
+   * longer than its absolute lifetime either way. Safe to run on a schedule.
+   */
   async purgeExpired(now = new Date(), manager?: EntityManager): Promise<number> {
     const result = await this.manager(manager).delete(this.entities.session, {
       expiresAt: LessThan(now),

@@ -4,6 +4,34 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## auth 1.4.1
+
+### Fixed
+
+- **`SessionService.purgeExpired`'s documentation says what it does**: it
+  deletes the sessions past their expiry, revoked ones included, and keeps a
+  session revoked earlier until then — it never said otherwise in code, only
+  in its comment, which promised revoked sessions went at once. A product
+  that publishes how long a session's address is kept reads the lifetime, not
+  the comment.
+
+## game-economy 2.1.0
+
+### Added
+
+- **`forget(holderId, before)`: a holder's whole ledger deleted** — entries,
+  draws, lots, balances — once the product's period for its records has
+  passed, refused while the holder holds anything or wrote an entry at or after
+  the cut-off. The one deletion the ledger allows: the append-only guard lets a
+  delete of exactly that holder's rows through inside `forget`'s transaction,
+  and refuses every update and every other delete as before. First consumed by
+  Holdfast's retention sweep, ten years after an erased account's last entry.
+
+### Migrating
+
+- Run the new migration, `AllowForgettingAHolder`, which `gameEconomyMigrations`
+  now includes. Nothing else changes for a caller that never forgets.
+
 ## comms 1.12.0
 
 ### Added

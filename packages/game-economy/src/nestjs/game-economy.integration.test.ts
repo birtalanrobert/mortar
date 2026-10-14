@@ -444,6 +444,89 @@ describe('the caller’s transaction', () => {
   });
 });
 
+describe('forgetting a holder', () => {
+  const tomorrow = () => new Date(Date.now() + 86_400_000);
+  const rowsOf = async (holder: string) => {
+    const [row] = (await dataSource.query(
+      `SELECT
+         (SELECT count(*) FROM "mortar_economy_entries" WHERE "holder_id" = $1)::int AS "entries",
+         (SELECT count(*) FROM "mortar_economy_lots" WHERE "holder_id" = $1)::int AS "lots",
+         (SELECT count(*) FROM "mortar_economy_balances" WHERE "holder_id" = $1)::int AS "balances",
+         (SELECT count(*) FROM "mortar_economy_draws" d
+            JOIN "mortar_economy_entries" e ON e."id" = d."entry_id" WHERE e."holder_id" = $1)::int AS "draws"`,
+      [holder],
+    )) as Array<Record<string, number>>;
+    return row!;
+  };
+
+  it('deletes everything it ever had once it holds nothing and wrote nothing since the cut-off', async () => {
+    const bought = await buy(5);
+    await economy.refund(HOLDER, {
+      purchaseId: bought.id,
+      reason: 'stripe.refund',
+      idempotencyKey: key(),
+    });
+    await grant(10);
+    await spend(6);
+    await spend(4);
+    await grant(7, key(), 'account-bea');
+
+    expect(await economy.forget(HOLDER, tomorrow())).toBe(true);
+
+    expect(await rowsOf(HOLDER)).toEqual({ entries: 0, lots: 0, balances: 0, draws: 0 });
+    // Another holder's ledger is untouched, and still reconciles.
+    expect(await economy.balance('account-bea', SILVER)).toBe(7);
+    expect((await economy.reconcile('account-bea', SILVER)).agrees).toBe(true);
+    // Nothing left to forget is forgotten already.
+    expect(await economy.forget(HOLDER, tomorrow())).toBe(true);
+  });
+
+  it('refuses a holder that still holds anything, or wrote anything at or after the cut-off', async () => {
+    await grant(10);
+    expect(await economy.forget(HOLDER, tomorrow())).toBe(false);
+    await spend(10);
+    expect(await economy.forget(HOLDER, new Date(Date.now() - 86_400_000))).toBe(false);
+    expect((await rowsOf(HOLDER)).entries).toBe(2);
+  });
+
+  it('is joined to the caller’s transaction, and rolls back with it', async () => {
+    await grant(4);
+    await spend(4);
+    await expect(
+      runInTransaction(dataSource, async () => {
+        expect(await economy.forget(HOLDER, tomorrow())).toBe(true);
+        throw new Error('rolled back');
+      }),
+    ).rejects.toThrow('rolled back');
+    expect((await rowsOf(HOLDER)).entries).toBe(2);
+  });
+
+  it('lets nothing but the holder being forgotten go, and nothing outside it', async () => {
+    await grant(4);
+    await spend(4);
+    await grant(3, key(), 'account-bea');
+    await expect(
+      runInTransaction(dataSource, async (manager) => {
+        await manager.query(`SELECT set_config('mortar.economy_forgetting', $1, true)`, [HOLDER]);
+        await manager.query(
+          `DELETE FROM "mortar_economy_entries" WHERE "holder_id" = 'account-bea'`,
+        );
+      }),
+    ).rejects.toThrow(/append-only/);
+    await expect(
+      runInTransaction(dataSource, async (manager) => {
+        await manager.query(`SELECT set_config('mortar.economy_forgetting', $1, true)`, [HOLDER]);
+        await manager.query(`UPDATE "mortar_economy_entries" SET "amount" = 1`);
+      }),
+    ).rejects.toThrow(/append-only/);
+    // The setting is the transaction's own: after `forget`, a delete is refused again.
+    expect(await economy.forget(HOLDER, tomorrow())).toBe(true);
+    await expect(dataSource.query(`DELETE FROM "mortar_economy_entries"`)).rejects.toThrow(
+      /append-only/,
+    );
+  });
+});
+
 describe('the database', () => {
   it('refuses to rewrite or remove an entry or a draw', async () => {
     await grant(10);

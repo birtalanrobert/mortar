@@ -128,6 +128,27 @@ that did (`earlier`), and two at once leave one of them standing.
   deletes as well as updates, unlike a transition log that cascades from its
   subject.
 
+## Forgetting a holder, whole
+
+The ledger outlives an erasure, but not for ever: accounting rules keep records
+for a number of years, and once they are gone by the records have no reason left
+to exist. `forget(holderId, before)` deletes everything a holder ever had —
+entries, draws, lots, balances — in one transaction, the caller's when there is
+one, and answers `true` once nothing of the holder is left.
+
+It refuses, deleting nothing, while the holder holds anything in any currency,
+or wrote an entry at or after `before` — the cut-off the product's period sets,
+which this package does not choose. It never deletes part of a holder: a ledger
+missing some of a holder's entries no longer reconciles; one missing all of them
+has nothing left to reconcile. Use it for a holder nothing writes to any more —
+an erased account — since a credit in a currency it never held could otherwise
+land meanwhile.
+
+The guard still refuses every update and every other delete. `forget` names the
+holder in a setting local to its transaction, `mortar.economy_forgetting`, and
+the trigger lets that holder's entries, and the draws they made, go — a guard
+against mistakes, not against a role that may set the setting itself.
+
 ## Checking it
 
 `reconcile(holderId, currency)` compares the cached balance, the sum of the

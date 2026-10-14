@@ -290,6 +290,54 @@ export class GameEconomyService {
     return { balance, ledger, lots: left, agrees: balance === ledger && ledger === left };
   }
 
+  /**
+   * A holder forgotten whole: every entry, the draws they made, the lots and
+   * the balances — once the product's period for its records has passed, an
+   * account erased and the years its accounting keeps records for gone by. The
+   * one deletion the ledger allows, and only of a whole holder: a ledger
+   * missing some of a holder's entries no longer reconciles; one missing all
+   * of them has nothing left to reconcile.
+   *
+   * Refused — nothing deleted, `false` answered — while the holder holds
+   * anything in any currency, or wrote an entry at or after `before`, the
+   * cut-off the product's period sets. `true` once nothing of the holder is
+   * left, already so included. Joins the caller's transaction; takes the
+   * holder's balance rows first. For a holder nothing writes to any more: a
+   * credit in a currency it never held could otherwise land meanwhile.
+   */
+  async forget(holderId: string, before: Date): Promise<boolean> {
+    if (!holderId) throw new Error('A holder to forget is named.');
+    return runInTransaction(this.dataSource, async (manager) => {
+      const balances = (await manager.query(
+        `SELECT "balance" FROM "mortar_economy_balances" WHERE "holder_id" = $1 FOR UPDATE`,
+        [holderId],
+      )) as Array<{ balance: string }>;
+      if (balances.some((row) => toAmount(row.balance) > 0)) return false;
+      const [latest] = (await manager.query(
+        `SELECT max("occurred_at") AS "at" FROM "mortar_economy_entries" WHERE "holder_id" = $1`,
+        [holderId],
+      )) as Array<{ at: Date | null }>;
+      if (latest?.at && latest.at.getTime() >= before.getTime()) return false;
+
+      // The guard lets this holder's rows go, and only within this transaction.
+      await manager.query(`SELECT set_config('mortar.economy_forgetting', $1, true)`, [holderId]);
+      await manager.query(
+        `DELETE FROM "mortar_economy_draws" WHERE "entry_id" IN (
+           SELECT "id" FROM "mortar_economy_entries" WHERE "holder_id" = $1)`,
+        [holderId],
+      );
+      await manager.query(`DELETE FROM "mortar_economy_lots" WHERE "holder_id" = $1`, [holderId]);
+      await manager.query(`DELETE FROM "mortar_economy_entries" WHERE "holder_id" = $1`, [
+        holderId,
+      ]);
+      await manager.query(`DELETE FROM "mortar_economy_balances" WHERE "holder_id" = $1`, [
+        holderId,
+      ]);
+      await manager.query(`SELECT set_config('mortar.economy_forgetting', '', true)`);
+      return true;
+    });
+  }
+
   private async credit(
     holderId: string,
     kind: CreditKind,

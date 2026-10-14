@@ -1,5 +1,6 @@
 import { CreateGameEconomy1791401023940 } from '../migrations/1791401023940-CreateGameEconomy';
 import { AddReversals1791548064129 } from '../migrations/1791548064129-AddReversals';
+import { AllowForgettingAHolder1791960327592 } from '../migrations/1791960327592-AllowForgettingAHolder';
 import { EconomyBalance } from './economy-balance.entity';
 import { EconomyDraw } from './economy-draw.entity';
 import { EconomyEntry } from './economy-entry.entity';
@@ -17,4 +18,8 @@ export type { EntryView, LotView, Reconciliation, Reversal } from './economy-vie
 export const gameEconomyEntities = [EconomyEntry, EconomyBalance, EconomyLot, EconomyDraw];
 
 /** Register alongside the project's own migrations. */
-export const gameEconomyMigrations = [CreateGameEconomy1791401023940, AddReversals1791548064129];
+export const gameEconomyMigrations = [
+  CreateGameEconomy1791401023940,
+  AddReversals1791548064129,
+  AllowForgettingAHolder1791960327592,
+];
