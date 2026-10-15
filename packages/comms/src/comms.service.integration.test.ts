@@ -513,6 +513,23 @@ describe('everything written to one address', () => {
     expect(sent).toHaveLength(2);
     expect(sent.every((log) => log.address === 'ana@example.com')).toBe(true);
   });
+
+  it('reads what was sent with no tenant apart from what a tenant sent', async () => {
+    const comms = service({ email: new NoopMessagePort('email') });
+
+    await comms.send({ channel: 'email', to: 'ana@example.com', text: 'your receipt' });
+    await comms.send(
+      { channel: 'email', to: 'ana@example.com', text: 'your tickets' },
+      { tenantId: TENANT, subject: 'order:1' },
+    );
+
+    expect((await comms.sentTo(null, 'ana@example.com')).map((log) => log.tenantId)).toEqual([
+      null,
+    ]);
+    expect((await comms.sentTo(TENANT, 'ana@example.com')).map((log) => log.tenantId)).toEqual([
+      TENANT,
+    ]);
+  });
 });
 
 /**

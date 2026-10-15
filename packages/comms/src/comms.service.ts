@@ -407,16 +407,24 @@ export class CommsService {
    *
    * Bounded, because an address with ten years of messages behind it is a
    * response nobody can read and a query nobody planned for.
+   *
+   * `tenantId` null reads what was sent with no tenant — the mail a product
+   * sends to the person as such, which {@link forget} forgets the same way —
+   * and nothing a tenant sent; a tenant's id reads that tenant's alone.
    */
   async sentTo(
-    tenantId: string,
+    tenantId: string | null,
     address: string,
     limit = 500,
     manager?: EntityManager,
   ): Promise<MessageLog[]> {
     return this.manager(manager)
       .getRepository(MessageLog)
-      .find({ where: { tenantId, address }, order: { createdAt: 'DESC' }, take: limit });
+      .find({
+        where: { tenantId: tenantId === null ? IsNull() : tenantId, address },
+        order: { createdAt: 'DESC' },
+        take: limit,
+      });
   }
 
   // ── Erasure, and throwing away what is too old to keep ───────────────────

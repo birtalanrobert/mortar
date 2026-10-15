@@ -4,6 +4,17 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## comms 1.12.1
+
+### Fixed
+
+- **`sentTo` reads the mail sent with no tenant**: `tenantId` null now reads
+  what a product sends to the person as such — a verification, a receipt —
+  as `forget` already forgot it, where before a tenant's id was the only thing
+  it took and a product without tenants could not answer "what have you ever
+  sent me" from the log at all. A tenant's id still reads that tenant's mail
+  alone. First consumed by Holdfast's copy of an account's data.
+
 ## auth 1.4.1
 
 ### Fixed
