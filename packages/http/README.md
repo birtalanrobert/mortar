@@ -102,9 +102,11 @@ import { HttpModule, createValidationPipe } from '@birtalanrobert/http/nestjs';
       inject: [ConfigModule.token()],
       useFactory: (config: AppConfig) => ({
         context: {
-          // Only behind a proxy that overwrites the header. Trusting it while
-          // directly exposed lets any client claim any address, which defeats
-          // both rate limiting and the audit trail.
+          // How many proxies stand in front — `true` for one. The client is that
+          // many entries from the right of `X-Forwarded-For`: anything further
+          // left is the client's own word. Trusting it while directly exposed
+          // lets any client claim any address, which defeats both rate
+          // limiting and the audit trail.
           trustProxy: config.NODE_ENV === 'production',
           supportedLocales: ['ro', 'hu', 'en'],
         },

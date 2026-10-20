@@ -229,6 +229,34 @@ avoid. The lookup is one indexed read.
 - **`revokeAllForUser()`** is the required response to a password change;
   leaving other sessions alive means the attacker keeps their access.
 
+## A second factor
+
+`SecondFactorModule.forRootAsync({ useFactory: () => ({ secretKey, issuer }) })`
+gives a product `SecondFactorService`: a code from an authenticator app (RFC
+6238 — HMAC-SHA1, thirty seconds, six digits, because those are what every app
+honours) or a recovery code for when the phone is gone. The product decides
+who must have one and when it is asked for; the service keeps the secret,
+checks a code and says why one failed.
+
+- **Enrolment shows one secret until a code confirms it.** `begin()` answers
+  with the base32 secret and its `otpauth://` link — for a QR code, or a tap on
+  a phone — and gives the same one again until `confirm()` takes a first code,
+  so a page reloaded half-way does not leave the app holding a stale secret.
+  Confirming answers with the recovery codes, to be shown once.
+- **The secret is sealed** with the product's key (`sealSecret`), and the
+  recovery codes are kept as SHA-256 hashes: a dump of the table holds nothing
+  that signs anybody in.
+- **A code is good once.** The time step of the last code accepted is kept and
+  none at or before it passes again, with the row locked while a code is
+  checked — so a code seen over a shoulder, replayed from a log or sent twice
+  at once is spent.
+- **Wrong codes lock it**, five by default for fifteen minutes; a right one
+  clears the count. Check a code **outside** a transaction of your own: the
+  count is committed before the error is thrown, and a transaction of yours that
+  the error then rolls back would take the count with it.
+- **Recovery codes are renewed with the app's code alone**, never a recovery
+  code: whoever renews them must hold the phone.
+
 ## Enumeration resistance
 
 Wrong password, unknown account and unverified address all return the _same_

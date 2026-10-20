@@ -10,11 +10,7 @@ import {
 import type { User } from './user';
 
 export type AuthTokenType =
-  | 'email_verification'
-  | 'email_change'
-  | 'password_reset'
-  | 'invitation'
-  | 'magic_link';
+  'email_verification' | 'email_change' | 'password_reset' | 'invitation' | 'magic_link';
 
 /**
  * A single-use token: verification, a new address confirmed, reset, invitation

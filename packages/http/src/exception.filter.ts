@@ -1,5 +1,6 @@
 import { Catch, Inject, Optional, type ArgumentsHost, type ExceptionFilter } from '@nestjs/common';
 import { getRequestId } from '@birtalanrobert/context';
+import { safeUrl } from '@birtalanrobert/observability';
 import { MORTAR_LOGGER, type Logger } from './logger-token';
 import { MortarError } from './errors';
 import { PROBLEM_CONTENT_TYPE } from './problem';
@@ -22,6 +23,7 @@ interface RequestLike {
   url?: string;
   originalUrl?: string;
   method?: string;
+  params?: Record<string, unknown>;
 }
 
 /**
@@ -66,7 +68,12 @@ export class MortarExceptionFilter implements ExceptionFilter {
   private log(exception: unknown, status: number, request: RequestLike | undefined): void {
     if (!this.logger) return;
 
-    const fields = { method: request?.method, path: request?.originalUrl ?? request?.url, status };
+    // The credentials stripped out of the path, as the request log strips them.
+    const fields = {
+      method: request?.method,
+      path: safeUrl(request?.originalUrl ?? request?.url, request?.params),
+      status,
+    };
 
     // 5xx is ours and always warrants a stack. 4xx is the client's and is
     // logged at debug — a wall of 404 warnings trains everyone to ignore

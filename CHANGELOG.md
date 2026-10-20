@@ -4,6 +4,55 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## auth 1.5.0
+
+### Added
+
+- **A second factor for signing in** — `SecondFactorService`, through its own
+  `SecondFactorModule`, so a product that asks for none is never asked for a
+  key: a code from an authenticator app (RFC 6238, checked against its test
+  vectors) or a recovery code. Enrolment shows one secret until a first code
+  confirms it, and answers with ten recovery codes shown once; the secret is
+  sealed with the product's key and the codes kept as hashes; a code is good
+  once, the row locked while it is checked; five wrong codes lock it for
+  fifteen minutes. The pure parts — `totpCode`, `matchTotpStep`,
+  `otpauthUri`, base32, the recovery codes — are exported for a product's
+  tests. First consumed by Holdfast's administrators.
+
+### Migrating
+
+- Run the new migration, `AddSecondFactor`, which `authMigrations` now
+  includes, and register `SecondFactor`, which `authEntities` now includes.
+  Nothing else changes for a product that asks for no second factor.
+
+## http 2.1.0
+
+### Fixed
+
+- **The client's address is read from the right of `X-Forwarded-For`.**
+  `trustProxy` took the left-most entry, which is whatever the client sent:
+  behind a proxy that appends to the header — most do — any client could claim
+  any address, past the rate limits and into the audit trail. The client is
+  now the entry as many from the right as there are trusted proxies — one for
+  `true`, or the number given — which a proxy that overwrites the header
+  answers the same way as before.
+- **A credential in a path is struck out of the error log**, as the request
+  log now strikes it (`@birtalanrobert/observability` 1.6.0's `safeUrl`).
+
+### Added
+
+- `trustProxy` takes a number: how many proxies stand in front.
+
+## observability 1.6.0
+
+### Added
+
+- **`safeUrl(url, params)`: a credential that is a segment of the path** —
+  `/reports/shared/:token` — struck out too, given the route's parameters, as
+  the request log now passes them. A signed link is as often in the path as in
+  the query, and the framework hands the logger the URL with it filled in. A
+  malformed parameter name or segment is logged as it is, never thrown on.
+
 ## comms 1.12.1
 
 ### Fixed

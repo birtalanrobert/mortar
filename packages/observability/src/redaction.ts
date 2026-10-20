@@ -92,33 +92,74 @@ const CREDENTIAL_PARAMETERS = new Set([
  *
  * Keeps the path and every ordinary parameter — a log line with the query
  * stripped entirely is one nobody can debug from — and replaces only the values
- * that are credentials.
+ * that are credentials: a query parameter named as one, and, given the route's
+ * parameters, a path segment holding one. A share link's token is as often a
+ * segment of the path (`/reports/shared/:token`) as a parameter of the query,
+ * and a framework hands the logger the URL with the segment filled in.
  *
  * Deliberately string-in, string-out and tolerant of a malformed URL: this runs
  * on the logging path of every request, and a logger that throws is worse than
  * one that logs a little too much.
  */
-export function safeUrl(url: string | undefined): string | undefined {
+export function safeUrl(
+  url: string | undefined,
+  params?: Readonly<Record<string, unknown>>,
+): string | undefined {
   if (!url) return url;
 
   const split = url.indexOf('?');
-  if (split === -1) return url;
+  const path = split === -1 ? url : url.slice(0, split);
+  const safePath = withoutCredentialSegments(path, params);
+  if (split === -1) return safePath;
 
-  const path = url.slice(0, split);
-  const query = url.slice(split + 1);
-
-  const cleaned = query
+  const cleaned = url
+    .slice(split + 1)
     .split('&')
     .map((pair) => {
       const equals = pair.indexOf('=');
       if (equals === -1) return pair;
 
       const name = pair.slice(0, equals);
-      return CREDENTIAL_PARAMETERS.has(decodeURIComponent(name).toLowerCase())
-        ? `${name}=${REDACTED}`
-        : pair;
+      return isCredentialName(decoded(name)) ? `${name}=${REDACTED}` : pair;
     })
     .join('&');
 
-  return `${path}?${cleaned}`;
+  return `${safePath}?${cleaned}`;
+}
+
+/** Whether a parameter's name — of the query or the route — is one a credential travels under. */
+function isCredentialName(name: string): boolean {
+  return CREDENTIAL_PARAMETERS.has(name.toLowerCase());
+}
+
+/**
+ * A path with every segment that holds the value of a credential-named route
+ * parameter replaced. Compared decoded, as the framework decoded the
+ * parameter; a parameter that is not a string — or not a credential — is left
+ * alone.
+ */
+function withoutCredentialSegments(
+  path: string,
+  params: Readonly<Record<string, unknown>> | undefined,
+): string {
+  if (!params) return path;
+  const secrets = new Set(
+    Object.entries(params)
+      .filter(([name, value]) => isCredentialName(name) && typeof value === 'string' && value)
+      .map(([, value]) => value as string),
+  );
+  if (secrets.size === 0) return path;
+  return path
+    .split('/')
+    .map((segment) => (secrets.has(decoded(segment)) ? REDACTED : segment))
+    .join('/');
+}
+
+/** A URL component decoded, or as it is when it cannot be: a malformed one is logged, never thrown on. */
+function decoded(component: string): string {
+  try {
+    return decodeURIComponent(component);
+  } catch {
+    return component;
+  }
 }

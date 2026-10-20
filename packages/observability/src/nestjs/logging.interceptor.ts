@@ -31,7 +31,12 @@ export class LoggingInterceptor implements NestInterceptor {
     if (context.getType() !== 'http') return next.handle();
 
     const http = context.switchToHttp();
-    const request = http.getRequest<{ method?: string; url?: string; route?: { path?: string } }>();
+    const request = http.getRequest<{
+      method?: string;
+      url?: string;
+      route?: { path?: string };
+      params?: Record<string, unknown>;
+    }>();
     const startedAt = process.hrtime.bigint();
 
     const method = request?.method ?? 'UNKNOWN';
@@ -45,9 +50,10 @@ export class LoggingInterceptor implements NestInterceptor {
       const fields = {
         method,
         route,
-        // The credentials stripped out of it. A signed link's token in a log
-        // line is a credential anybody with log access can use.
-        url: safeUrl(request?.url),
+        // The credentials stripped out of it — the query's, and a path
+        // segment the route names as one. A signed link's token in a log line
+        // is a credential anybody with log access can use.
+        url: safeUrl(request?.url, request?.params),
         statusCode,
         durationMs: Math.round(durationMs * 1000) / 1000,
       };

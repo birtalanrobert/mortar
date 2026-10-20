@@ -6,7 +6,7 @@ import { createNoopLogger } from '@birtalanrobert/observability';
 import { ConflictError, CrossTenantAccessError, RateLimitedError } from './errors';
 import { MortarExceptionFilter, type ExceptionFilterOptions } from './exception.filter';
 
-function makeHost(url = '/bookings/abc', method = 'GET') {
+function makeHost(url = '/bookings/abc', method = 'GET', params?: Record<string, string>) {
   const response = {
     statusCode: 200,
     body: undefined as unknown,
@@ -26,7 +26,7 @@ function makeHost(url = '/bookings/abc', method = 'GET') {
   const host = {
     getType: () => 'http',
     switchToHttp: () => ({
-      getRequest: () => ({ url, originalUrl: url, method }),
+      getRequest: () => ({ url, originalUrl: url, method, params }),
       getResponse: () => response,
     }),
   } as unknown as ArgumentsHost;
@@ -119,6 +119,17 @@ describe('logging', () => {
     const spy = vi.spyOn(logger, 'warn');
     run(new CrossTenantAccessError(), {}, logger);
     expect(spy).toHaveBeenCalledWith('cross-tenant access blocked', expect.any(Object));
+  });
+
+  it('logs the path with a credential the route names in it struck out', () => {
+    // A share link's token in a path is as much a credential as one in a query.
+    const logger = createNoopLogger();
+    const debug = vi.spyOn(logger, 'debug');
+    const { host } = makeHost('/reports/shared/eyJ.sig', 'GET', { token: 'eyJ.sig' });
+    new MortarExceptionFilter(logger).catch(new NotFoundException(), host);
+    expect(debug.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({ path: '/reports/shared/[redacted]' }),
+    );
   });
 
   it('works without a logger at all', () => {

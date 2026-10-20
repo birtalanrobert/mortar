@@ -38,5 +38,26 @@ describe('a URL safe to write down', () => {
     expect(safeUrl('/api/health')).toBe('/api/health');
     expect(safeUrl(undefined)).toBeUndefined();
     expect(safeUrl('/x?%')).toBe('/x?%');
+    expect(safeUrl('/x?%=1')).toBe('/x?%=1');
+    expect(safeUrl('/x/%/y', { token: 'z' })).toBe('/x/%/y');
+  });
+
+  it('strips a credential that is a segment of the path, given the route’s parameters', () => {
+    /*
+     * A share link's token is as often in the path — `/reports/shared/:token`
+     * — as in the query, and the framework hands the logger the URL with the
+     * segment filled in. The route's parameters say which segment it is.
+     */
+    expect(
+      safeUrl('/api/worlds/w1/reports/shared/eyJ.abc%2Fdef?page=2', {
+        worldId: 'w1',
+        token: 'eyJ.abc/def',
+      }),
+    ).toBe(`/api/worlds/w1/reports/shared/${REDACTED}?page=2`);
+    // An ordinary parameter, or none, leaves the path as it is.
+    expect(safeUrl('/api/worlds/w1/villages/v1', { worldId: 'w1', villageId: 'v1' })).toBe(
+      '/api/worlds/w1/villages/v1',
+    );
+    expect(safeUrl('/api/worlds/w1', {})).toBe('/api/worlds/w1');
   });
 });

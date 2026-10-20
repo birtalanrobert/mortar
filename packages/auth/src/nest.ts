@@ -21,6 +21,7 @@ import { TokenService } from './services/token.service';
 import { RoleService } from './services/role.service';
 import { assertAuthEntitiesValid, resolveRegistry, type AuthEntityRegistry } from './registry';
 import { UserService, type UserServiceOptions } from './services/user.service';
+import { SecondFactorService, type SecondFactorOptions } from './services/second-factor.service';
 
 export const PERMISSIONS_KEY = 'mortar:permissions';
 /**
@@ -191,6 +192,46 @@ export class AuthModule {
       imports: (options.imports ?? []) as never[],
       providers,
       exports: [UserService, RoleService, SessionService, TokenService, PermissionsGuard],
+    };
+  }
+}
+
+/**
+ * A second factor for signing in (`SecondFactorService`), for a product that
+ * asks for one — its own module, so a product that does not is never asked
+ * for a sealing key. Global, as `AuthModule` is.
+ */
+@Global()
+@Module({})
+export class SecondFactorModule {
+  static forRoot(options: SecondFactorOptions): DynamicModule {
+    return {
+      module: SecondFactorModule,
+      providers: [
+        {
+          provide: SecondFactorService,
+          useFactory: (dataSource: DataSource) => new SecondFactorService(dataSource, options),
+          inject: [MORTAR_DATA_SOURCE],
+        },
+      ],
+      exports: [SecondFactorService],
+    };
+  }
+
+  /** Configures from other providers — the validated configuration's key, most often. */
+  static forRootAsync(options: AsyncModuleOptions<SecondFactorOptions>): DynamicModule {
+    return {
+      module: SecondFactorModule,
+      imports: (options.imports ?? []) as never[],
+      providers: [
+        {
+          provide: SecondFactorService,
+          useFactory: async (dataSource: DataSource, ...args: never[]) =>
+            new SecondFactorService(dataSource, await options.useFactory(...args)),
+          inject: [MORTAR_DATA_SOURCE, ...((options.inject ?? []) as never[])],
+        },
+      ],
+      exports: [SecondFactorService],
     };
   }
 }

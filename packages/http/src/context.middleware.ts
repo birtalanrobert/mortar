@@ -5,13 +5,17 @@ import { runWithContext, createContext } from '@birtalanrobert/context';
 
 export interface ContextMiddlewareOptions {
   /**
-   * Trust `X-Forwarded-For` when determining the client address.
+   * Trust `X-Forwarded-For` when determining the client address: `true` for
+   * one proxy in front of the application, or how many there are.
    *
-   * Only enable behind a proxy that overwrites the header. Trusting it when
-   * directly exposed lets any client claim any address, which quietly defeats
-   * both rate limiting and the audit trail.
+   * Each proxy appends the address it was connected from, so the client is
+   * the entry that many from the **right** — the left-most entry is whatever
+   * the client chose to send, and taking it lets anybody claim any address.
+   * Only enable behind proxies that are really there: trusting the header
+   * when directly exposed lets any client claim any address, which quietly
+   * defeats both rate limiting and the audit trail.
    */
-  trustProxy?: boolean;
+  trustProxy?: boolean | number;
   /** Locales this application serves, best first. */
   supportedLocales?: readonly string[];
   /** Locale used when negotiation finds no match. */
@@ -85,12 +89,19 @@ function setHeader(response: ResponseLike, name: string, value: string): void {
   else if (typeof response.header === 'function') response.header(name, value);
 }
 
-function clientIp(request: RequestLike, trustProxy: boolean): string | undefined {
-  if (trustProxy) {
-    const forwarded = headerValue(request, 'x-forwarded-for');
-    // The left-most entry is the original client; everything after it was
-    // appended by successive proxies.
-    if (forwarded) return forwarded.split(',')[0]?.trim();
+function clientIp(request: RequestLike, trustProxy: boolean | number): string | undefined {
+  const hops = trustProxy === true ? 1 : trustProxy === false ? 0 : Math.max(0, trustProxy);
+  const forwarded = hops > 0 ? headerValue(request, 'x-forwarded-for') : undefined;
+  if (forwarded) {
+    const entries = forwarded
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    // Counted from the right: each trusted proxy appended the address it was
+    // connected from, so the last `hops` entries are theirs to vouch for, and
+    // anything further left is the client's own word.
+    const client = entries[Math.max(0, entries.length - hops)];
+    if (client) return client;
   }
   return request.ip ?? request.socket?.remoteAddress;
 }

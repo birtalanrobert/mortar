@@ -61,12 +61,34 @@ describe('client address', () => {
     expect(context?.ip).toBe('10.0.0.1');
   });
 
-  it('takes the left-most forwarded address when proxied', () => {
+  it('takes the address the one trusted proxy appended, never what the client sent before it', () => {
+    /*
+     * The exposure this closes. A proxy appends the address it was connected
+     * from; anything to its left is whatever the client chose to send. Taking
+     * the left-most entry let any client claim any address, past the rate
+     * limits and into the audit trail.
+     */
     const { context } = run(
-      { headers: { 'x-forwarded-for': '203.0.113.7, 10.0.0.5' }, ip: '10.0.0.1' },
+      { headers: { 'x-forwarded-for': '6.6.6.6, 203.0.113.7' }, ip: '10.0.0.1' },
       { trustProxy: true },
     );
     expect(context?.ip).toBe('203.0.113.7');
+  });
+
+  it('counts back as many proxies as there are', () => {
+    const forwarded = { 'x-forwarded-for': '6.6.6.6, 203.0.113.7, 10.0.0.5' };
+    expect(run({ headers: forwarded, ip: '10.0.0.1' }, { trustProxy: 2 }).context?.ip).toBe(
+      '203.0.113.7',
+    );
+    // A header shorter than the proxies said to be there gives its first entry.
+    expect(
+      run({ headers: { 'x-forwarded-for': '203.0.113.7' }, ip: '10.0.0.1' }, { trustProxy: 3 })
+        .context?.ip,
+    ).toBe('203.0.113.7');
+    // None trusted: the socket, whatever the header says.
+    expect(run({ headers: forwarded, ip: '10.0.0.1' }, { trustProxy: 0 }).context?.ip).toBe(
+      '10.0.0.1',
+    );
   });
 
   it('falls back to the socket when the header is absent', () => {
