@@ -46,14 +46,18 @@ beforeEach(async () => {
 });
 
 describe('enrolment', () => {
-  it('shows the same secret until a code confirms it, then gives recovery codes once', async () => {
+  it('gives a new secret each time it is begun, then recovery codes once one is confirmed', async () => {
     const first = await factors.begin(userId, 'ada@example.com');
     const again = await factors.begin(userId, 'ada@example.com');
-    expect(again.secret).toBe(first.secret);
-    expect(first.uri).toContain(`secret=${first.secret}`);
+    expect(again.secret).not.toBe(first.secret);
+    expect(again.uri).toContain(`secret=${again.secret}`);
     expect((await factors.status(userId))?.confirmed).toBe(false);
 
-    const codes = await factors.confirm(userId, codeAt(first.secret, T0), T0);
+    // Whoever began the first holds a secret that no longer confirms anything.
+    await expect(factors.confirm(userId, codeAt(first.secret, T0), T0)).rejects.toBeInstanceOf(
+      SecondFactorInvalidError,
+    );
+    const codes = await factors.confirm(userId, codeAt(again.secret, T0), T0);
     expect(codes).toHaveLength(10);
     expect(await factors.status(userId)).toEqual({
       confirmed: true,

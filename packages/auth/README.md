@@ -238,10 +238,12 @@ honours) or a recovery code for when the phone is gone. The product decides
 who must have one and when it is asked for; the service keeps the secret,
 checks a code and says why one failed.
 
-- **Enrolment shows one secret until a code confirms it.** `begin()` answers
-  with the base32 secret and its `otpauth://` link — for a QR code, or a tap on
-  a phone — and gives the same one again until `confirm()` takes a first code,
-  so a page reloaded half-way does not leave the app holding a stale secret.
+- **Enrolment makes a new secret every time.** `begin()` answers with the
+  base32 secret and its `otpauth://` link — for a QR code, or a tap on a phone
+  — replacing any begun before, and `confirm()` takes a first code of the last
+  one. Never the same secret twice: a product that lets enrolment begin on the
+  password alone would otherwise hand whoever began it first the secret its
+  owner goes on to confirm, and the second factor would be shared unseen.
   Confirming answers with the recovery codes, to be shown once.
 - **The secret is sealed** with the product's key (`sealSecret`), and the
   recovery codes are kept as SHA-256 hashes: a dump of the table holds nothing

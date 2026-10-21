@@ -4,6 +4,18 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## auth 1.5.1
+
+### Fixed
+
+- **An enrolment's secret is new every time it is begun.** `begin()` showed
+  the same secret until a code confirmed it, so whoever began an enrolment
+  first — with nothing but a password, in a product that sets the factor up at
+  sign-in — held the secret the account's owner went on to confirm, and shared
+  their second factor without either of them seeing it. Each `begin()` now
+  replaces the secret of one begun before; a page reloaded half-way shows a new
+  one to scan.
+
 ## auth 1.5.0
 
 ### Added

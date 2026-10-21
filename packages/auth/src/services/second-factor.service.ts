@@ -118,37 +118,34 @@ export class SecondFactorService {
   }
 
   /**
-   * An enrolment begun, or the one already begun: the same secret until a code
-   * confirms it, so a page reloaded half-way shows what the app already holds.
+   * An enrolment begun: a new secret every time, the one an enrolment begun
+   * before it replaced, until a code confirms one. Never the same one again —
+   * whoever began an enrolment with the password alone would otherwise hold
+   * the secret the account's owner goes on to confirm, and share their second
+   * factor unseen. A page reloaded half-way shows a new secret to scan.
    * `account` is what the app labels it with — an address, a name.
    */
   async begin(userId: string, account: string): Promise<SecondFactorEnrolment> {
-    return runInTransaction(this.dataSource, async () => {
+    const secret = generateTotpSecret();
+    const secretSealed = sealSecret(secret, this.options.secretKey);
+    await runInTransaction(this.dataSource, async () => {
       const em = this.manager();
-      const existing = await em.findOne(this.entity, {
+      // The row made if there is none — a concurrent insert waited for — then held.
+      await em
+        .createQueryBuilder()
+        .insert()
+        .into(this.entity)
+        .values({ userId, secretSealed })
+        .orIgnore()
+        .execute();
+      const row = await em.findOneOrFail(this.entity, {
         where: { userId },
         lock: { mode: 'pessimistic_write' },
       });
-      if (existing?.confirmedAt) throw new SecondFactorEnrolledError();
-
-      if (!existing) {
-        // Ignored if another request inserted one first: its secret is the one shown.
-        await em
-          .createQueryBuilder()
-          .insert()
-          .into(this.entity)
-          .values({
-            userId,
-            secretSealed: sealSecret(generateTotpSecret(), this.options.secretKey),
-          })
-          .orIgnore()
-          .execute();
-      }
-      const row = existing ?? (await em.findOneOrFail(this.entity, { where: { userId } }));
       if (row.confirmedAt) throw new SecondFactorEnrolledError();
-      const secret = openSecret(row.secretSealed, this.options.secretKey);
-      return { secret, uri: otpauthUri({ issuer: this.options.issuer, account, secret }) };
+      await em.update(this.entity, { userId }, { secretSealed });
     });
+    return { secret, uri: otpauthUri({ issuer: this.options.issuer, account, secret }) };
   }
 
   /**
