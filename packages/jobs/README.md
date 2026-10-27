@@ -126,6 +126,17 @@ The difference matters at scale: a million reminders is a million timers under
 the second design, and one query under this one. It also survives a deadline
 moving, which a scheduled timer does not.
 
+## When Redis is down
+
+The queue's connection says the outage once, as the application's client does
+(`@birtalanrobert/redis`'s `watchConnection`, with `LoggerModule` registered).
+Its workers and queues pass on every failed reconnection as an error of their
+own, several a second each; while the connection is down those are said at
+`debug`, and any other at `error` as before. A worker closing then does not
+wait for its jobs in flight — none could record its end without Redis, and each
+is taken up again as stalled — because BullMQ's graceful close would wait for
+Redis to come back.
+
 ## Queues are concurrency pools
 
 Give housekeeping its own queue. Maintenance must never sit behind a backlog of

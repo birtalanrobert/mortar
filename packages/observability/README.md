@@ -66,7 +66,22 @@ app.useLogger(app.get(NestLoggerAdapter));
 ```
 
 `bufferLogs` matters — without it, everything Nest prints before the adapter is
-resolved escapes in the default format.
+resolved escapes in the default format. A boot that fails before then — a
+database that cannot be reached while the container is built — is still
+reported in Nest's own format, buffered lines and all: the adapter lives in the
+container that failed.
+
+What Nest says of its own wiring — each module initialised, each controller,
+route and gateway subscription mapped — the adapter says at `debug`: some four
+hundred lines at every start of a modest API, which at `info` bury the lines
+that say it started. An error Nest hands over whole is logged whole, as the
+entry's `err`.
+
+## In a terminal
+
+`pretty` writes one line an entry, its fields after the message, and an
+error's stack beneath it; everywhere else the output is one JSON object a line,
+which is what a log shipper parses.
 
 ## Request logging
 

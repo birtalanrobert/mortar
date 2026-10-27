@@ -5,6 +5,7 @@ import {
   type Logger,
   type Metrics,
 } from '@birtalanrobert/observability';
+import { connectionReady } from './connection-ready';
 import type { JobDefinition } from './job';
 import { detachContext, runWithJobContext, type WithContext } from './propagation';
 
@@ -106,8 +107,21 @@ export class JobWorkers {
     });
 
     worker.on('error', (error) => {
-      // A worker-level error is the connection or the runtime, not a job —
-      // silence here means a worker that has quietly stopped consuming.
+      /*
+       * While the queue's connection is down, every attempt to reconnect
+       * comes here — several a second for each worker — and the outage is
+       * said once, by the connection's watcher (`watchConnection`, which
+       * `JobsModule` sets on it). Otherwise a worker-level error is the
+       * runtime, not a job: silence here would mean a worker that has quietly
+       * stopped consuming.
+       */
+      if (!connectionReady(this.options.connection)) {
+        this.logger.debug('job worker error while its connection is down', {
+          queue: queueName,
+          error: error.message,
+        });
+        return;
+      }
       this.logger.error('job worker error', error, { queue: queueName });
     });
 
@@ -184,9 +198,15 @@ export class JobWorkers {
     }
   }
 
-  /** Stops consuming, letting in-flight jobs finish first. */
+  /**
+   * Stops consuming, letting in-flight jobs finish first — unless the
+   * connection is down: then a job in flight cannot record its end anyway,
+   * and is taken up again as stalled, and waiting for it would hold the
+   * process until Redis came back, BullMQ's own close never returning.
+   */
   async close(): Promise<void> {
-    await Promise.all([...this.workers.values()].map((worker) => worker.close()));
+    const force = !connectionReady(this.options.connection);
+    await Promise.all([...this.workers.values()].map((worker) => worker.close(force)));
     this.workers.clear();
   }
 }

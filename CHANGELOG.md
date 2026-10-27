@@ -4,6 +4,98 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## redis 1.2.0
+
+### Added
+
+- **An outage is said once, and its end once.** ioredis emits `error` at
+  every failed attempt to reconnect and, with nobody listening, printed each to
+  the console itself — some sixty lines in under a minute from an API whose
+  Redis had stopped, outside its log. `watchConnection(client, logger)` logs
+  `redis unreachable` with its cause the first time, nothing more while it
+  lasts, and `redis reachable again` with how long it lasted. `RedisModule`
+  sets it on the client and the subscriber whenever `LoggerModule` is
+  registered; `RedisService` takes the logger as an optional third argument.
+
+## jobs 1.3.0
+
+### Changed
+
+- **Redis down is said once, not several times a second by every worker.**
+  `JobsModule` watches the queue's connection as `@birtalanrobert/redis` 1.2.0
+  watches the application's. A worker's or a queue's error while that
+  connection is down is said at `debug` — each failed reconnection used to be a
+  `job worker error`, about four a second from a process with three queues —
+  and any other at `error`, as before. `JobQueues` takes a `logger`; without
+  one BullMQ prints a queue's errors to the console itself.
+
+### Fixed
+
+- **A process stops while Redis is down.** `JobWorkers.close()` waited for
+  BullMQ's graceful close, which waits for Redis: a process told to stop held
+  on until its shutdown timeout killed it. While the connection is down the
+  workers now close without waiting for jobs in flight, which could not record
+  their end anyway and are taken up again as stalled.
+
+## observability 1.7.0
+
+### Changed
+
+- **A terminal gets one line an entry.** `pretty` wrote every field on a line
+  of its own, so one request took eleven lines and a minute of use scrolled
+  out of reach; an entry's fields now follow its message on the same line.
+  An error's stack still runs beneath its entry. JSON output is unchanged.
+- **Nest's account of its own wiring is said at `debug`.** A line for each
+  module initialised, controller and route mapped and gateway subscription —
+  some four hundred at every start of a modest API — came at `info`, burying
+  the lines that say the application started. `NestLoggerAdapter` now says
+  what Nest logs from `InstanceLoader`, `RoutesResolver`, `RouterExplorer` and
+  `WebSocketsController` at `debug`; everything else Nest says keeps its level.
+
+### Fixed
+
+- **An error Nest hands the adapter whole is logged whole.** Nest's exception
+  handler — the one that reports a boot that failed — passes the error itself
+  as the message, and the adapter wrote down its string: often no more than
+  its name, an `AggregateError` of refused connections losing the address it
+  could not reach, and the stack. It is now the entry's `err`, with its stack,
+  its code and the errors it gathers, its message (or name) the entry's; the
+  same for `fatal`.
+
+## http 2.2.0
+
+### Added
+
+- **`allRoutes()`**, from `@birtalanrobert/http/nestjs`: the path that gives a
+  middleware every route, written as the Nest in use reads it — `/{*path}` on
+  Nest 11, `*` on Nest 10.
+
+### Fixed
+
+- **No legacy-route warning at every start.** `HttpModule` gave its context
+  middleware `*`, which Nest 11, beneath a global prefix, rewrote itself while
+  warning that `/api/*` is written the old way — a warning in every service
+  that sets a prefix, which nobody reading it could act on. It now takes
+  `allRoutes()`, and the same routes, the health probes kept out of the prefix
+  among them.
+
+## tenancy 1.1.1
+
+### Fixed
+
+- **No legacy-route warning at every start**, as for `@birtalanrobert/http`
+  2.2.0: the tenant middleware takes `allRoutes()` instead of `*`.
+
+## realtime 2.3.1
+
+### Fixed
+
+- **A port already taken no longer ends the process.** `ws` passes every error
+  of the HTTP server a gateway is attached to on to the gateway, and the
+  gateway had no listener for it: an application starting on a port in use
+  died of an unhandled `'error'` event before its own `listen` could fail and
+  say so. The gateway now leaves the error to the server's owner.
+
 ## auth 1.5.1
 
 ### Fixed

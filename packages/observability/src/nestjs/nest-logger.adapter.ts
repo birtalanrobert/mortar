@@ -3,6 +3,20 @@ import type { Logger } from '../types';
 import { MORTAR_LOGGER } from './tokens';
 
 /**
+ * What Nest says of its own wiring at every start: a line for each module
+ * initialised, each controller and route mapped, each gateway's subscription —
+ * some four hundred in a modest API. Detail for finding out why a route is
+ * missing, so said at `debug`: at `info` it buried the lines that tell whoever
+ * is watching that the application started, and how.
+ */
+const WIRING_CONTEXTS: ReadonlySet<string> = new Set([
+  'InstanceLoader',
+  'RoutesResolver',
+  'RouterExplorer',
+  'WebSocketsController',
+]);
+
+/**
  * Adapts a mortar {@link Logger} to Nest's own `LoggerService`, so that
  * framework output — route mapping, dependency errors, shutdown notices —
  * lands in the same structured stream as application output.
@@ -22,10 +36,22 @@ export class NestLoggerAdapter implements LoggerService {
   constructor(@Inject(MORTAR_LOGGER) private readonly logger: Logger) {}
 
   log(message: unknown, ...optional: unknown[]): void {
-    this.logger.info(String(message), this.fields(optional));
+    const fields = this.fields(optional);
+    if (typeof fields.context === 'string' && WIRING_CONTEXTS.has(fields.context)) {
+      this.logger.debug(String(message), fields);
+      return;
+    }
+    this.logger.info(String(message), fields);
   }
 
   error(message: unknown, ...optional: unknown[]): void {
+    // Nest hands some errors over whole — the one that ends a failed boot,
+    // for one — and the error is its stack, its code and the errors it
+    // gathers; its string alone is often no more than its name.
+    if (message instanceof Error) {
+      this.logger.error(headline(message), message, this.fields(optional));
+      return;
+    }
     // Nest passes the stack as the first optional argument.
     const [first, ...rest] = optional;
     if (typeof first === 'string' && first.includes('\n')) {
@@ -48,6 +74,10 @@ export class NestLoggerAdapter implements LoggerService {
   }
 
   fatal(message: unknown, ...optional: unknown[]): void {
+    if (message instanceof Error) {
+      this.logger.fatal(headline(message), message, this.fields(optional));
+      return;
+    }
     this.logger.fatal(String(message), this.fields(optional));
   }
 
@@ -56,4 +86,9 @@ export class NestLoggerAdapter implements LoggerService {
     const last = optional[optional.length - 1];
     return typeof last === 'string' ? { context: last } : {};
   }
+}
+
+/** An error's message, or its name when it has none — an `AggregateError` of refused connections has none. */
+function headline(error: Error): string {
+  return error.message || error.name;
 }

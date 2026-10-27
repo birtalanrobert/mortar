@@ -1,4 +1,6 @@
+import type { Logger } from '@birtalanrobert/observability';
 import { Queue, type ConnectionOptions, type JobsOptions } from 'bullmq';
+import { connectionReady } from './connection-ready';
 import { DEFAULT_JOB_OPTIONS, type JobDefinition } from './job';
 import { attachContext } from './propagation';
 
@@ -7,6 +9,11 @@ export interface QueueRegistryOptions {
   /** Namespaces every key, so two services can share one Redis safely. */
   prefix?: string;
   defaultJobOptions?: JobsOptions;
+  /**
+   * Where a queue's own errors go. Without one BullMQ prints them to the
+   * console itself.
+   */
+  logger?: Logger;
 }
 
 /**
@@ -29,6 +36,21 @@ export class JobQueues {
         prefix: this.options.prefix ?? 'mortar',
         defaultJobOptions: { ...DEFAULT_JOB_OPTIONS, ...this.options.defaultJobOptions },
       });
+      const logger = this.options.logger;
+      if (logger) {
+        // A queue passes on its connection's errors, which the connection's
+        // watcher says once; any other is the queue's own.
+        queue.on('error', (error) => {
+          if (connectionReady(this.options.connection)) {
+            logger.error('job queue error', error, { queue: name });
+            return;
+          }
+          logger.debug('job queue error while its connection is down', {
+            queue: name,
+            error: error.message,
+          });
+        });
+      }
       this.queues.set(name, queue);
     }
     return queue;

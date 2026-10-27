@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
 import type { AsyncModuleOptions } from '@birtalanrobert/context';
+import { allRoutes } from './all-routes';
 import { ContextMiddleware, type ContextMiddlewareOptions } from './context.middleware';
 import { MortarExceptionFilter, type ExceptionFilterOptions } from './exception.filter';
 import { HealthRegistry, type HealthIndicator } from './health';
@@ -131,6 +132,6 @@ export class HttpModule implements NestModule {
       .apply((request: never, response: never, next: () => void) =>
         middleware.use(request, response, next),
       )
-      .forRoutes('*');
+      .forRoutes(allRoutes());
   }
 }

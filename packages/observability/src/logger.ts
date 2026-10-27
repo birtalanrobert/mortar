@@ -1,5 +1,6 @@
 import { contextSnapshot } from '@birtalanrobert/context';
 import pino, { type Logger as PinoLogger, type LoggerOptions } from 'pino';
+import { PRETTY_OPTIONS } from './pretty-options';
 import { buildRedactionPaths, REDACTED } from './redaction';
 import type { LogFields, LogLevel, Logger } from './types';
 
@@ -135,10 +136,7 @@ export function createLogger(options: CreateLoggerOptions): Logger {
     return new PinoAdapter(
       pino({
         ...pinoOptions,
-        transport: {
-          target: 'pino-pretty',
-          options: { colorize: true, translateTime: 'HH:MM:ss.l', ignore: 'pid,hostname' },
-        },
+        transport: { target: 'pino-pretty', options: { ...PRETTY_OPTIONS } },
       }),
     );
   }

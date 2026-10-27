@@ -126,6 +126,13 @@ export class RealtimeSocketServer {
     });
 
     this.server.on('connection', (socket, request) => this.accept(socket, request));
+    /*
+     * `ws` passes on every error of the HTTP server it is attached to — a port
+     * already taken, as the server starts to listen — and an error emitted
+     * with nobody listening ends the process. The server's owner is told of it
+     * already, its `listen` failing with it; here it is nobody's to report.
+     */
+    this.server.on('error', () => undefined);
 
     /*
      * One subscription to the publisher for the whole process, rather than one

@@ -13,6 +13,7 @@ import { MORTAR_LOGGER, MORTAR_METRICS } from '@birtalanrobert/observability/nes
 import {
   RedisService,
   createQueueConnection,
+  watchConnection,
   type CreateRedisOptions,
 } from '@birtalanrobert/redis';
 import type { Job } from 'bullmq';
@@ -61,11 +62,21 @@ export class JobsModule implements OnApplicationShutdown {
 
     const providers: Provider[] = [
       // Provided so `onApplicationShutdown` can close it. Without this the
-      // socket outlives `app.close()` and the process never exits.
-      { provide: MORTAR_QUEUE_CONNECTION, useValue: connection },
+      // socket outlives `app.close()` and the process never exits. Given a
+      // logger, it says an outage once, and its end.
+      {
+        provide: MORTAR_QUEUE_CONNECTION,
+        useFactory: (logger?: Logger) => {
+          if (logger) watchConnection(connection, logger);
+          return connection;
+        },
+        inject: [{ token: MORTAR_LOGGER, optional: true }],
+      },
       {
         provide: JobQueues,
-        useFactory: () => new JobQueues({ connection, prefix: options.prefix }),
+        useFactory: (logger?: Logger) =>
+          new JobQueues({ connection, prefix: options.prefix, logger }),
+        inject: [{ token: MORTAR_LOGGER, optional: true }],
       },
       {
         provide: JobWorkers,
@@ -108,20 +119,22 @@ export class JobsModule implements OnApplicationShutdown {
     const providers: Provider[] = [
       {
         provide: connectionToken,
-        useFactory: async (...args: never[]) => {
+        useFactory: async (logger: Logger | undefined, ...args: never[]) => {
           resolved.current = await options.useFactory(...args);
-          return createQueueConnection({
+          const connection = createQueueConnection({
             ...resolved.current.redis,
             connectionName: 'mortar-queue',
           });
+          if (logger) watchConnection(connection, logger);
+          return connection;
         },
-        inject: (options.inject ?? []) as never[],
+        inject: [{ token: MORTAR_LOGGER, optional: true }, ...((options.inject ?? []) as never[])],
       },
       {
         provide: JobQueues,
-        useFactory: (connection: never) =>
-          new JobQueues({ connection, prefix: resolved.current?.prefix }),
-        inject: [connectionToken],
+        useFactory: (connection: never, logger?: Logger) =>
+          new JobQueues({ connection, prefix: resolved.current?.prefix, logger }),
+        inject: [connectionToken, { token: MORTAR_LOGGER, optional: true }],
       },
       {
         provide: JobWorkers,

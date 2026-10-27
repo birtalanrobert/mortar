@@ -222,4 +222,31 @@ describe('a realtime gateway at its door', () => {
 
     expect(await code).toBe(1009);
   });
+
+  /**
+   * As an application whose port is taken starts: `ws` passes the HTTP
+   * server's error to the gateway as well as to the server's owner, and an
+   * error emitted with nobody listening would end the process before the
+   * owner's `listen` could fail with it.
+   */
+  it('leaves an error of the HTTP server to the server’s owner', async () => {
+    const port = await start();
+    const backlog = new MemoryBacklog();
+    const second = new RealtimeSocketServer({
+      publisher: new RealtimePublisher({ backlog }),
+      backlog,
+      authorise: (_request, channels) => channels,
+      heartbeatMs: 60_000,
+    });
+    const taken = createServer();
+    second.attach(taken);
+
+    const failure = await new Promise<NodeJS.ErrnoException>((done) => {
+      taken.once('error', done);
+      taken.listen(port, '127.0.0.1');
+    });
+
+    expect(failure.code).toBe('EADDRINUSE');
+    await second.close();
+  });
 });

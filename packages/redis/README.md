@@ -109,6 +109,15 @@ It is closed with the application, together with the client. A subscriber
 built beside the module is one that nothing quits, and it keeps the process
 alive after `SIGTERM`. Publish on `redis.client`.
 
+## An outage, said once
+
+With `LoggerModule` registered, the client and the subscriber say an outage
+through the logger — `redis unreachable`, with its cause, the first time a
+connection fails — and its end, `redis reachable again`, with how long it
+lasted. Without a listener ioredis prints every failed reconnection to the
+console itself, several a second at first and outside any log.
+`watchConnection(client, logger)` does the same for a client built by hand.
+
 ## Health
 
 The connection registers a health indicator, so `/health/ready` reports Redis

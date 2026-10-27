@@ -1,7 +1,8 @@
 import { Writable } from 'node:stream';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { of, throwError } from 'rxjs';
+import { ConsoleLogger, Logger as NestLogger } from '@nestjs/common';
 import type { CallHandler, ExecutionContext } from '@nestjs/common';
 import { createLogger, createNoopLogger } from '../logger';
 import { InMemoryMetrics } from '../metrics';
@@ -85,14 +86,75 @@ describe('LoggerModule', () => {
 });
 
 describe('NestLoggerAdapter', () => {
+  afterEach(() => NestLogger.overrideLogger(new ConsoleLogger()));
+
   it('routes framework output into the structured stream', () => {
     const { logger, lines } = capture();
     const adapter = new NestLoggerAdapter(logger);
-    adapter.log('Mapped {/bookings, GET} route', 'RouterExplorer');
+    adapter.log('Nest application successfully started', 'NestApplication');
     expect(lines()[0]).toMatchObject({
       level: 'info',
-      msg: 'Mapped {/bookings, GET} route',
-      context: 'RouterExplorer',
+      msg: 'Nest application successfully started',
+      context: 'NestApplication',
+    });
+  });
+
+  it('says Nest’s account of its own wiring at debug, and the rest at info', () => {
+    const { logger, lines } = capture();
+    NestLogger.overrideLogger(new NestLoggerAdapter(logger));
+
+    new NestLogger('InstanceLoader').log('BookingsModule dependencies initialized');
+    new NestLogger('RoutesResolver').log('BookingsController {/bookings}:');
+    new NestLogger('RouterExplorer').log('Mapped {/bookings, GET} route');
+    new NestLogger('WebSocketsController').log('EventsGateway subscribed to the "join" message');
+    new NestLogger('NestApplication').log('Nest application successfully started');
+
+    expect(lines().map((line) => [line.context, line.level])).toEqual([
+      ['InstanceLoader', 'debug'],
+      ['RoutesResolver', 'debug'],
+      ['RouterExplorer', 'debug'],
+      ['WebSocketsController', 'debug'],
+      ['NestApplication', 'info'],
+    ]);
+  });
+
+  /**
+   * As a boot that cannot reach its database ends: Nest's exception handler
+   * logs the error itself, and a refused connection is an `AggregateError`
+   * whose message is empty — the address it could not reach is in the errors
+   * it gathers, and the string of it was all that reached the log before.
+   */
+  it('keeps an error Nest hands over whole, with what it gathers', () => {
+    const { logger, lines } = capture();
+    NestLogger.overrideLogger(new NestLoggerAdapter(logger));
+    const refused = Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:5432'), {
+      code: 'ECONNREFUSED',
+    });
+
+    new NestLogger('ExceptionHandler').error(new AggregateError([refused]));
+    new NestLogger('NestApplication').fatal(new Error('listen EADDRINUSE: address already in use'));
+
+    const [boot, listen] = lines();
+    expect(boot).toMatchObject({
+      level: 'error',
+      msg: 'AggregateError',
+      context: 'ExceptionHandler',
+    });
+    expect(boot?.err).toMatchObject({
+      type: 'AggregateError',
+      stack: expect.stringContaining('AggregateError'),
+      aggregateErrors: [
+        expect.objectContaining({
+          message: 'connect ECONNREFUSED 127.0.0.1:5432',
+          code: 'ECONNREFUSED',
+        }),
+      ],
+    });
+    expect(listen).toMatchObject({
+      level: 'fatal',
+      msg: 'listen EADDRINUSE: address already in use',
+      context: 'NestApplication',
+      err: expect.objectContaining({ stack: expect.stringContaining('EADDRINUSE') }),
     });
   });
 

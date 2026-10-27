@@ -6,6 +6,7 @@ export {
   type CreateRedisOptions,
 } from './connection';
 export { checkRedisHealth, type RedisHealth } from './health';
+export { watchConnection } from './watch-connection';
 export { RedisLocks, type AcquiredLock, type LockOptions } from './lock';
 export { RedisCache, type CacheOptions } from './cache';
 export { RedisRateLimiter, type RateLimitOptions, type RateLimitResult } from './rate-limit';

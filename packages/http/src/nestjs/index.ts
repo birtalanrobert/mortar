@@ -19,4 +19,6 @@ export {
 
 export { CONTEXT_OPTIONS, HttpModule, type HttpModuleOptions } from '../nest';
 
+export { allRoutes } from '../all-routes';
+
 export { PUBLIC_ROUTE_KEY, PublicRoute } from '../public';

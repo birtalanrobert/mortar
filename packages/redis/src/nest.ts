@@ -7,12 +7,15 @@ import {
   type Provider,
 } from '@nestjs/common';
 import type { AsyncModuleOptions } from '@birtalanrobert/context';
+import type { Logger } from '@birtalanrobert/observability';
+import { MORTAR_LOGGER } from '@birtalanrobert/observability/nestjs';
 import type { Redis } from 'ioredis';
 import { RedisCache, type CacheOptions } from './cache';
 import { createRedis, type CreateRedisOptions } from './connection';
 import { checkRedisHealth, type RedisHealth } from './health';
 import { RedisLocks } from './lock';
 import { RedisRateLimiter } from './rate-limit';
+import { watchConnection } from './watch-connection';
 
 export const MORTAR_REDIS = Symbol('MORTAR_REDIS');
 
@@ -31,13 +34,20 @@ export class RedisService {
   readonly rateLimit: RedisRateLimiter;
   private listening: Redis | null = null;
 
+  /**
+   * Given a logger, the client and the subscriber say an outage through it,
+   * once, and its end ({@link watchConnection}); without one ioredis prints
+   * every failed reconnection to the console itself.
+   */
   constructor(
     readonly client: Redis,
     cacheOptions: CacheOptions = {},
+    private readonly logger?: Logger,
   ) {
     this.locks = new RedisLocks(client);
     this.cache = new RedisCache(client, cacheOptions);
     this.rateLimit = new RedisRateLimiter(client);
+    if (logger) watchConnection(client, logger);
   }
 
   /**
@@ -66,10 +76,14 @@ export class RedisService {
    * reconnection. `ioredis` re-subscribes by itself after a reconnection.
    */
   get subscriber(): Redis {
-    this.listening ??= this.client.duplicate({
-      connectionName: `${this.client.options.connectionName ?? 'mortar-app'}-subscriber`,
-      lazyConnect: true,
-    });
+    if (!this.listening) {
+      this.listening = this.client.duplicate({
+        connectionName: `${this.client.options.connectionName ?? 'mortar-app'}-subscriber`,
+        lazyConnect: true,
+      });
+      // A duplicate takes the client's options and none of its listeners.
+      if (this.logger) watchConnection(this.listening, this.logger);
+    }
     return this.listening;
   }
 
@@ -116,8 +130,8 @@ export class RedisModule implements OnApplicationShutdown {
       },
       {
         provide: RedisService,
-        useFactory: (client: Redis) => new RedisService(client, cache),
-        inject: [MORTAR_REDIS],
+        useFactory: (client: Redis, logger?: Logger) => new RedisService(client, cache, logger),
+        inject: [MORTAR_REDIS, { token: MORTAR_LOGGER, optional: true }],
       },
     ];
 
@@ -137,11 +151,15 @@ export class RedisModule implements OnApplicationShutdown {
 
     const serviceProvider: Provider = {
       provide: RedisService,
-      useFactory: async (client: Redis, ...args: never[]) => {
+      useFactory: async (client: Redis, logger: Logger | undefined, ...args: never[]) => {
         const { cache } = await options.useFactory(...args);
-        return new RedisService(client, cache);
+        return new RedisService(client, cache, logger);
       },
-      inject: [MORTAR_REDIS, ...((options.inject ?? []) as never[])],
+      inject: [
+        MORTAR_REDIS,
+        { token: MORTAR_LOGGER, optional: true },
+        ...((options.inject ?? []) as never[]),
+      ],
     };
 
     return {
