@@ -4,6 +4,7 @@ import {
   Module,
   Optional,
   type DynamicModule,
+  type BeforeApplicationShutdown,
   type OnApplicationShutdown,
   type Provider,
 } from '@nestjs/common';
@@ -43,7 +44,7 @@ export const MORTAR_QUEUE_CONNECTION = Symbol('MORTAR_QUEUE_CONNECTION');
 
 @Global()
 @Module({})
-export class JobsModule implements OnApplicationShutdown {
+export class JobsModule implements BeforeApplicationShutdown, OnApplicationShutdown {
   constructor(
     private readonly queues: JobQueues,
     private readonly workers: JobWorkers,
@@ -170,10 +171,19 @@ export class JobsModule implements OnApplicationShutdown {
     };
   }
 
+  /**
+   * The scheduled tasks stopped, and their runs under way let finish, before
+   * any connection closes: the application's database and Redis close on
+   * shutdown, after every `beforeApplicationShutdown`.
+   */
+  async beforeApplicationShutdown(): Promise<void> {
+    await this.scheduler.stop();
+  }
+
   async onApplicationShutdown(): Promise<void> {
     // Workers first, so in-flight jobs finish before the queues they report to
     // are closed.
-    this.scheduler.stop();
+    await this.scheduler.stop();
     await this.workers.close();
     await this.queues.close();
 

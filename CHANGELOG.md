@@ -4,6 +4,23 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## jobs 1.4.0
+
+### Changed
+
+- **A stop waits for the runs under way.** `TaskScheduler.stop()` only
+  cleared the timers: a run already going carried on while the application
+  closed its database and Redis under it, and every shutdown that caught one
+  logged it failing half-way — a connection gone, a query runner released. It
+  now answers once the runs under way have finished, and `JobsModule` awaits
+  it in `beforeApplicationShutdown`, before any connection closes. A task that
+  should end sooner than its run would watches for its own stop.
+
+### Migrating from 1.3
+
+`stop()` returns a promise: await it where a run must be finished — before
+closing what the task uses. Left unawaited it stops the ticks as before.
+
 ## redis 1.2.1
 
 ### Fixed

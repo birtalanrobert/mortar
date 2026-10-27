@@ -52,6 +52,8 @@ export interface TaskSchedulerOptions {
  */
 export class TaskScheduler {
   private readonly timers = new Map<string, NodeJS.Timeout>();
+  /** Each task's ticks under way, so a stop can wait for them. */
+  private readonly running = new Map<string, Set<Promise<void>>>();
   private readonly logger: Logger;
   private readonly now: () => number;
 
@@ -126,19 +128,27 @@ export class TaskScheduler {
      * early finds its interval already run and is set again for the one it
      * meant.
      */
+    const start = (): void => {
+      const run = tick();
+      const runs = this.running.get(task.name) ?? new Set<Promise<void>>();
+      this.running.set(task.name, runs);
+      runs.add(run);
+      void run.finally(() => runs.delete(run));
+    };
+
     const arm = (): void => {
       const now = this.now();
       const next = (Math.floor(now / task.intervalMs) + 1) * task.intervalMs;
       const timer = setTimeout(() => {
         arm();
-        void tick();
+        start();
       }, next - now);
       timer.unref?.();
       this.timers.set(task.name, timer);
     };
 
     arm();
-    if (task.runOnStart) void tick();
+    if (task.runOnStart) start();
     return this;
   }
 
@@ -168,14 +178,19 @@ export class TaskScheduler {
     );
   }
 
-  stop(name?: string): void {
-    if (name) {
-      const timer = this.timers.get(name);
-      if (timer) clearTimeout(timer);
-      this.timers.delete(name);
-      return;
+  /**
+   * Stops a task's ticks — or every task's — and answers once the runs already
+   * under way have finished. Await it before closing what the tasks use: a run
+   * cut off by its database closing under it fails half-way and says so, at
+   * every shutdown that catches one. A task that should end sooner than its
+   * run would watches for its own stop.
+   */
+  async stop(name?: string): Promise<void> {
+    const names = name ? [name] : [...new Set([...this.timers.keys(), ...this.running.keys()])];
+    for (const each of names) {
+      clearTimeout(this.timers.get(each));
+      this.timers.delete(each);
     }
-    for (const timer of this.timers.values()) clearTimeout(timer);
-    this.timers.clear();
+    await Promise.all(names.flatMap((each) => [...(this.running.get(each) ?? [])]));
   }
 }

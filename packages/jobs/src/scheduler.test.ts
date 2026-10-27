@@ -136,6 +136,50 @@ describe('TaskScheduler', () => {
     await vi.waitFor(() => expect(logger.debug).toHaveBeenCalled());
   });
 
+  /**
+   * As an application shuts down: the stop answers only once a run under way
+   * has finished, so the connections closed after it are not closed under the
+   * run — and no tick starts after it.
+   */
+  it('stops, answering once the run under way has finished', async () => {
+    let finish!: () => void;
+    const run = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const scheduler = new TaskScheduler(memoryLocks(), silent as never).register({
+      name: 'sweep',
+      intervalMs: 60_000,
+      run,
+      runOnStart: true,
+    });
+    await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(1));
+
+    let stopped = false;
+    const stopping = scheduler.stop().then(() => {
+      stopped = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(stopped).toBe(false);
+
+    finish();
+    await stopping;
+    expect(stopped).toBe(true);
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it('answers a stop at once with nothing under way', async () => {
+    const scheduler = new TaskScheduler(memoryLocks(), silent as never).register({
+      name: 'sweep',
+      intervalMs: 60_000,
+      run: async () => undefined,
+    });
+
+    await expect(scheduler.stop('sweep')).resolves.toBeUndefined();
+  });
+
   it('refuses two tasks with one name', () => {
     const scheduler = new TaskScheduler(
       locks(async (_key, work) => work()),

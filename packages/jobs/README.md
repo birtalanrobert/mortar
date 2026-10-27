@@ -116,6 +116,11 @@ later finds it taken; and a run still going when the next interval starts is not
 joined by a second. Keep the callback short — it enqueues rather than doing the
 work.
 
+`stop()` answers once the runs under way have finished, and `JobsModule` awaits
+it before the application's connections close, so a shutdown never closes the
+database under a run. A task whose run could outlast a shutdown's patience
+watches for its own stop and ends early.
+
 ## The scanner
 
 For work that comes due rather than work that is requested. A **forward
