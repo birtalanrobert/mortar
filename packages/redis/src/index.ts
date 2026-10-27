@@ -5,6 +5,7 @@ export {
   createRedis,
   type CreateRedisOptions,
 } from './connection';
+export { closeClient } from './close-client';
 export { checkRedisHealth, type RedisHealth } from './health';
 export { watchConnection } from './watch-connection';
 export { RedisLocks, type AcquiredLock, type LockOptions } from './lock';

@@ -4,6 +4,26 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## redis 1.2.1
+
+### Fixed
+
+- **A process stopped while Redis is down closes at once.** `RedisService`
+  quit its clients whatever their state, and `QUIT` on a client that is not
+  connected waits behind any command already waiting — a subscription asked for
+  during the outage — until that times out: an application told to stop failed
+  its shutdown five seconds later, with exit code 1. A client is now quit only
+  when connected, and disconnected otherwise (`closeClient`, exported); nothing
+  in flight could be answered without a connection anyway.
+
+## jobs 1.3.1
+
+### Fixed
+
+- **The queue's connection closes at once while Redis is down**, as
+  `@birtalanrobert/redis` 1.2.1's clients do: it has no command timeout, so a
+  `QUIT` waiting behind another command waited for as long as Redis was gone.
+
 ## redis 1.2.0
 
 ### Added

@@ -11,6 +11,7 @@ import type { Logger } from '@birtalanrobert/observability';
 import { MORTAR_LOGGER } from '@birtalanrobert/observability/nestjs';
 import type { Redis } from 'ioredis';
 import { RedisCache, type CacheOptions } from './cache';
+import { closeClient } from './close-client';
 import { createRedis, type CreateRedisOptions } from './connection';
 import { checkRedisHealth, type RedisHealth } from './health';
 import { RedisLocks } from './lock';
@@ -91,24 +92,17 @@ export class RedisService {
     return checkRedisHealth(this.client, timeoutMs);
   }
 
-  /** Quits the client and, if one was handed out, the subscriber. */
+  /**
+   * Closes the client and, if one was handed out, the subscriber: each quit
+   * when connected and disconnected otherwise ({@link closeClient}) — a
+   * subscriber that never subscribed, whose `QUIT` would open the connection
+   * it closes, or either while Redis is down.
+   */
   async close(): Promise<void> {
     const subscriber = this.listening;
     this.listening = null;
-    await Promise.all([this.client.quit(), subscriber && closeSubscriber(subscriber)]);
+    await Promise.all([closeClient(this.client), subscriber && closeClient(subscriber)]);
   }
-}
-
-/**
- * A subscriber that never subscribed is disconnected rather than quit.
- * `QUIT` is a command, and a command would open the connection it closes.
- */
-async function closeSubscriber(subscriber: Redis): Promise<void> {
-  if (subscriber.status === 'wait') {
-    subscriber.disconnect();
-    return;
-  }
-  await subscriber.quit();
 }
 
 export interface RedisModuleOptions extends CreateRedisOptions {

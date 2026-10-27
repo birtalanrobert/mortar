@@ -2,11 +2,13 @@ import { NestFactory } from '@nestjs/core';
 import type { Redis } from 'ioredis';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { RedisCache } from './cache';
+import { closeClient } from './close-client';
+import { createRedis } from './connection';
 import { checkRedisHealth } from './health';
 import { RedisLocks } from './lock';
 import { RedisModule, RedisService } from './nest';
 import { RedisRateLimiter } from './rate-limit';
-import { createTestRedis, flushTestRedis } from './testing';
+import { TEST_REDIS_URL, createTestRedis, flushTestRedis } from './testing';
 
 const client: Redis = createTestRedis('redis-suite');
 
@@ -32,6 +34,20 @@ describe('the test helper itself', () => {
      * expected three.
      */
     expect(await client.get('left-behind')).toBeNull();
+  });
+});
+
+describe('closing a client', () => {
+  it('quits one that is connected, answering what it has in flight first', async () => {
+    const own = createRedis({ url: TEST_REDIS_URL, connectionName: 'mortar-test-close' });
+    await own.ping();
+    const pending = own.ping();
+    const ended = new Promise<void>((done) => own.once('end', () => done()));
+
+    await closeClient(own);
+
+    expect(await pending).toBe('PONG');
+    await ended;
   });
 });
 

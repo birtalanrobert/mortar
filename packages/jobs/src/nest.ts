@@ -12,6 +12,7 @@ import type { Logger, Metrics } from '@birtalanrobert/observability';
 import { MORTAR_LOGGER, MORTAR_METRICS } from '@birtalanrobert/observability/nestjs';
 import {
   RedisService,
+  closeClient,
   createQueueConnection,
   watchConnection,
   type CreateRedisOptions,
@@ -185,13 +186,17 @@ export class JobsModule implements OnApplicationShutdown {
      * and called `app.close()` sits there with an open socket for ever: a seed
      * script that never returns, and a deployment that hangs waiting for it.
      *
-     * `quit` waits for in-flight commands; a connection already gone throws,
+     * Quit when connected, so in-flight commands are answered; disconnected
+     * otherwise ({@link closeClient}) — a `QUIT` sent while Redis is down
+     * waits behind what is already waiting, and this connection has no
+     * command timeout to end it. A connection that goes as it is quit throws,
      * and there is nothing left to do about it at this point.
      */
+    if (!this.connection) return;
     try {
-      await this.connection?.quit();
+      await closeClient(this.connection);
     } catch {
-      this.connection?.disconnect();
+      this.connection.disconnect();
     }
   }
 }
