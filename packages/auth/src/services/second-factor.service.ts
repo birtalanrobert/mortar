@@ -233,6 +233,38 @@ export class SecondFactorService {
     });
   }
 
+  /**
+   * Every secret sealed again under `nextKey` — the product's key replaced,
+   * after it leaked or on a schedule — every one opened with the key this
+   * service holds, all or none: one that does not open throws, and nothing
+   * changes. In the caller's transaction, or one of its own. Answered with how
+   * many were sealed again. A service holding the old key opens none of them
+   * after: the processes are started again with the new one.
+   *
+   * What it cannot do is take back a secret already read. A dump taken with
+   * the old key beside it holds every secret in the clear — then every second
+   * factor is set up again.
+   */
+  async reseal(nextKey: Buffer, manager?: EntityManager): Promise<number> {
+    if (nextKey.length !== 32) throw new Error('A second factor sealing key must be 32 bytes.');
+    if (nextKey.equals(this.options.secretKey)) {
+      throw new Error('The next sealing key is the one in use.');
+    }
+    const work = async (em: EntityManager): Promise<number> => {
+      const rows = await em.find(this.entity, { lock: { mode: 'pessimistic_write' } });
+      for (const row of rows) {
+        const secret = openSecret(row.secretSealed, this.options.secretKey);
+        await em.update(
+          this.entity,
+          { userId: row.userId },
+          { secretSealed: sealSecret(secret, nextKey) },
+        );
+      }
+      return rows.length;
+    };
+    return manager ? work(manager) : runInTransaction(this.dataSource, work);
+  }
+
   /** The account's second factor gone — to be set up again, a lost phone's or a departing person's. */
   async remove(userId: string, manager?: EntityManager): Promise<void> {
     await this.manager(manager).delete(this.entity, { userId });

@@ -4,6 +4,34 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## auth 1.6.0
+
+### Added
+
+- **`SessionService.revokeEvery()`**: every live session of every user ended,
+  each keeping when and why — a breach's containment, when nobody can yet say
+  whose sessions were reached. Answers with how many were live.
+- **`TokenService.revokeEvery()`**: every link still unused invalidated, of
+  every type and for every address — a reset sitting in a mailbox somebody
+  else reached is access too.
+- **`SecondFactorService.reseal(nextKey)`**: every secret, confirmed or
+  pending, sealed again under the next key, all or none — one that does not
+  open throws and nothing changes. The processes are then started with the next
+  key. A secret already read is not taken back: with a dump taken beside the
+  old key, every second factor is set up again. First consumed by Holdfast,
+  whose breach response replaces its sealing key.
+
+## comms 1.14.0
+
+### Added
+
+- **`rekey(pairs)`: a fingerprint's key replaced.** The product gives each
+  address it still knows as its fingerprint under the old key and under the
+  new, and the message log's and the suppressions' rows move from one to the
+  other, in the caller's transaction. A row of an address no longer held keeps
+  its old fingerprint, which nothing finds again, and goes with its retention.
+  Refused where addresses are kept as themselves.
+
 ## comms 1.13.0
 
 ### Added

@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { createTestDataSource } from '@birtalanrobert/database';
+import { createTestDataSource, sealSecret } from '@birtalanrobert/database';
 import type { DataSource } from 'typeorm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
@@ -175,5 +175,58 @@ describe('a code checked', () => {
     ({ secret } = await factors.begin(userId, 'ada@example.com'));
     await dataSource.query(`DELETE FROM "mortar_user" WHERE "id" = $1`, [userId]);
     expect(await factors.status(userId)).toBeNull();
+  });
+});
+
+describe('a key replaced', () => {
+  const KEY = randomBytes(32);
+  const NEXT = randomBytes(32);
+  const options = { issuer: 'Mortar', maxFailures: 3, lockMs: 60_000 };
+  const under = (secretKey: Buffer) =>
+    new SecondFactorService(dataSource, { ...options, secretKey });
+
+  it('seals every secret again under the next key — confirmed and pending — so only the next opens them', async () => {
+    const before = under(KEY);
+    const { secret } = await before.begin(userId, 'ada@example.com');
+    await before.confirm(userId, codeAt(secret, T0), T0);
+    const [other] = (await dataSource.query(
+      `INSERT INTO "mortar_user" ("email") VALUES ('bo@example.com') RETURNING "id"`,
+    )) as Array<{ id: string }>;
+    const pending = await before.begin(other!.id, 'bo@example.com');
+
+    expect(await before.reseal(NEXT)).toBe(2);
+
+    const after = under(NEXT);
+    await expect(after.verify(userId, codeAt(secret, at(60)), at(60))).resolves.toMatchObject({
+      method: 'totp',
+    });
+    await expect(after.confirm(other!.id, codeAt(pending.secret, T0), T0)).resolves.toHaveLength(
+      10,
+    );
+    // The old key opens nothing any more.
+    await expect(before.verify(userId, codeAt(secret, at(90)), at(90))).rejects.toThrow();
+  });
+
+  it('changes nothing when one secret does not open, and refuses a key that is not a new one of 32 bytes', async () => {
+    const before = under(KEY);
+    const { secret } = await before.begin(userId, 'ada@example.com');
+    await before.confirm(userId, codeAt(secret, T0), T0);
+    const [other] = (await dataSource.query(
+      `INSERT INTO "mortar_user" ("email") VALUES ('bo@example.com') RETURNING "id"`,
+    )) as Array<{ id: string }>;
+    await dataSource.query(
+      `INSERT INTO "mortar_second_factor" ("user_id", "secret_sealed") VALUES ($1, $2)`,
+      [other!.id, sealSecret('JBSWY3DPEHPK3PXP', randomBytes(32))],
+    );
+
+    await expect(before.reseal(NEXT)).rejects.toThrow();
+    // Nothing changed: the key in use still opens the first.
+    await expect(before.verify(userId, codeAt(secret, at(60)), at(60))).resolves.toMatchObject({
+      method: 'totp',
+    });
+    await expect(before.reseal(KEY)).rejects.toThrow('The next sealing key is the one in use.');
+    await expect(before.reseal(randomBytes(16))).rejects.toThrow(
+      'A second factor sealing key must be 32 bytes.',
+    );
   });
 });

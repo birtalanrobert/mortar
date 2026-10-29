@@ -176,6 +176,22 @@ export class TokenService {
     return result.affected ?? 0;
   }
 
+  /**
+   * Invalidates every outstanding token, of every type and for every address.
+   *
+   * A breach's other half to ending every session: a reset or a sign-in link
+   * sitting unread in a mailbox somebody else reached is access too. Whoever
+   * still needs one asks for it again. Returns how many were outstanding.
+   */
+  async revokeEvery(manager?: EntityManager): Promise<number> {
+    const result = await this.manager(manager).update(
+      this.entities.authToken,
+      { consumedAt: IsNull() },
+      { consumedAt: new Date() },
+    );
+    return result.affected ?? 0;
+  }
+
   async purgeExpired(now = new Date(), manager?: EntityManager): Promise<number> {
     const result = await this.manager(manager).delete(this.entities.authToken, {
       expiresAt: LessThan(now),

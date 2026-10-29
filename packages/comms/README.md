@@ -190,6 +190,14 @@ and a fingerprint in one column is worth nothing beside the address in the
 next. A row only ever holds what was kept when it was written, so turning this
 on reads no row written before it.
 
+Replacing the key a fingerprint is made under — after it leaked, or on a
+schedule — is the product's to drive, since only it can make a fingerprint:
+`rekey(pairs)` takes each address it still knows as its fingerprint under the
+old key and under the new, and moves the log's and the suppressions' rows from
+one to the other. A row of an address it no longer holds keeps its old
+fingerprint, which nothing finds again, and goes with its retention. A service
+keeping addresses as themselves refuses: there is no key to replace.
+
 ## Sending
 
 `MessagePort` per channel. What it exposes is fixed by behaviour rather than by

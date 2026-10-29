@@ -171,6 +171,24 @@ export class SessionService {
     return (await qb.execute()).affected ?? 0;
   }
 
+  /**
+   * Revokes every live session of every user.
+   *
+   * The containment step of a breach: a stolen session table, a leaked
+   * signing secret, an attacker who reached the sessions of people nobody can
+   * yet name. Everybody signs in again, and each session's history keeps when
+   * and why it ended. Returns how many were live.
+   */
+  async revokeEvery(reason = 'revoked', manager?: EntityManager): Promise<number> {
+    const result = await this.manager(manager)
+      .createQueryBuilder()
+      .update(this.entities.session)
+      .set({ revokedAt: new Date(), revokedReason: reason })
+      .where('revoked_at IS NULL')
+      .execute();
+    return result.affected ?? 0;
+  }
+
   async listForUser(userId: string, manager?: EntityManager): Promise<BaseSession[]> {
     return this.manager(manager).find(this.entities.session, {
       where: { userId },

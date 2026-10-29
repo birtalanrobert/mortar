@@ -228,6 +228,11 @@ avoid. The lookup is one indexed read.
   Keeping one token across a privilege boundary is session fixation.
 - **`revokeAllForUser()`** is the required response to a password change;
   leaving other sessions alive means the attacker keeps their access.
+- **`revokeEvery()`** ends every live session of every user — a breach's
+  containment, when nobody can yet say whose sessions were reached — and
+  `TokenService.revokeEvery()` every link still unused: a reset sitting in a
+  mailbox somebody else reached is access too. Each session's history keeps
+  when and why it ended.
 
 ## A second factor
 
@@ -258,6 +263,10 @@ checks a code and says why one failed.
   the error then rolls back would take the count with it.
 - **Recovery codes are renewed with the app's code alone**, never a recovery
   code: whoever renews them must hold the phone.
+- **The key can be replaced.** `reseal(nextKey)` seals every secret again under
+  the next key, all or none, and the processes start again with it. It cannot
+  take back a secret already read: with a dump taken beside the old key, every
+  second factor is set up again instead.
 
 ## Enumeration resistance
 

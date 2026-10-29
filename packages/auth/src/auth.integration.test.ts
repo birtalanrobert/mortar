@@ -221,6 +221,21 @@ describe('sessions', () => {
     expect((await sessions.validate(keep.token)).id).toBe(keep.session.id);
   });
 
+  it('revokes every live session of every user, keeping each one’s history', async () => {
+    const other = (await users.create({ email: 'bo@example.com', password: 'pw-123456' })).id;
+    const mine = await sessions.create(userId);
+    const theirs = await sessions.create(other);
+    const ended = await sessions.create(other);
+    await sessions.revoke(ended.session.id, 'signed_out');
+
+    expect(await sessions.revokeEvery('breach')).toBe(2);
+    await expect(sessions.validate(mine.token)).rejects.toThrow(SessionExpiredError);
+    await expect(sessions.validate(theirs.token)).rejects.toThrow(SessionExpiredError);
+    const kept = await dataSource.getRepository(Session).find({ where: { userId: other } });
+    // One ended before keeps its own reason; nothing is deleted.
+    expect(kept.map((session) => session.revokedReason).sort()).toEqual(['breach', 'signed_out']);
+  });
+
   it('captures the address and agent from the request context', async () => {
     const { session } = await runInContext({ ip: '203.0.113.7', userAgent: 'Mozilla/5.0' }, () =>
       sessions.create(userId),
@@ -321,6 +336,20 @@ describe('single-use tokens', () => {
     const record = await tokens.consume(token, 'invitation');
     expect(record.tenantId).toBe(TENANT);
     expect(record.payload).toEqual({ roles: ['manager'] });
+  });
+
+  it('invalidates every outstanding token of every type and address, never one spent', async () => {
+    const reset = await tokens.issue({ type: 'password_reset', email: 'a@example.com' });
+    const verify = await tokens.issue({ type: 'email_verification', email: 'b@example.com' });
+    const spent = await tokens.issue({ type: 'magic_link', email: 'c@example.com' });
+    await tokens.consume(spent.token, 'magic_link');
+
+    expect(await tokens.revokeEvery()).toBe(2);
+    await expect(tokens.consume(reset.token, 'password_reset')).rejects.toThrow(InvalidTokenError);
+    await expect(tokens.consume(verify.token, 'email_verification')).rejects.toThrow(
+      InvalidTokenError,
+    );
+    expect(await tokens.revokeEvery()).toBe(0);
   });
 
   it('purges expired tokens', async () => {

@@ -541,6 +541,49 @@ export class CommsService {
     return result.affected ?? 0;
   }
 
+  // ── A fingerprint's key replaced ─────────────────────────────────────────
+
+  /**
+   * Every fingerprint the log and the suppressions keep made again under a new
+   * key — the product's key replaced, after it leaked or on a schedule.
+   *
+   * Only the product can make a fingerprint, so it gives each address it still
+   * knows as a pair: its fingerprint under the old key, and under the new. A
+   * row whose fingerprint is in no pair is left as it was, and no lookup under
+   * the new key finds it again: an address the product no longer holds goes
+   * with the row's retention, which is what forgetting it asks anyway. In the
+   * caller's transaction; answered with how many rows of each moved.
+   *
+   * For a product keeping fingerprints alone: one keeping the addresses
+   * themselves has no key to replace, and is refused rather than having its
+   * addresses overwritten with whatever it passed.
+   */
+  async rekey(
+    pairs: ReadonlyArray<{ readonly from: string; readonly to: string }>,
+    manager?: EntityManager,
+  ): Promise<{ readonly log: number; readonly suppressions: number }> {
+    if (!this.fingerprint) {
+      throw new Error('Addresses are kept as themselves here: there is no fingerprint to rekey.');
+    }
+    if (pairs.length === 0) return { log: 0, suppressions: 0 };
+    const em = this.manager(manager);
+    const from = pairs.map((pair) => pair.from);
+    const to = pairs.map((pair) => pair.to);
+    const moved = async (table: string): Promise<number> => {
+      const [, count] = (await em.query(
+        `UPDATE "${table}" AS kept SET "address" = pair."to"
+           FROM unnest($1::text[], $2::text[]) AS pair("from", "to")
+          WHERE kept."address" = pair."from"`,
+        [from, to],
+      )) as [unknown, number];
+      return count;
+    };
+    return {
+      log: await moved(em.getRepository(MessageLog).metadata.tableName),
+      suppressions: await moved(em.getRepository(Suppression).metadata.tableName),
+    };
+  }
+
   // ── Addresses that have said no ──────────────────────────────────────────
 
   /**

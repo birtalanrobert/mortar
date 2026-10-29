@@ -744,6 +744,41 @@ describe('keeping no address at all', () => {
     expect(await comms.suppressionFor(TENANT, 'sms', '+40722000009')).toBeNull();
   });
 
+  it('makes every fingerprint it is given again under a new key, the log’s and the suppressions’, leaving the rest', async () => {
+    const comms = fingerprinted({ email: new NoopMessagePort('email') });
+    const ana = await comms.send({ channel: 'email', to: 'ana@example.com', text: 'x' });
+    const ion = await comms.send({ channel: 'email', to: 'ion@example.com', text: 'x' });
+    await comms.unsubscribe(TENANT, 'email', 'ana@example.com', 'unsubscribed');
+
+    const NEXT = randomBytes(32);
+    const next = (address: string) =>
+      createHmac('sha256', NEXT).update(address.trim().toLowerCase()).digest('hex');
+    // Ion's address is one the product no longer holds: it gives no pair for it.
+    expect(
+      await comms.rekey([{ from: fingerprint('ana@example.com'), to: next('ana@example.com') }]),
+    ).toEqual({ log: 1, suppressions: 1 });
+
+    const after = new CommsService(dataSource, {
+      ports: { email: new NoopMessagePort('email') },
+      fingerprint: next,
+    });
+    expect((await after.sentTo(null, 'ana@example.com')).map((row) => row.id)).toEqual([ana.id]);
+    expect(await after.suppressionFor(TENANT, 'email', 'ana@example.com')).toEqual(
+      expect.objectContaining({ address: next('ana@example.com') }),
+    );
+    expect(await after.sentTo(null, 'ion@example.com')).toEqual([]);
+    expect(
+      (await dataSource.getRepository(MessageLog).findOneByOrFail({ id: ion.id })).address,
+    ).toBe(fingerprint('ion@example.com'));
+    expect(await comms.rekey([])).toEqual({ log: 0, suppressions: 0 });
+  });
+
+  it('refuses to rekey where addresses are kept as themselves', async () => {
+    await expect(
+      service({ email: new NoopMessagePort('email') }).rekey([{ from: 'a', to: 'b' }]),
+    ).rejects.toThrow('Addresses are kept as themselves here: there is no fingerprint to rekey.');
+  });
+
   it('keeps the address itself, and its words whole, when the product gives no fingerprint', async () => {
     const comms = service({ email: new NoopMessagePort('email') });
     const sent = await comms.send({
