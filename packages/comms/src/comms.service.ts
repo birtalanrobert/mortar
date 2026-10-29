@@ -12,12 +12,28 @@ import {
   type MessagePort,
   type OutboundMessage,
 } from './outbound/port';
+import { withoutAddresses } from './without-addresses';
 
 export interface CommsServiceOptions {
   /** One per channel. A channel with no port cannot be sent on. */
   ports?: Partial<Record<Channel, MessagePort>>;
   /** Absent means this deployment does not accept inbound mail. */
   inbound?: InboundAddressOptions;
+  /**
+   * How an address is kept in the log and among the suppressions, for a
+   * product that promises a copy of its database names nobody: a keyed
+   * fingerprint — an HMAC under a key held outside the database — the same
+   * every time for the same address. Every method still takes the address
+   * itself, and finds what is kept by its fingerprint; the free text kept
+   * beside it — a provider's word on a failure, a subject line — has every
+   * address-shaped run struck out (`withoutAddresses`), since it can repeat the
+   * address it is about. A row only ever holds a fingerprint, so a lookup reads
+   * only rows written once this was set.
+   *
+   * Absent, an address is kept as itself, which is what answering "did they
+   * get it?" from the log alone needs.
+   */
+  fingerprint?: (address: string) => string;
 }
 
 export interface ReceivedResult {
@@ -39,6 +55,7 @@ export interface ReceivedResult {
  */
 export class CommsService {
   private readonly ports: Partial<Record<Channel, MessagePort>>;
+  private readonly fingerprint?: (address: string) => string;
   readonly addresses?: InboundAddress;
 
   constructor(
@@ -46,11 +63,24 @@ export class CommsService {
     options: CommsServiceOptions = {},
   ) {
     this.ports = options.ports ?? {};
+    this.fingerprint = options.fingerprint;
     this.addresses = options.inbound ? new InboundAddress(options.inbound) : undefined;
   }
 
   private manager(manager?: EntityManager): EntityManager {
     return manager ?? resolveManager(this.dataSource);
+  }
+
+  /** An address as the log and the suppressions keep it: its fingerprint, where the product asked for one. */
+  private kept(address: string): string {
+    return this.fingerprint ? this.fingerprint(address) : address;
+  }
+
+  /** Free text as the log and the suppressions keep it: without addresses, beside a fingerprint. */
+  private told(text: string): string;
+  private told(text: string | null): string | null;
+  private told(text: string | null): string | null {
+    return this.fingerprint && text !== null ? withoutAddresses(text) : text;
   }
 
   /** The address a client can forward documents to for one subject. */
@@ -190,8 +220,8 @@ export class CommsService {
           direction: 'outbound',
           channel: message.channel,
           subject: context.subject ?? null,
-          address: message.to,
-          heading: message.subject ?? null,
+          address: this.kept(message.to),
+          heading: this.told(message.subject ?? null),
           state: 'failed',
           detail:
             `Attachments total ${Math.round(attached / 1024 / 1024)} MB, ` +
@@ -232,8 +262,8 @@ export class CommsService {
             direction: 'outbound',
             channel: message.channel,
             subject: context.subject ?? null,
-            address: message.to,
-            heading: message.subject ?? null,
+            address: this.kept(message.to),
+            heading: this.told(message.subject ?? null),
             /*
              * `discarded`, not `failed`.
              *
@@ -246,7 +276,9 @@ export class CommsService {
             detail:
               stopped.reason === 'unsubscribed'
                 ? 'They asked not to be contacted.'
-                : `That address has refused ${stopped.failures} times. ${stopped.detail ?? ''}`.trim(),
+                : this.told(
+                    `That address has refused ${stopped.failures} times. ${stopped.detail ?? ''}`.trim(),
+                  ),
             settledAt: new Date(),
           }),
         );
@@ -260,8 +292,8 @@ export class CommsService {
           direction: 'outbound',
           channel: message.channel,
           subject: context.subject ?? null,
-          address: message.to,
-          heading: message.subject ?? null,
+          address: this.kept(message.to),
+          heading: this.told(message.subject ?? null),
           state: 'failed',
           detail: `No ${message.channel} provider is configured.`,
           settledAt: new Date(),
@@ -281,8 +313,8 @@ export class CommsService {
           channel: result.channel ?? message.channel,
           subject: context.subject ?? null,
           providerMessageId: result.providerMessageId ?? null,
-          address: message.to,
-          heading: message.subject ?? null,
+          address: this.kept(message.to),
+          heading: this.told(message.subject ?? null),
           // `accepted`, not `delivered`. The provider has taken it; whether it
           // reached a person is a later webhook's news.
           state: 'accepted',
@@ -301,10 +333,10 @@ export class CommsService {
           direction: 'outbound',
           channel: message.channel,
           subject: context.subject ?? null,
-          address: message.to,
-          heading: message.subject ?? null,
+          address: this.kept(message.to),
+          heading: this.told(message.subject ?? null),
           state: 'failed',
-          detail: error instanceof Error ? error.message : String(error),
+          detail: this.told(error instanceof Error ? error.message : String(error)),
           settledAt: new Date(),
         }),
       );
@@ -344,8 +376,8 @@ export class CommsService {
         channel: 'email',
         subject: routed?.subject ?? null,
         providerMessageId,
-        address: message.from,
-        heading: message.subject || null,
+        address: this.kept(message.from),
+        heading: this.told(message.subject || null),
         state: routed ? 'received' : 'discarded',
         detail: routed ? null : 'No recognised recipient address.',
         // The body is never stored. A reminder is innocuous; inbound mail here
@@ -384,7 +416,7 @@ export class CommsService {
 
     await repository.update(
       { id: log.id },
-      { state, detail: detail ?? null, settledAt: new Date() },
+      { state, detail: this.told(detail ?? null), settledAt: new Date() },
     );
 
     return repository.findOneOrFail({ where: { id: log.id } });
@@ -410,7 +442,9 @@ export class CommsService {
    *
    * `tenantId` null reads what was sent with no tenant — the mail a product
    * sends to the person as such, which {@link forget} forgets the same way —
-   * and nothing a tenant sent; a tenant's id reads that tenant's alone.
+   * and nothing a tenant sent; a tenant's id reads that tenant's alone. Asked
+   * by the address itself; where addresses are kept as fingerprints, each row
+   * answers with the fingerprint.
    */
   async sentTo(
     tenantId: string | null,
@@ -421,7 +455,7 @@ export class CommsService {
     return this.manager(manager)
       .getRepository(MessageLog)
       .find({
-        where: { tenantId: tenantId === null ? IsNull() : tenantId, address },
+        where: { tenantId: tenantId === null ? IsNull() : tenantId, address: this.kept(address) },
         order: { createdAt: 'DESC' },
         take: limit,
       });
@@ -466,7 +500,7 @@ export class CommsService {
      * an empty string — which looks like a bug rather than a decision.
      */
     const result = await repository.update(
-      { tenantId: tenantId === null ? IsNull() : tenantId, address },
+      { tenantId: tenantId === null ? IsNull() : tenantId, address: this.kept(address) },
       { address: 'erased@invalid', heading: null, detail: null },
     );
 
@@ -524,7 +558,7 @@ export class CommsService {
   ): Promise<Suppression | null> {
     const found = await this.manager(manager)
       .getRepository(Suppression)
-      .findOne({ where: { tenantId, channel, address } });
+      .findOne({ where: { tenantId, channel, address: this.kept(address) } });
 
     if (!found) return null;
     if (found.expiresAt && found.expiresAt.getTime() <= Date.now()) return null;
@@ -547,16 +581,18 @@ export class CommsService {
     manager?: EntityManager,
   ): Promise<Suppression> {
     const repository = this.manager(manager).getRepository(Suppression);
-    const existing = await repository.findOne({ where: { tenantId, channel, address } });
+    const existing = await repository.findOne({
+      where: { tenantId, channel, address: this.kept(address) },
+    });
 
     if (!existing) {
       return repository.save(
         repository.create({
           tenantId,
           channel,
-          address,
+          address: this.kept(address),
           reason: 'refused',
-          detail: detail ?? null,
+          detail: this.told(detail ?? null),
           failures: 1,
           // Nothing is suppressed on the first refusal, so the hold starts only
           // once the count says the address is genuinely gone.
@@ -580,7 +616,7 @@ export class CommsService {
       { id: existing.id, tenantId },
       {
         failures,
-        detail: detail ?? existing.detail,
+        detail: this.told(detail ?? null) ?? existing.detail,
         expiresAt:
           failures >= REFUSALS_BEFORE_SUPPRESSING ? suppressionExpiry('refused') : new Date(0),
       },
@@ -606,12 +642,18 @@ export class CommsService {
     manager?: EntityManager,
   ): Promise<Suppression> {
     const repository = this.manager(manager).getRepository(Suppression);
-    const existing = await repository.findOne({ where: { tenantId, channel, address } });
+    const existing = await repository.findOne({
+      where: { tenantId, channel, address: this.kept(address) },
+    });
 
     if (existing) {
       await repository.update(
         { id: existing.id, tenantId },
-        { reason: 'unsubscribed', detail: detail ?? existing.detail, expiresAt: null },
+        {
+          reason: 'unsubscribed',
+          detail: this.told(detail ?? null) ?? existing.detail,
+          expiresAt: null,
+        },
       );
 
       return repository.findOneOrFail({ where: { id: existing.id, tenantId } });
@@ -621,9 +663,9 @@ export class CommsService {
       repository.create({
         tenantId,
         channel,
-        address,
+        address: this.kept(address),
         reason: 'unsubscribed',
-        detail: detail ?? null,
+        detail: this.told(detail ?? null),
         failures: 0,
         expiresAt: null,
       }),
@@ -637,6 +679,8 @@ export class CommsService {
     address: string,
     manager?: EntityManager,
   ): Promise<void> {
-    await this.manager(manager).getRepository(Suppression).delete({ tenantId, channel, address });
+    await this.manager(manager)
+      .getRepository(Suppression)
+      .delete({ tenantId, channel, address: this.kept(address) });
   }
 }

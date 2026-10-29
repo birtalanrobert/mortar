@@ -161,6 +161,35 @@ emailed again the next time a business imports a list.
 worth keeping, and a table of hollowed rows still grows for ever. It is bounded
 and returns what it deleted, so a sweep runs again until it returns zero.
 
+### Keeping no address at all
+
+A product that promises a copy of its database names nobody gives the service a
+fingerprint, and the log and the suppressions keep that instead of the address:
+
+```ts
+CommsModule.forRootAsync({
+  inject: [ConfigModule.token()],
+  useFactory: (config: AppConfig) => ({
+    ports: { email: new SmtpMessagePort(/* … */) },
+    // Keyed, so the fingerprint opens nothing without the key; the same every time.
+    fingerprint: (address) =>
+      createHmac('sha256', config.FINGERPRINT_KEY)
+        .update(address.trim().toLowerCase())
+        .digest('hex'),
+  }),
+});
+```
+
+Every method still takes the address — `send` writes to it, `sentTo`, `forget`
+and the suppressions find it by its fingerprint — so nothing else changes for a
+caller. What is lost is reading an address back out of the log: support answers
+"did they get it?" by asking with the address, not by browsing. The free text
+kept beside a fingerprint has every address-shaped run struck out
+(`withoutAddresses`): a provider's refusal often repeats the address it refused,
+and a fingerprint in one column is worth nothing beside the address in the
+next. A row only ever holds what was kept when it was written, so turning this
+on reads no row written before it.
+
 ## Sending
 
 `MessagePort` per channel. What it exposes is fixed by behaviour rather than by

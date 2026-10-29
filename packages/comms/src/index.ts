@@ -49,6 +49,7 @@ export {
   REFUSALS_BEFORE_SUPPRESSING,
   REFUSAL_HOLDS_FOR_DAYS,
 } from './suppression';
+export { withoutAddresses, STRUCK_ADDRESS } from './without-addresses';
 export {
   CreateMessageLog1787813849846,
   CreateSuppressions1790400000000,

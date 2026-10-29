@@ -4,6 +4,26 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## comms 1.13.0
+
+### Added
+
+- **`fingerprint`: keep no address at all.** A product that promises a copy of
+  its database names nobody gives `CommsService` a fingerprint — a keyed HMAC,
+  the same every time for the same address — and the message log and the
+  suppressions keep that instead of the address. Every method still takes the
+  address: `send` writes to it, and `sentTo`, `forget`, `suppressionFor`,
+  `recordRefusal`, `unsubscribe` and `allowAgain` find what is kept by its
+  fingerprint, so a caller changes nothing else. The free text kept beside a
+  fingerprint — a provider's word on a failure or a bounce, a subject line, an
+  inbound one — has every address-shaped run struck out, since a provider's
+  refusal often repeats the address it refused. Absent, an address is kept as
+  itself, as before. First consumed by Holdfast, whose security overview says
+  a copy of its database alone shows nobody's address.
+- **`withoutAddresses`**, the striking out on its own: email addresses and
+  E.164 telephone numbers in free text replaced with `[address]`
+  (`STRUCK_ADDRESS`).
+
 ## jobs 1.4.0
 
 ### Changed

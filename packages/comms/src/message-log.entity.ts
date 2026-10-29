@@ -64,6 +64,10 @@ export class MessageLog extends BaseEntity {
   @Column({ type: 'varchar', length: 255, nullable: true })
   providerMessageId!: string | null;
 
+  /**
+   * To whom, or from whom: the address itself, or its fingerprint where the
+   * product keeps addresses so (`CommsServiceOptions.fingerprint`).
+   */
   @Column({ type: 'varchar', length: 320 })
   address!: string;
 

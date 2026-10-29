@@ -52,7 +52,11 @@ export class Suppression extends BaseEntity {
    */
   channel!: Channel;
 
-  /** As the provider was given it: E.164, or the email address. */
+  /**
+   * As the provider was given it — E.164, or the email address — or its
+   * fingerprint where the product keeps addresses so
+   * (`CommsServiceOptions.fingerprint`).
+   */
   @Column('varchar', { length: 320 })
   address!: string;
 

@@ -1,3 +1,4 @@
+import { createHmac, randomBytes } from 'node:crypto';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createTestDataSource } from '@birtalanrobert/database';
 import type { DataSource } from 'typeorm';
@@ -630,6 +631,133 @@ describe('forgetting one address', () => {
  * And the other half of the same obligation: a schedule needs something that
  * runs.
  */
+describe('keeping no address at all', () => {
+  /** This run's key, generated here: a fingerprint is the product's HMAC, never a stored secret. */
+  const KEY = randomBytes(32);
+  const fingerprint = (address: string) =>
+    createHmac('sha256', KEY).update(address.trim().toLowerCase()).digest('hex');
+  const fingerprinted = (ports: Partial<Record<Channel, MessagePort>> = {}) =>
+    new CommsService(dataSource, {
+      ports,
+      inbound: { domain: 'in.example.com', secret: SECRET },
+      fingerprint,
+    });
+  /** Every value the two tables hold, as text, for asking whether an address is among them. */
+  const everything = async () =>
+    JSON.stringify([
+      await dataSource.getRepository(MessageLog).find(),
+      await dataSource.getRepository(Suppression).find(),
+    ]);
+
+  it('logs a fingerprint, never the address, and finds and forgets by the address', async () => {
+    const comms = fingerprinted({ email: new NoopMessagePort('email') });
+
+    const sent = await comms.send({ channel: 'email', to: 'Ana@Example.com', text: 'Hello' });
+
+    expect(sent.address).toBe(fingerprint('ana@example.com'));
+    expect(await everything()).not.toMatch(/ana@example\.com/i);
+    // Asked by the address, as a caller has it; found by its fingerprint.
+    expect((await comms.sentTo(null, 'ana@example.com')).map((row) => row.id)).toEqual([sent.id]);
+    expect(await comms.forget(null, 'ana@example.com')).toBe(1);
+    expect(
+      (await dataSource.getRepository(MessageLog).findOneByOrFail({ id: sent.id })).address,
+    ).toBe('erased@invalid');
+  });
+
+  it('strikes the address from the provider’s words, on a failure and on a bounce', async () => {
+    const broken: MessagePort = {
+      channel: 'email',
+      send: async () => {
+        throw new Error('550 5.1.1 <ana@example.com>: Recipient address rejected');
+      },
+    };
+    const failed = await fingerprinted({ email: broken }).send({
+      channel: 'email',
+      to: 'ana@example.com',
+      subject: 'For ana@example.com',
+      text: 'x',
+    });
+    expect(failed.detail).toBe('550 5.1.1 <[address]>: Recipient address rejected');
+    expect(failed.heading).toBe('For [address]');
+
+    const comms = fingerprinted({ email: new NoopMessagePort('email') });
+    const sent = await comms.send({ channel: 'email', to: 'ion@example.com', text: 'x' });
+    const bounced = await comms.settle(
+      sent.providerMessageId!,
+      'bounced',
+      'ion@example.com: mailbox unavailable',
+    );
+    expect(bounced?.detail).toBe('[address]: mailbox unavailable');
+    expect(await everything()).not.toMatch(/(ana|ion)@example\.com/);
+  });
+
+  it('keeps an inbound sender as a fingerprint', async () => {
+    const comms = fingerprinted();
+    const to = comms.inboundAddressFor('request-9')!;
+
+    const { log } = await comms.receive(
+      parseMime(
+        crlf([
+          'From: Ion Popescu <ion@example.com>',
+          `To: ${to}`,
+          'Subject: Statement',
+          'Message-ID: <fp-1@example.com>',
+          'Content-Type: text/plain',
+          '',
+          'Attached.',
+        ]),
+      ),
+    );
+
+    expect(log.address).toBe(fingerprint('ion@example.com'));
+    expect(await everything()).not.toMatch(/ion@example\.com/);
+  });
+
+  it('refuses, unsubscribes and allows again by the address, keeping only its fingerprint', async () => {
+    const comms = fingerprinted({ sms: new NoopMessagePort('sms') });
+
+    await comms.unsubscribe(TENANT, 'sms', '+40722000009', 'STOP from +40722000009');
+    const stopped = await comms.send(
+      { channel: 'sms', to: '+40722000009', text: 'Reminder' },
+      { tenantId: TENANT },
+    );
+    expect(stopped.state).toBe('discarded');
+    expect(await comms.suppressionFor(TENANT, 'sms', '+40722000009')).toEqual(
+      expect.objectContaining({
+        address: fingerprint('+40722000009'),
+        detail: 'STOP from [address]',
+      }),
+    );
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await comms.recordRefusal(TENANT, 'sms', '+40722000010', '21610: +40722000010 unsubscribed');
+    }
+    const refused = await comms.send(
+      { channel: 'sms', to: '+40722000010', text: 'Reminder' },
+      { tenantId: TENANT },
+    );
+    expect(refused.state).toBe('discarded');
+    expect(refused.detail).toContain('21610: [address] unsubscribed');
+    expect(await everything()).not.toMatch(/4072200001[0-9]|4072200000[0-9]/);
+
+    await comms.allowAgain(TENANT, 'sms', '+40722000009');
+    expect(await comms.suppressionFor(TENANT, 'sms', '+40722000009')).toBeNull();
+  });
+
+  it('keeps the address itself, and its words whole, when the product gives no fingerprint', async () => {
+    const comms = service({ email: new NoopMessagePort('email') });
+    const sent = await comms.send({
+      channel: 'email',
+      to: 'ana@example.com',
+      subject: 'For ana@example.com',
+      text: 'x',
+    });
+
+    expect(sent.address).toBe('ana@example.com');
+    expect(sent.heading).toBe('For ana@example.com');
+  });
+});
+
 describe('purging what is too old to keep', () => {
   const age = async (address: string, days: number) =>
     dataSource.query(
