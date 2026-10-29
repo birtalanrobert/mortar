@@ -4,6 +4,18 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## config 1.3.1
+
+### Fixed
+
+- **A key named for its place in a rotation is redacted.** The boot banner
+  redacted a name ending in `KEY`, and printed `PII_KEY_NEXT`,
+  `JWT_KEY_PREVIOUS` or `SIGNING_KEY_2` in full — the key beside one being
+  replaced, about to be trusted. `KEY` between two words now redacts too; a
+  name that only starts with it (`KEY_PREFIX`, `KEYCLOAK_URL`) is still left
+  alone. Found in Holdfast, whose key replacing its sealing key was about to be
+  named so.
+
 ## auth 1.6.0
 
 ### Added

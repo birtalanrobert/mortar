@@ -45,7 +45,8 @@ The module is `@Global()`, so one registration covers the whole application.
 
 `logOnBoot` prints every key once, through `describeConfig`, and nothing secret
 reaches it. A key whose name says it is a secret — `…PASSWORD`, `…TOKEN`,
-anything ending in `KEY` — is shown as a prefix and a length. Every other value
+anything ending in `KEY`, or with `KEY` between two words as a key in a
+rotation is named, `PII_KEY_NEXT` — is shown as a prefix and a length. Every other value
 has any password inside a URL masked, because a connection string's key names
 no secret although its password is one: `DATABASE_URL` prints with its password
 as `***`, and its scheme, user, host and database as they are, still saying

@@ -39,10 +39,20 @@ const SECRET_PATTERNS = [
  */
 const KEY_SUFFIX = /(^|_)key$/;
 
+/**
+ * And a key named for its place in a rotation — `PII_KEY_NEXT`,
+ * `JWT_KEY_PREVIOUS`, `SIGNING_KEY_2` — the word "key" after another word, with
+ * more after it. The suffix rule missed every one, and the one beside a key
+ * being replaced is the most dangerous to print: it is the key about to be
+ * trusted. A name that only starts with the word — `KEY_PREFIX`, `KEYCLOAK_URL`
+ * — is a key's namespace or a product's name, and is left alone.
+ */
+const KEY_WORD = /_key_/;
+
 /** Whether a configuration key should be treated as a secret. */
 export function isSecretKey(key: string): boolean {
   const normalized = key.toLowerCase().replace(/[-\s]/g, '_');
-  if (KEY_SUFFIX.test(normalized)) return true;
+  if (KEY_SUFFIX.test(normalized) || KEY_WORD.test(normalized)) return true;
   return SECRET_PATTERNS.some((pattern) => normalized.includes(pattern));
 }
 

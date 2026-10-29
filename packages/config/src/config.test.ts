@@ -335,6 +335,12 @@ describe('keys that are not called secrets', () => {
     expect(redactConfig({ PARTITION_KEY: 'orders-2026' }).PARTITION_KEY).not.toBe('orders-2026');
   });
 
+  it('redacts a key named for its place in a rotation, the word in the middle', () => {
+    for (const key of ['PII_KEY_NEXT', 'JWT_KEY_PREVIOUS', 'SIGNING_KEY_2', 'master-key-old']) {
+      expect(redactConfig({ [key]: 'aaaaaaaaaaaaaaaa' })[key]).not.toBe('aaaaaaaaaaaaaaaa');
+    }
+  });
+
   it('leaves a name that merely contains the word alone', () => {
     expect(redactConfig({ KEY_PREFIX: 'rentbook' }).KEY_PREFIX).toBe('rentbook');
     expect(redactConfig({ KEYCLOAK_URL: 'https://id.example' }).KEYCLOAK_URL).toBe(
