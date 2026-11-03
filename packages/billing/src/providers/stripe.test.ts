@@ -911,6 +911,60 @@ describe('reading Stripe’s answers', () => {
       });
     });
 
+    it('reads a refund that failed after it was accepted: the refund, its payment, the money and why', () => {
+      const client = withSecret({
+        id: 'evt_14',
+        type: 'refund.failed',
+        data: {
+          object: {
+            id: 're_1',
+            payment_intent: 'pi_1',
+            metadata: { purchase: 'p-1' },
+            amount: 999,
+            currency: 'eur',
+            status: 'failed',
+            failure_reason: 'expired_or_canceled_card',
+          },
+        },
+      });
+
+      expect(client.verify('{}', 'v1=ok')).toEqual({
+        kind: 'refund_failed',
+        eventId: 'evt_14',
+        externalId: 're_1',
+        payment: 'pi_1',
+        metadata: { purchase: 'p-1' },
+        amount: 999,
+        currency: 'EUR',
+        failureReason: 'expired_or_canceled_card',
+      });
+    });
+
+    it('reads a refund that failed without saying why as failed all the same', () => {
+      const client = withSecret({
+        id: 'evt_15',
+        type: 'refund.failed',
+        data: {
+          object: {
+            id: 're_2',
+            payment_intent: 'pi_1',
+            metadata: {},
+            amount: 500,
+            currency: 'eur',
+          },
+        },
+      });
+
+      expect(client.verify('{}', 'v1=ok')).toEqual({
+        kind: 'refund_failed',
+        eventId: 'evt_15',
+        externalId: 're_2',
+        payment: 'pi_1',
+        amount: 500,
+        currency: 'EUR',
+      });
+    });
+
     it('reads a dispute by the money it moves: withdrawn, and reinstated when it is won', () => {
       const read = (type: string) =>
         withSecret({

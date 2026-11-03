@@ -87,6 +87,14 @@ await provider.deleteCustomer('cus_…'); // for an erasure: the payments stay
   in the provider's dashboard too, with how much has gone back altogether, and
   a dispute is read by the money it moves — withdrawn, or reinstated when it is
   won.
+- **So is a refund that fails after it was accepted.** `refund` answers, and
+  later the card turns out closed: Stripe's
+  `refund.failed` reads as `kind: 'refund_failed'`, naming the refund as
+  `refund` answered it, its payment, the money it would have returned and,
+  where Stripe gives one, `failureReason`. The money is back in the provider's
+  balance and the buyer is still owed it — paying it another way is the
+  product's decision, so the endpoint must be subscribed to `refund.failed`
+  for the product to hear it at all.
 - **`eventId` is the same on every delivery**, which is what a product keys on
   to act on a webhook delivered twice once.
 - **An erasure deletes the customer**, and with it the address and name the

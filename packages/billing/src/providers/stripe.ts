@@ -598,6 +598,29 @@ function interpretEvent(event: Stripe.Event): BillingEvent {
       };
     }
 
+    case 'refund.failed': {
+      const refund = event.data.object as Stripe.Refund;
+
+      /*
+       * A refund accepted and never completed — a card closed since, an
+       * account gone — told after `refund` has answered. Its money is back in
+       * the provider's balance, and the buyer is still owed it: how it is paid
+       * is the product's to decide.
+       */
+      return {
+        kind: 'refund_failed',
+        eventId,
+        externalId: refund.id,
+        ...(idOf(refund.payment_intent) ? { payment: idOf(refund.payment_intent)! } : {}),
+        ...(refund.metadata && Object.keys(refund.metadata).length > 0
+          ? { metadata: { ...refund.metadata } }
+          : {}),
+        amount: refund.amount,
+        currency: refund.currency.toUpperCase(),
+        ...(refund.failure_reason ? { failureReason: refund.failure_reason } : {}),
+      };
+    }
+
     case 'charge.dispute.funds_withdrawn':
     case 'charge.dispute.funds_reinstated': {
       const dispute = event.data.object as Stripe.Dispute;

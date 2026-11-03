@@ -187,14 +187,31 @@ export interface ProviderSubscription {
 
 /** What a provider's webhook turned out to be about. */
 export interface BillingEvent {
+  /**
+   * `refund` is money returned from a payment, told by how much has gone back
+   * altogether; `refund_failed` is one refund the provider accepted and could
+   * not complete — a card closed since — its money back in the provider's
+   * balance and none of it with the buyer.
+   */
   readonly kind:
-    'subscription' | 'invoice' | 'checkout' | 'payment' | 'refund' | 'dispute' | 'other';
+    | 'subscription'
+    | 'invoice'
+    | 'checkout'
+    | 'payment'
+    | 'refund'
+    | 'refund_failed'
+    | 'dispute'
+    | 'other';
   /**
    * The event's own identifier: the same on every delivery of it, which is
    * what makes a webhook delivered twice recognisable as one.
    */
   readonly eventId: string;
-  /** What the event is about — a subscription, an invoice, a session, a charge, a dispute. */
+  /**
+   * What the event is about — a subscription, an invoice, a session, a
+   * charge, a dispute; for a refund that failed, the refund itself, as
+   * `refund` answered it (`ProviderRefund.externalId`).
+   */
   readonly externalId: string;
   /**
    * The customer, where the event names one.
@@ -221,7 +238,8 @@ export interface BillingEvent {
   readonly failed?: boolean;
   /**
    * What an invoice came to, what a checkout charged, what a refunded payment
-   * was for, or what a dispute questions — in minor units.
+   * was for, what a refund that failed would have returned, or what a dispute
+   * questions — in minor units.
    */
   readonly amount?: number;
   readonly currency?: string;
@@ -239,6 +257,12 @@ export interface BillingEvent {
    * dashboard as much as one asked for here.
    */
   readonly amountRefunded?: number;
+  /**
+   * Set on a refund that failed, where the provider says why — Stripe's
+   * `expired_or_canceled_card`, `lost_or_stolen_card`, `declined`, … — for
+   * the person who pays the money another way to read.
+   */
+  readonly failureReason?: string;
   /**
    * Set on a dispute event: `true` when the disputed money has left the
    * account, `false` when it has come back because the dispute was won. An

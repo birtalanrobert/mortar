@@ -4,6 +4,19 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## billing 7.2.0
+
+### Added
+
+- **A refund that fails after it was accepted.** Stripe's `refund.failed` —
+  a card closed since the payment, an account gone — reads as
+  `kind: 'refund_failed'`: the refund as `refund` answered it (`externalId`),
+  its payment, the money it would have returned and, where Stripe says,
+  `failureReason`. Before, it read as `other`, so a product that answered a
+  refund as done never heard that the buyer had none of the money. The webhook
+  endpoint must be subscribed to `refund.failed`. First consumed by Holdfast,
+  which owes such a refund and has an Operator pay it another way.
+
 ## config 1.3.1
 
 ### Fixed
