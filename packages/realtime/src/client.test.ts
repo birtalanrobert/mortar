@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RealtimeClient, type SocketLike } from './client';
+import { CLOSE_SUPERSEDED } from './close-codes';
 import type { RealtimeEvent, ServerFrame } from './wire';
 
 /**
@@ -318,6 +319,41 @@ describe('the polling fallback', () => {
    * `polling` showed only for the instant between a socket dying and the next
    * attempt, which on a network that eats WebSockets is every few seconds.
    */
+  it('polls once the server supersedes its socket, and asks for one again only at its longest wait', async () => {
+    const made: FakeSocket[] = [];
+    const one = new RealtimeClient({
+      url: 'wss://example.test/realtime',
+      pollUrl: 'https://example.test/poll',
+      channels: ['station:grill'],
+      pollMs: 1_000,
+      onEvent: () => {},
+      socketFactory: () => {
+        const socket = new FakeSocket();
+        made.push(socket);
+        return socket;
+      },
+      fetch: (async () => ({
+        ok: true,
+        json: async () => ({ events: [] }),
+      })) as unknown as typeof fetch,
+    });
+    one.start();
+    made[0]!.open();
+
+    // Another page of the same person took this one's place on the server.
+    made[0]!.onclose?.({ code: CLOSE_SUPERSEDED });
+
+    expect(one.connection).toBe('polling');
+    // Not within the second a dropped socket is asked for again in: that would
+    // only close the other page's in turn.
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(made).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(made).toHaveLength(2);
+
+    one.stop();
+  });
+
   it('does not report connecting again for a retry behind a working fallback', async () => {
     const states: string[] = [];
 

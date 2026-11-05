@@ -1,7 +1,11 @@
+import { CLOSE_SUPERSEDED } from './close-codes';
 import { ChannelCursor } from './gaps';
 import { parseFrame, type ClientFrame, type RealtimeEvent, type ServerFrame } from './wire';
 
 export type ConnectionState = 'connecting' | 'live' | 'polling' | 'offline';
+
+/** The longest a socket is waited for between attempts. */
+const LONGEST_RETRY_MS = 30_000;
 
 export interface ClientOptions {
   /** `wss://…` for the socket. The polling URL is derived unless given. */
@@ -161,12 +165,12 @@ export class RealtimeClient {
 
     socket.onerror = () => socket.close();
 
-    socket.onclose = () => {
+    socket.onclose = (event) => {
       this.socket = null;
       this.stopHeartbeat();
       if (this.closed) return;
 
-      this.fallBack();
+      this.fallBack((event as { code?: unknown } | null)?.code === CLOSE_SUPERSEDED);
     };
   }
 
@@ -261,14 +265,21 @@ export class RealtimeClient {
    * retried in the background, so a venue whose network eats WebSockets — a
    * hotel, a corporate guest network, an ageing router — has a working display
    * rather than a spinner and an exponential backoff.
+   *
+   * A socket the server closed as **superseded** — another of the same key's
+   * took its place — is asked for again only at the longest wait: at once, it
+   * would close the next oldest in turn, and two of one person's pages would
+   * take the socket from each other for as long as both were open.
    */
-  private fallBack(): void {
+  private fallBack(superseded = false): void {
     if (this.closed) return;
 
     this.startPolling();
 
     this.retry += 1;
-    const wait = Math.min(30_000, 500 * 2 ** Math.min(this.retry, 6));
+    const wait = superseded
+      ? LONGEST_RETRY_MS
+      : Math.min(LONGEST_RETRY_MS, 500 * 2 ** Math.min(this.retry, 6));
 
     setTimeout(() => {
       if (!this.closed && !this.socket) this.open();

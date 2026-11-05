@@ -5,6 +5,7 @@ import { WebSocket } from 'ws';
 import { MemoryBacklog, type BacklogPort } from '../../server/backlog';
 import { RealtimePublisher } from '../../server/publisher';
 import type { ServerFrame } from '../../wire';
+import { CLOSE_SUPERSEDED } from '../../close-codes';
 import { RealtimeSocketServer, type SocketServerOptions } from './index';
 
 /**
@@ -116,6 +117,96 @@ describe('a realtime gateway at its door', () => {
     // A check that could not be made is not a caller refused.
     expect(answer).toEqual({ status: 503 });
     expect(reported).toEqual([failure]);
+  });
+
+  it('answers a refusal admit throws with its status and its Retry-After, and reports it', async () => {
+    const reported: unknown[] = [];
+    const limited = Object.assign(new Error('too many upgrades'), { status: 429, retryAfter: 7.2 });
+    const port = await start({
+      admit: () => Promise.reject(limited),
+      onError: (error) => reported.push(error),
+    });
+
+    const answer = await new Promise<{ status: number; retryAfter: string | undefined }>(
+      (settled) => {
+        const socket = new WebSocket(`ws://127.0.0.1:${port}/realtime`);
+        socket.once('unexpected-response', (_request, response) => {
+          settled({
+            status: response.statusCode ?? 0,
+            retryAfter: response.headers['retry-after'],
+          });
+          socket.terminate();
+        });
+        socket.once('error', () => undefined);
+      },
+    );
+
+    expect(answer).toEqual({ status: 429, retryAfter: '8' });
+    expect(reported).toEqual([limited]);
+  });
+
+  it('closes a key’s oldest connection, as superseded, once the key holds more than its cap', async () => {
+    const port = await start({
+      admit: (request) => ({ key: String(request.headers.cookie) }),
+      maxConnectionsPerKey: 2,
+    });
+    const open = async (cookie: string) => {
+      const answer = await knock(`ws://127.0.0.1:${port}/realtime`, { cookie });
+      if (!('socket' in answer)) throw new Error(`refused with ${answer.status}`);
+      return answer.socket;
+    };
+    const first = await open('ada');
+    const firstClosed = closed(first);
+    const second = await open('ada');
+    const bea = await open('bea');
+
+    // A third of Ada's: the newest kept, the oldest given way.
+    const third = await open('ada');
+
+    expect(await firstClosed).toBe(CLOSE_SUPERSEDED);
+    expect(server!.connectionCount).toBe(3);
+    expect([second.readyState, third.readyState, bea.readyState]).toEqual([
+      WebSocket.OPEN,
+      WebSocket.OPEN,
+      WebSocket.OPEN,
+    ]);
+
+    // One left of its own accord: room for another, nobody given way.
+    const secondClosed = closed(second);
+    second.close();
+    await secondClosed;
+    await settle();
+    const fourth = await open('ada');
+    await settle();
+    expect([third.readyState, fourth.readyState]).toEqual([WebSocket.OPEN, WebSocket.OPEN]);
+    for (const socket of [third, fourth, bea]) socket.close();
+  });
+
+  it('counts nothing admitted with no key, nor any key when no cap is set', async () => {
+    for (const options of [
+      { admit: () => true, maxConnectionsPerKey: 1 },
+      { admit: () => ({ key: 'ada' }) },
+    ] as Array<Partial<SocketServerOptions>>) {
+      const port = await start(options);
+      const sockets: WebSocket[] = [];
+      for (let index = 0; index < 3; index += 1) {
+        const answer = await knock(`ws://127.0.0.1:${port}/realtime`);
+        if (!('socket' in answer)) throw new Error(`refused with ${answer.status}`);
+        sockets.push(answer.socket);
+      }
+      await settle();
+
+      expect(sockets.map((socket) => socket.readyState)).toEqual([
+        WebSocket.OPEN,
+        WebSocket.OPEN,
+        WebSocket.OPEN,
+      ]);
+      for (const socket of sockets) socket.close();
+      await server?.close();
+      await new Promise<void>((done) => (http ? http.close(() => done()) : done()));
+      server = null;
+      http = null;
+    }
   });
 
   it('does not ask admit about an upgrade to another path', async () => {

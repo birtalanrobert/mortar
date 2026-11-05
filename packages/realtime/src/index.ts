@@ -1,5 +1,7 @@
 export { parseFrame, type ClientFrame, type RealtimeEvent, type ServerFrame } from './wire';
 
+export { CLOSE_SUPERSEDED } from './close-codes';
+
 export { ChannelCursor, missing } from './gaps';
 
 export {

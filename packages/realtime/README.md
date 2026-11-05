@@ -170,7 +170,20 @@ Without it, a request with no credential is upgraded, granted nothing, and kept
 alive by the heartbeat for as long as it answers: a socket held for free by
 anybody who can reach the port. It is also where `Origin` is checked, because a
 browser sends its cookies on a WebSocket upgrade from any page. A refusal is
-answered `403`, and an `admit` that throws `503`.
+answered `403`, and an `admit` that throws `503` — unless what it throws carries
+an HTTP `status` from 400 to 599, which is answered with it: a rate limit's
+`429`, with its `retryAfter` as `Retry-After`.
+
+`admit` may answer `{ key }` — the account the connection is a person's — and
+`maxConnectionsPerKey` then caps how many one key holds on a process. Past the
+cap the **oldest** is closed with `CLOSE_SUPERSEDED` (4001), so the page just
+opened always has its socket. Refusing the newest instead would leave a player's
+fresh tab silent behind a forgotten one. The client answers 4001 by polling and
+asking for a socket again only at its longest wait, 30 seconds: reconnecting at
+once, as it does for a socket that dropped, would close the next oldest, and two
+pages of one person would take the socket from each other for as long as both
+were open. The cap is each process's, never the fleet's; a product running
+several replicas gives one person at most that many on each.
 
 A client frame may weigh **64 KiB** unless `maxPayload` says otherwise; `ws`'s
 own default is 100 MiB. A subscription that `authorise` or the backlog could not

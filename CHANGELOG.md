@@ -4,6 +4,27 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## realtime 2.4.0
+
+### Added
+
+- **A cap on one person's sockets.** `admit` may answer `{ key }`, and
+  `maxConnectionsPerKey` caps the connections one key holds on a process: past
+  it the oldest is closed with `CLOSE_SUPERSEDED` (4001, exported from the
+  root), so the page just opened keeps its socket. Before, one account could
+  hold as many sockets as it opened, each a file descriptor and a place in
+  every fan-out. First consumed by Holdfast, five to an account.
+- **A refusal with its own status.** What `admit` throws with an HTTP `status`
+  from 400 to 599 is answered with it, and its `retryAfter` as `Retry-After` —
+  a rate limit's `429` — rather than as `503`, a check that could not be made.
+
+### Changed
+
+- **The client waits its longest after being superseded.** A socket closed with
+  4001 sends the client to polling, and it asks for a socket again only after
+  30 seconds rather than within the second, so two of one person's pages do not
+  take the socket from each other for as long as both are open.
+
 ## billing 7.2.0
 
 ### Added
