@@ -4,6 +4,20 @@ Each package carries its own version. A release publishes only the packages
 whose version is not yet on the registry; `pnpm release` asks npm and skips the
 rest.
 
+## billing 7.3.0
+
+### Fixed
+
+- **A payment confirmed as its form was set up.** `pay` takes
+  `paymentMethods`, the list the page's Payment Element was given as
+  `allowedPaymentMethodTypes`, and sends it as `allowed_payment_method_types`
+  rather than `automatic_payment_methods`. Stripe refuses a token from such a
+  form under automatic payment methods — "cannot be confirmed through the API
+  configured with automatic payment methods" — so a form offering a card alone
+  never paid; the two are exclusive, and the list goes alone. Without
+  `paymentMethods`, `pay` sends `automatic_payment_methods` as before. Found by
+  Holdfast's first payment in Stripe's test mode.
+
 ## realtime 2.4.0
 
 ### Added

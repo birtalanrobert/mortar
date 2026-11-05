@@ -122,6 +122,7 @@ const paid = await provider.pay({
     taxCode: 'txcd_…',
   },
   confirmationToken: 'ctoken_…', // from stripe.createConfirmationToken in the page
+  paymentMethods: ['card'], // as the Payment Element was given them, if it was
   reference: '…', // the payment's idempotency key
   metadata: { purchase: '…' },
 });
@@ -139,6 +140,12 @@ await provider.payment('pi_…'); // asked again when the page says it is done
   is charged. The tax worked out rides on the payment, so the payment read
   back and its events say it too — for a webhook that arrives before `pay`
   has answered.
+- **The payment names what the form offered.** A Payment Element given
+  `allowedPaymentMethodTypes` — a card alone, say — makes a token Stripe
+  confirms only under the same list, and refuses under the account's dynamic
+  payment methods; so `paymentMethods` is that list, sent as
+  `allowed_payment_method_types`. Absent, the form offered the account's own,
+  and the payment does too.
 - **A card refused is an answer, not an error.** It comes back `failed` with
   Stripe's code, the issuer's reason and Stripe's sentence; the buyer tries
   another card, as a payment of its own under a reference of its own.

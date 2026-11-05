@@ -107,6 +107,15 @@ export interface PaymentRequest {
    */
   readonly confirmationToken: string;
   /**
+   * The kinds of payment the page's form was given — the Payment Element's
+   * `allowedPaymentMethodTypes`, in the provider's own names (`card`) — which
+   * the payment names the same: Stripe confirms what such a form collected
+   * only under the same list, and refuses it under the account's dynamic
+   * payment methods. Absent, the form offered the account's own, and so does
+   * the payment.
+   */
+  readonly paymentMethods?: readonly string[];
+  /**
    * Holds the payment to once: the same request asked again under it — a
    * retry after a timeout, or after the provider failed — is answered with the
    * payment already made, never a second one; and one asked with another

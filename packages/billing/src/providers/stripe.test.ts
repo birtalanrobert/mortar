@@ -306,6 +306,27 @@ describe('reading Stripe’s answers', () => {
       expect(options.idempotencyKey).toBe('purchase-p-1');
     });
 
+    /*
+     * Stripe refuses a token collected by a form given
+     * `allowedPaymentMethodTypes` when the payment is confirmed with automatic
+     * payment methods — "cannot be confirmed through the API configured with
+     * automatic payment methods" — so a form limited to cards never paid.
+     * The two are exclusive: the list goes alone.
+     */
+    it('names the kinds of payment the form was given, never the account’s dynamic ones beside them', async () => {
+      const { billing: provider, create } = client();
+
+      await provider.pay({ ...request, paymentMethods: ['card'] });
+
+      const [body] = create.mock.calls[0] as [Record<string, unknown>];
+      expect(body).toMatchObject({
+        confirmation_token: 'ctoken_1',
+        allowed_payment_method_types: ['card'],
+      });
+      expect(body).not.toHaveProperty('automatic_payment_methods');
+      expect(body).not.toHaveProperty('payment_method_types');
+    });
+
     it('hands the page what it needs to finish a 3-D Secure check, and nothing else', async () => {
       const { billing: provider } = client({
         create: vi.fn().mockResolvedValue(intent({ status: 'requires_action' })),

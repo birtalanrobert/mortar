@@ -214,7 +214,19 @@ export class StripeBilling implements BillingProvider {
           description: request.price.name,
           confirm: true,
           confirmation_token: request.confirmationToken,
-          automatic_payment_methods: { enabled: true },
+          /*
+           * As the page's form was given them. A token collected under
+           * `allowedPaymentMethodTypes` is confirmed only under the same list,
+           * which excludes the account's dynamic payment methods: Stripe
+           * refuses the one with the other.
+           */
+          ...(request.paymentMethods
+            ? {
+                allowed_payment_method_types: [
+                  ...request.paymentMethods,
+                ] as Stripe.PaymentIntentCreateParams.AllowedPaymentMethodType[],
+              }
+            : { automatic_payment_methods: { enabled: true } }),
           metadata,
           /*
            * The calculation attached: the provider records the tax transaction
